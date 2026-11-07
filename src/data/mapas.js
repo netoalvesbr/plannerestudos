@@ -159,4 +159,46 @@ export const MAPAS = {
       },
     ],
   },
+
+  'Noções de Identificação e Papiloscopia': {
+    c: [
+      {
+        t: 'Postulados da papiloscopia',
+        assunto: 'Postulados da papiloscopia',
+        n: 'Fundamentam a identificação pelas cristas papilares.',
+        c: [
+          { t: 'Perenidade', n: 'Os desenhos existem desde a vida intrauterina (por volta do 6º mês) até a decomposição cadavérica.' },
+          { t: 'Imutabilidade', n: 'Não mudam de forma ao longo da vida, salvo lesões que atinjam a derme.' },
+          { t: 'Variabilidade', n: 'Únicos: diferem de pessoa para pessoa e de dedo para dedo, inclusive em gêmeos idênticos.' },
+          { t: 'Classificabilidade', n: 'Podem ser classificados e arquivados, o que permite a busca em grandes acervos.' },
+        ],
+      },
+      {
+        t: 'Sistema de Vucetich – tipos fundamentais',
+        assunto: 'Sistema datiloscópico de Vucetich',
+        n: 'Polegares: A, I, E, V. Demais dedos: 1, 2, 3, 4.',
+        c: [
+          { t: 'Arco (A / 1)', n: 'Sem delta (adelto); linhas atravessam o campo de um lado a outro.' },
+          { t: 'Presilha interna (I / 2)', n: 'Um delta à DIREITA do observador; núcleo voltado para a esquerda.' },
+          { t: 'Presilha externa (E / 3)', n: 'Um delta à ESQUERDA do observador; núcleo voltado para a direita.' },
+          { t: 'Verticilo (V / 4)', n: 'Dois deltas; núcleo de linhas circulares, espirais ou ovoides.' },
+        ],
+      },
+      {
+        t: 'Revelação de impressões latentes',
+        assunto: 'Revelação de impressões latentes',
+        n: 'Escolha o método pela superfície.',
+        c: [
+          { t: 'Superfícies porosas (papel)', n: 'Ninidrina (aminoácidos → púrpura de Ruhemann); nitrato de prata (cloretos).' },
+          { t: 'Superfícies não porosas (vidro, plástico)', n: 'Pós (comuns, magnéticos, negro de fumo) e cianoacrilato (vapor que polimeriza).' },
+          { t: 'Iodo', n: 'Vapor que reage com lipídios; revelação temporária.' },
+        ],
+      },
+      {
+        t: 'Identificação criminal',
+        assunto: 'Identificação criminal',
+        n: 'CF, art. 5º, LVIII: o civilmente identificado não será identificado criminalmente, salvo nas hipóteses da lei (Lei 12.037/2009, art. 3º).',
+      },
+    ],
+  },
 };

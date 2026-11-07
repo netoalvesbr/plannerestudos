@@ -1,0 +1,686 @@
+{
+  "versao_esquema": "2.0",
+  "concurso_id": "pcac-2026",
+  "semana": 1,
+  "dia": 1,
+  "data": "2026-11-09",
+  "provas": [
+    {
+      "id": "PCAC-S01-D1-P1-PAP",
+      "titulo": "Prova 1 – Manhã (Papiloscopista)",
+      "turno": "Manhã",
+      "cargos": [
+        "pap"
+      ],
+      "distribuicao_gabarito": {
+        "A": 4,
+        "B": 4,
+        "C": 4,
+        "D": 4,
+        "E": 4
+      },
+      "questoes": [
+        {
+          "materia": "Língua Portuguesa",
+          "assunto": "Pontuação",
+          "bloco": "Conhecimentos Básicos",
+          "item_edital": "1",
+          "dificuldade": "fácil",
+          "enunciado": "Assinale a alternativa em que o emprego da vírgula está de acordo com a norma-padrão.",
+          "alternativas": {
+            "A": "Os papiloscopistas da delegacia, coletaram as impressões digitais.",
+            "B": "Após a coleta, as amostras foram enviadas ao laboratório.",
+            "C": "O perito, entregou o laudo ao delegado no fim da tarde.",
+            "D": "Precisamos de, luvas, máscaras e pinças para a coleta.",
+            "E": "O suspeito afirmou que, não estava no local do crime."
+          },
+          "gabarito": "B",
+          "comentario": "Correta a B: a vírgula isola o adjunto adverbial deslocado para o início da oração (\"Após a coleta\"). Nas demais há erro: não se separa o sujeito do verbo (A e C), não se separa a preposição do seu complemento (D) e não se separa o verbo da oração que funciona como seu objeto (E).",
+          "fonte": "Norma-padrão – emprego da vírgula (adjunto adverbial deslocado; vedação entre sujeito e verbo)",
+          "id": "PCAC-S01-D1-P1-PAP-Q01",
+          "uid": "69369f4554b25427",
+          "numero": 1,
+          "origem": "inédita",
+          "banca": "IDECAN",
+          "ano": null,
+          "orgao_prova_original": null,
+          "formato": "A-E",
+          "anulada": false,
+          "concursos": [
+            "pcac-2026"
+          ],
+          "cargos": [
+            "pap"
+          ]
+        },
+        {
+          "materia": "Língua Portuguesa",
+          "assunto": "Regência verbal",
+          "bloco": "Conhecimentos Básicos",
+          "item_edital": "1",
+          "dificuldade": "média",
+          "enunciado": "De acordo com a norma-padrão, a regência verbal está correta em:",
+          "alternativas": {
+            "A": "O investigador assistiu o depoimento do suspeito pela câmera.",
+            "B": "Os agentes preferem mais trabalhar à noite do que de dia.",
+            "C": "Os peritos obedeceram ao protocolo de coleta de vestígios.",
+            "D": "Esqueci do nome da testemunha durante a audiência.",
+            "E": "O escrivão namora com uma colega da delegacia."
+          },
+          "gabarito": "C",
+          "comentario": "\"Obedecer\" é transitivo indireto (obedecer a algo): correta a C. \"Assistir\", no sentido de ver, exige a preposição \"a\" (assistiu ao depoimento); \"preferir\" rejeita \"mais\" e \"do que\" (preferem trabalhar à noite a trabalhar de dia); \"esquecer\" sem pronome é transitivo direto (esqueci o nome) – com pronome, \"esqueci-me do nome\"; \"namorar\" é transitivo direto na norma-padrão (namora uma colega).",
+          "fonte": "Norma-padrão – regência dos verbos obedecer, assistir, preferir, esquecer e namorar",
+          "id": "PCAC-S01-D1-P1-PAP-Q02",
+          "uid": "2809e7b5a13f9257",
+          "numero": 2,
+          "origem": "inédita",
+          "banca": "IDECAN",
+          "ano": null,
+          "orgao_prova_original": null,
+          "formato": "A-E",
+          "anulada": false,
+          "concursos": [
+            "pcac-2026"
+          ],
+          "cargos": [
+            "pap"
+          ]
+        },
+        {
+          "materia": "Raciocínio Lógico",
+          "assunto": "Porcentagem",
+          "bloco": "Conhecimentos Básicos",
+          "item_edital": "2",
+          "dificuldade": "fácil",
+          "enunciado": "Um laboratório recebeu 80 fragmentos de impressões papilares. 25% deles foram identificados no primeiro dia. Dos fragmentos não identificados, 20% foram descartados por falta de qualidade. Quantos fragmentos permaneceram sem identificação e aptos para nova análise?",
+          "alternativas": {
+            "A": "44",
+            "B": "60",
+            "C": "12",
+            "D": "48",
+            "E": "20"
+          },
+          "gabarito": "D",
+          "comentario": "Identificados: 25% de 80 = 20; restam 60. Descartados: 20% de 60 = 12. Aptos: 60 − 12 = 48. O erro comum é aplicar os 20% sobre o total (80), obtendo 44.",
+          "fonte": "Porcentagens sucessivas: a segunda porcentagem incide sobre o que restou",
+          "id": "PCAC-S01-D1-P1-PAP-Q03",
+          "uid": "71b6cdb679338df6",
+          "numero": 3,
+          "origem": "inédita",
+          "banca": "IDECAN",
+          "ano": null,
+          "orgao_prova_original": null,
+          "formato": "A-E",
+          "anulada": false,
+          "concursos": [
+            "pcac-2026"
+          ],
+          "cargos": [
+            "pap"
+          ]
+        },
+        {
+          "materia": "Raciocínio Lógico",
+          "assunto": "Argumentação lógica",
+          "bloco": "Conhecimentos Básicos",
+          "item_edital": "2",
+          "dificuldade": "média",
+          "enunciado": "Considere verdadeiras as afirmações:\nI. Todos os papiloscopistas nomeados possuem nível superior.\nII. Algum candidato aprovado não possui nível superior.\nCom base nelas, é necessariamente verdadeiro que:",
+          "alternativas": {
+            "A": "nenhum papiloscopista nomeado é candidato aprovado.",
+            "B": "todo candidato aprovado é papiloscopista nomeado.",
+            "C": "algum papiloscopista nomeado não possui nível superior.",
+            "D": "nenhum candidato aprovado possui nível superior.",
+            "E": "algum candidato aprovado não é papiloscopista nomeado."
+          },
+          "gabarito": "E",
+          "comentario": "Se todo papiloscopista nomeado tem nível superior, quem não tem nível superior não pode ser papiloscopista nomeado. Como há candidato aprovado sem nível superior, esse candidato não é papiloscopista nomeado (E). As demais falham: A e D não decorrem das premissas; B e C são incompatíveis com elas (B obrigaria o aprovado sem nível superior a ser papiloscopista nomeado, contrariando I; C contraria I diretamente).",
+          "fonte": "Silogismo categórico – diagramas de conjuntos (Todo A é B; Algum C não é B ⇒ Algum C não é A)",
+          "id": "PCAC-S01-D1-P1-PAP-Q04",
+          "uid": "3e1d93786ac3fcf8",
+          "numero": 4,
+          "origem": "inédita",
+          "banca": "IDECAN",
+          "ano": null,
+          "orgao_prova_original": null,
+          "formato": "A-E",
+          "anulada": false,
+          "concursos": [
+            "pcac-2026"
+          ],
+          "cargos": [
+            "pap"
+          ]
+        },
+        {
+          "materia": "Informática",
+          "assunto": "Atalhos do Windows",
+          "bloco": "Conhecimentos Básicos",
+          "item_edital": "3",
+          "dificuldade": "fácil",
+          "enunciado": "No Windows 10 e no Windows 11, ao pressionar a combinação de teclas Windows + L, o usuário:",
+          "alternativas": {
+            "A": "bloqueia a sessão do computador, exigindo nova autenticação para voltar.",
+            "B": "abre o Explorador de Arquivos.",
+            "C": "minimiza todas as janelas e exibe a área de trabalho.",
+            "D": "abre as Configurações do sistema.",
+            "E": "captura a tela e salva a imagem na pasta Capturas de Tela."
+          },
+          "gabarito": "A",
+          "comentario": "Windows + L bloqueia a sessão (L de \"lock\") – boa prática de segurança ao se afastar do computador. Windows + E abre o Explorador; Windows + D mostra a área de trabalho; Windows + I abre as Configurações; Windows + PrtScn salva a captura de tela.",
+          "fonte": "Atalhos de teclado do Windows (Microsoft)",
+          "id": "PCAC-S01-D1-P1-PAP-Q05",
+          "uid": "f869069d6961d5ad",
+          "numero": 5,
+          "origem": "inédita",
+          "banca": "IDECAN",
+          "ano": null,
+          "orgao_prova_original": null,
+          "formato": "A-E",
+          "anulada": false,
+          "concursos": [
+            "pcac-2026"
+          ],
+          "cargos": [
+            "pap"
+          ]
+        },
+        {
+          "materia": "Direito Constitucional",
+          "assunto": "Identificação criminal",
+          "bloco": "Conhecimentos Jurídicos",
+          "item_edital": "1",
+          "dificuldade": "média",
+          "enunciado": "Sobre a identificação criminal, a Constituição Federal estabelece que:",
+          "alternativas": {
+            "A": "o civilmente identificado não será submetido a identificação criminal, salvo nas hipóteses previstas em lei.",
+            "B": "todo preso em flagrante será submetido a identificação criminal, mesmo que civilmente identificado.",
+            "C": "o civilmente identificado nunca será submetido a identificação criminal, sem exceção.",
+            "D": "a identificação criminal do civilmente identificado depende apenas de decisão do delegado, sem previsão legal.",
+            "E": "a identificação criminal só é possível com o consentimento expresso do investigado."
+          },
+          "gabarito": "A",
+          "comentario": "Art. 5º, LVIII, da CF: \"o civilmente identificado não será submetido a identificação criminal, salvo nas hipóteses previstas em lei\". As hipóteses estão no art. 3º da Lei 12.037/2009 (ex.: documento rasurado, documentos conflitantes, identificação essencial às investigações por decisão judicial). A regra não é absoluta (C errada) nem automática (B errada); depende de lei, não do delegado (D) nem de consentimento (E).",
+          "fonte": "CF, art. 5º, LVIII; Lei 12.037/2009, art. 3º",
+          "id": "PCAC-S01-D1-P1-PAP-Q06",
+          "uid": "6c6f7e0d26a7007b",
+          "numero": 6,
+          "origem": "inédita",
+          "banca": "IDECAN",
+          "ano": null,
+          "orgao_prova_original": null,
+          "formato": "A-E",
+          "anulada": false,
+          "concursos": [
+            "pcac-2026"
+          ],
+          "cargos": [
+            "pap"
+          ]
+        },
+        {
+          "materia": "Direito Administrativo",
+          "assunto": "Princípios da Administração Pública",
+          "bloco": "Conhecimentos Jurídicos",
+          "item_edital": "1",
+          "dificuldade": "fácil",
+          "enunciado": "O princípio que impõe à Administração atuar sem favorecimentos ou perseguições, tendo sempre como finalidade o interesse público, e que veda a promoção pessoal de agentes em publicidade oficial, é o princípio da:",
+          "alternativas": {
+            "A": "legalidade.",
+            "B": "impessoalidade.",
+            "C": "moralidade.",
+            "D": "publicidade.",
+            "E": "eficiência."
+          },
+          "gabarito": "B",
+          "comentario": "Impessoalidade (art. 37, caput, CF): a atuação deve ser objetiva, voltada ao interesse público, sem privilégios nem perseguições; o § 1º do art. 37 proíbe nomes, símbolos ou imagens que caracterizem promoção pessoal na publicidade oficial. Legalidade = agir conforme a lei; moralidade = ética e probidade; publicidade = transparência; eficiência = resultados com qualidade e economicidade.",
+          "fonte": "CF, art. 37, caput e § 1º",
+          "id": "PCAC-S01-D1-P1-PAP-Q07",
+          "uid": "51e2e6f21ee1aa40",
+          "numero": 7,
+          "origem": "inédita",
+          "banca": "IDECAN",
+          "ano": null,
+          "orgao_prova_original": null,
+          "formato": "A-E",
+          "anulada": false,
+          "concursos": [
+            "pcac-2026"
+          ],
+          "cargos": [
+            "pap"
+          ]
+        },
+        {
+          "materia": "Direito Penal e Processual Penal",
+          "assunto": "Exame de corpo de delito",
+          "bloco": "Conhecimentos Jurídicos",
+          "item_edital": "3",
+          "dificuldade": "média",
+          "enunciado": "De acordo com o Código de Processo Penal, quando a infração deixar vestígios:",
+          "alternativas": {
+            "A": "a confissão do acusado dispensa o exame de corpo de delito.",
+            "B": "o exame de corpo de delito é facultativo, a critério da autoridade policial.",
+            "C": "será indispensável o exame de corpo de delito, direto ou indireto, não podendo supri-lo a confissão do acusado.",
+            "D": "o exame só pode ser direto; o indireto não é admitido em nenhuma hipótese.",
+            "E": "a prova testemunhal nunca poderá suprir a falta do exame, mesmo que os vestígios tenham desaparecido."
+          },
+          "gabarito": "C",
+          "comentario": "Art. 158 do CPP: o exame é indispensável e a confissão não o supre. O exame pode ser direto ou indireto. Se os vestígios tiverem desaparecido, a prova testemunhal pode suprir-lhe a falta (art. 167), por isso a E está errada.",
+          "fonte": "CPP, arts. 158 e 167",
+          "id": "PCAC-S01-D1-P1-PAP-Q08",
+          "uid": "1624c3ffd71bc2b2",
+          "numero": 8,
+          "origem": "inédita",
+          "banca": "IDECAN",
+          "ano": null,
+          "orgao_prova_original": null,
+          "formato": "A-E",
+          "anulada": false,
+          "concursos": [
+            "pcac-2026"
+          ],
+          "cargos": [
+            "pap"
+          ]
+        },
+        {
+          "materia": "Noções de Identificação e Papiloscopia",
+          "assunto": "Sistema datiloscópico de Vucetich",
+          "bloco": "Conhecimentos Específicos",
+          "item_edital": "1",
+          "dificuldade": "média",
+          "enunciado": "No sistema datiloscópico de Vucetich, o datilograma que apresenta um único delta, situado à direita do observador, com as linhas do núcleo voltadas para a esquerda, é classificado como:",
+          "alternativas": {
+            "A": "arco.",
+            "B": "presilha externa.",
+            "C": "verticilo.",
+            "D": "presilha interna.",
+            "E": "arco tendendo a presilha (sem delta)."
+          },
+          "gabarito": "D",
+          "comentario": "Vucetich define quatro tipos fundamentais: arco (sem delta), presilha interna (delta à direita do observador e núcleo voltado para a esquerda), presilha externa (delta à esquerda do observador e núcleo voltado para a direita) e verticilo (dois deltas). Nos polegares, representam-se por A, I, E e V; nos demais dedos, por 1, 2, 3 e 4.",
+          "fonte": "Sistema datiloscópico de Vucetich – tipos fundamentais",
+          "id": "PCAC-S01-D1-P1-PAP-Q09",
+          "uid": "659fd91b77847f4e",
+          "numero": 9,
+          "origem": "inédita",
+          "banca": "IDECAN",
+          "ano": null,
+          "orgao_prova_original": null,
+          "formato": "A-E",
+          "anulada": false,
+          "concursos": [
+            "pcac-2026"
+          ],
+          "cargos": [
+            "pap"
+          ]
+        },
+        {
+          "materia": "Noções de Identificação e Papiloscopia",
+          "assunto": "Sistema datiloscópico de Vucetich",
+          "bloco": "Conhecimentos Específicos",
+          "item_edital": "1",
+          "dificuldade": "fácil",
+          "enunciado": "No sistema de Vucetich, o tipo fundamental verticilo caracteriza-se por apresentar:",
+          "alternativas": {
+            "A": "nenhum delta.",
+            "B": "um delta à direita do observador.",
+            "C": "um delta à esquerda do observador.",
+            "D": "três ou mais deltas, sempre na região basilar.",
+            "E": "dois deltas, um à direita e outro à esquerda do observador."
+          },
+          "gabarito": "E",
+          "comentario": "Arco: nenhum delta (adelto); presilhas: um delta (interna, à direita; externa, à esquerda do observador); verticilo: dois deltas, um de cada lado, com núcleo de linhas circulares, espirais ou ovoides.",
+          "fonte": "Sistema datiloscópico de Vucetich – contagem de deltas",
+          "id": "PCAC-S01-D1-P1-PAP-Q10",
+          "uid": "4c8df44544aed075",
+          "numero": 10,
+          "origem": "inédita",
+          "banca": "IDECAN",
+          "ano": null,
+          "orgao_prova_original": null,
+          "formato": "A-E",
+          "anulada": false,
+          "concursos": [
+            "pcac-2026"
+          ],
+          "cargos": [
+            "pap"
+          ]
+        },
+        {
+          "materia": "Noções de Identificação e Papiloscopia",
+          "assunto": "Postulados da papiloscopia",
+          "bloco": "Conhecimentos Específicos",
+          "item_edital": "1",
+          "dificuldade": "média",
+          "enunciado": "A propriedade segundo a qual os desenhos papilares não mudam de forma ao longo da vida, salvo por lesões que atinjam a camada dérmica, denomina-se:",
+          "alternativas": {
+            "A": "perenidade.",
+            "B": "imutabilidade.",
+            "C": "variabilidade.",
+            "D": "classificabilidade.",
+            "E": "praticabilidade."
+          },
+          "gabarito": "B",
+          "comentario": "Os postulados que fundamentam a identificação papiloscópica são: perenidade (os desenhos existem desde a vida intrauterina até a decomposição cadavérica), imutabilidade (não mudam de forma), variabilidade (são únicos, diferentes de pessoa para pessoa e de dedo para dedo) e classificabilidade/praticabilidade (podem ser classificados e coletados de forma simples e barata).",
+          "fonte": "Papiloscopia – postulados (perenidade, imutabilidade, variabilidade, classificabilidade)",
+          "id": "PCAC-S01-D1-P1-PAP-Q11",
+          "uid": "85d497cf348aaa53",
+          "numero": 11,
+          "origem": "inédita",
+          "banca": "IDECAN",
+          "ano": null,
+          "orgao_prova_original": null,
+          "formato": "A-E",
+          "anulada": false,
+          "concursos": [
+            "pcac-2026"
+          ],
+          "cargos": [
+            "pap"
+          ]
+        },
+        {
+          "materia": "Medicina e Odontologia Legal",
+          "assunto": "Fenômenos cadavéricos",
+          "bloco": "Conhecimentos Específicos",
+          "item_edital": "2",
+          "dificuldade": "média",
+          "enunciado": "Segundo a Lei de Nysten, a rigidez cadavérica instala-se inicialmente:",
+          "alternativas": {
+            "A": "na musculatura da mandíbula e da face, progredindo em sentido crânio-caudal.",
+            "B": "nos membros inferiores, progredindo em direção à cabeça.",
+            "C": "nas mãos e nos pés ao mesmo tempo.",
+            "D": "no tronco, progredindo para as extremidades.",
+            "E": "simultaneamente em todos os músculos do corpo."
+          },
+          "gabarito": "A",
+          "comentario": "A Lei de Nysten descreve a instalação da rigidez em sentido crânio-caudal: começa pela mandíbula e pela face, segue para a nuca, os membros superiores e o tronco e termina nos membros inferiores. A rigidez desaparece na mesma ordem.",
+          "fonte": "Medicina legal – tanatologia: rigidez cadavérica (Lei de Nysten)",
+          "id": "PCAC-S01-D1-P1-PAP-Q12",
+          "uid": "efa2c0a2a1f81939",
+          "numero": 12,
+          "origem": "inédita",
+          "banca": "IDECAN",
+          "ano": null,
+          "orgao_prova_original": null,
+          "formato": "A-E",
+          "anulada": false,
+          "concursos": [
+            "pcac-2026"
+          ],
+          "cargos": [
+            "pap"
+          ]
+        },
+        {
+          "materia": "Medicina e Odontologia Legal",
+          "assunto": "Identificação de vítimas",
+          "bloco": "Conhecimentos Específicos",
+          "item_edital": "3",
+          "dificuldade": "média",
+          "enunciado": "De acordo com o Guia de Identificação de Vítimas de Desastres (DVI) da Interpol, são considerados métodos primários de identificação:",
+          "alternativas": {
+            "A": "as tatuagens, as cicatrizes e as vestimentas.",
+            "B": "os documentos pessoais encontrados com a vítima e o reconhecimento por familiares.",
+            "C": "a papiloscopia, a odontologia legal e a análise de DNA.",
+            "D": "a fotografia do rosto e a altura estimada.",
+            "E": "as joias, os objetos pessoais e a descrição física."
+          },
+          "gabarito": "C",
+          "comentario": "O Guia DVI da Interpol considera primários a comparação de impressões papilares, a odontologia legal e o perfil de DNA, pela confiabilidade científica. Tatuagens, cicatrizes, objetos pessoais, vestimentas e características físicas são métodos secundários, que apenas corroboram a identificação. O reconhecimento visual por familiares é falho em desastres.",
+          "fonte": "Interpol – Disaster Victim Identification Guide",
+          "id": "PCAC-S01-D1-P1-PAP-Q13",
+          "uid": "57425d0a7f24b915",
+          "numero": 13,
+          "origem": "inédita",
+          "banca": "IDECAN",
+          "ano": null,
+          "orgao_prova_original": null,
+          "formato": "A-E",
+          "anulada": false,
+          "concursos": [
+            "pcac-2026"
+          ],
+          "cargos": [
+            "pap"
+          ]
+        },
+        {
+          "materia": "Ciências Forenses",
+          "assunto": "Revelação de impressões latentes",
+          "bloco": "Conhecimentos Específicos",
+          "item_edital": "4",
+          "dificuldade": "média",
+          "enunciado": "Para revelar impressões papilares latentes em superfícies porosas, como papel, utiliza-se um reagente que reage com os aminoácidos do suor e produz coloração púrpura (púrpura de Ruhemann). Esse reagente é:",
+          "alternativas": {
+            "A": "o pó magnético.",
+            "B": "o cianoacrilato.",
+            "C": "o vapor de iodo.",
+            "D": "o negro de fumo.",
+            "E": "a ninidrina."
+          },
+          "gabarito": "E",
+          "comentario": "A ninidrina reage com os aminoácidos presentes no suor e forma a púrpura de Ruhemann; é o método clássico para papel. O pó magnético e o negro de fumo aderem a superfícies lisas e não porosas; o cianoacrilato polimeriza sobre os resíduos em superfícies não porosas; o vapor de iodo reage com lipídios e gera revelação temporária.",
+          "fonte": "Papiloscopia forense – métodos químicos de revelação de latentes",
+          "id": "PCAC-S01-D1-P1-PAP-Q14",
+          "uid": "6a18df0002e0377f",
+          "numero": 14,
+          "origem": "inédita",
+          "banca": "IDECAN",
+          "ano": null,
+          "orgao_prova_original": null,
+          "formato": "A-E",
+          "anulada": false,
+          "concursos": [
+            "pcac-2026"
+          ],
+          "cargos": [
+            "pap"
+          ]
+        },
+        {
+          "materia": "Ciências Forenses",
+          "assunto": "Cadeia de custódia",
+          "bloco": "Conhecimentos Específicos",
+          "item_edital": "4",
+          "dificuldade": "média",
+          "enunciado": "Nos termos do Código de Processo Penal, a primeira etapa do rastreamento do vestígio na cadeia de custódia, que consiste em distinguir um elemento como de potencial interesse para a produção da prova pericial, é o(a):",
+          "alternativas": {
+            "A": "reconhecimento.",
+            "B": "isolamento.",
+            "C": "fixação.",
+            "D": "coleta.",
+            "E": "acondicionamento."
+          },
+          "gabarito": "A",
+          "comentario": "O art. 158-B do CPP (incluído pela Lei 13.964/2019) lista as etapas: reconhecimento, isolamento, fixação, coleta, acondicionamento, transporte, recebimento, processamento, armazenamento e descarte. O reconhecimento (inciso I) é o ato de distinguir o elemento como de potencial interesse pericial.",
+          "fonte": "CPP, arts. 158-A e 158-B (Lei 13.964/2019)",
+          "id": "PCAC-S01-D1-P1-PAP-Q15",
+          "uid": "bdff9a35417aa1f4",
+          "numero": 15,
+          "origem": "inédita",
+          "banca": "IDECAN",
+          "ano": null,
+          "orgao_prova_original": null,
+          "formato": "A-E",
+          "anulada": false,
+          "concursos": [
+            "pcac-2026"
+          ],
+          "cargos": [
+            "pap"
+          ]
+        },
+        {
+          "materia": "Biologia",
+          "assunto": "Ácidos nucleicos",
+          "bloco": "Conhecimentos Específicos",
+          "item_edital": "5",
+          "dificuldade": "média",
+          "enunciado": "Em uma molécula de DNA de fita dupla, 30% das bases nitrogenadas são adenina. A porcentagem de citosina nessa molécula é:",
+          "alternativas": {
+            "A": "30%",
+            "B": "70%",
+            "C": "40%",
+            "D": "20%",
+            "E": "10%"
+          },
+          "gabarito": "D",
+          "comentario": "Pela complementaridade de bases (regra de Chargaff), A = T e C = G. Se A = 30%, então T = 30% e A + T = 60%. Restam 40% para C + G, logo C = 20%.",
+          "fonte": "Regra de Chargaff – pareamento A–T e C–G no DNA",
+          "id": "PCAC-S01-D1-P1-PAP-Q16",
+          "uid": "acf353611ac5a333",
+          "numero": 16,
+          "origem": "inédita",
+          "banca": "IDECAN",
+          "ano": null,
+          "orgao_prova_original": null,
+          "formato": "A-E",
+          "anulada": false,
+          "concursos": [
+            "pcac-2026"
+          ],
+          "cargos": [
+            "pap"
+          ]
+        },
+        {
+          "materia": "Biologia",
+          "assunto": "Células do sangue",
+          "bloco": "Conhecimentos Específicos",
+          "item_edital": "5",
+          "dificuldade": "fácil",
+          "enunciado": "Em amostras de sangue humano coletadas em local de crime, o DNA nuclear utilizado nos exames periciais é obtido principalmente:",
+          "alternativas": {
+            "A": "das hemácias (glóbulos vermelhos).",
+            "B": "das plaquetas.",
+            "C": "dos leucócitos (glóbulos brancos).",
+            "D": "do plasma sanguíneo, livre de células.",
+            "E": "do soro, após a coagulação."
+          },
+          "gabarito": "C",
+          "comentario": "As hemácias maduras dos mamíferos são anucleadas e as plaquetas são fragmentos celulares sem núcleo; por isso o DNA nuclear do sangue vem dos leucócitos. Plasma e soro são a parte líquida do sangue.",
+          "fonte": "Biologia celular – composição do sangue; genética forense",
+          "id": "PCAC-S01-D1-P1-PAP-Q17",
+          "uid": "b7dba167485824d3",
+          "numero": 17,
+          "origem": "inédita",
+          "banca": "IDECAN",
+          "ano": null,
+          "orgao_prova_original": null,
+          "formato": "A-E",
+          "anulada": false,
+          "concursos": [
+            "pcac-2026"
+          ],
+          "cargos": [
+            "pap"
+          ]
+        },
+        {
+          "materia": "Física",
+          "assunto": "Cinemática",
+          "bloco": "Conhecimentos Específicos",
+          "item_edital": "6",
+          "dificuldade": "fácil",
+          "enunciado": "Uma viatura percorreu 180 km entre duas cidades em 2 horas e 30 minutos. Sua velocidade média nesse percurso foi de:",
+          "alternativas": {
+            "A": "78,26 km/h",
+            "B": "90 km/h",
+            "C": "60 km/h",
+            "D": "20 km/h",
+            "E": "72 km/h"
+          },
+          "gabarito": "E",
+          "comentario": "2 h 30 min = 2,5 h (e não 2,3 h). Vm = distância ÷ tempo = 180 ÷ 2,5 = 72 km/h.",
+          "fonte": "Cinemática – velocidade média: Vm = Δs / Δt",
+          "id": "PCAC-S01-D1-P1-PAP-Q18",
+          "uid": "9c1006c57e6372d5",
+          "numero": 18,
+          "origem": "inédita",
+          "banca": "IDECAN",
+          "ano": null,
+          "orgao_prova_original": null,
+          "formato": "A-E",
+          "anulada": false,
+          "concursos": [
+            "pcac-2026"
+          ],
+          "cargos": [
+            "pap"
+          ]
+        },
+        {
+          "materia": "Física",
+          "assunto": "Energia mecânica",
+          "bloco": "Conhecimentos Específicos",
+          "item_edital": "6",
+          "dificuldade": "média",
+          "enunciado": "Um projétil de 10 g é disparado com velocidade de 400 m/s. Sua energia cinética no momento do disparo é de:",
+          "alternativas": {
+            "A": "4 J",
+            "B": "800 J",
+            "C": "1.600 J",
+            "D": "800.000 J",
+            "E": "2 J"
+          },
+          "gabarito": "B",
+          "comentario": "Ec = m·v²/2, com a massa em quilogramas: 10 g = 0,010 kg. Ec = 0,010 × 400² / 2 = 800 J. Usar a massa em gramas leva a 800.000 J; esquecer a divisão por 2 leva a 1.600 J.",
+          "fonte": "Dinâmica – energia cinética: Ec = m·v²/2 (SI)",
+          "id": "PCAC-S01-D1-P1-PAP-Q19",
+          "uid": "c458865a20ee8385",
+          "numero": 19,
+          "origem": "inédita",
+          "banca": "IDECAN",
+          "ano": null,
+          "orgao_prova_original": null,
+          "formato": "A-E",
+          "anulada": false,
+          "concursos": [
+            "pcac-2026"
+          ],
+          "cargos": [
+            "pap"
+          ]
+        },
+        {
+          "materia": "Química",
+          "assunto": "pH",
+          "bloco": "Conhecimentos Específicos",
+          "item_edital": "7",
+          "dificuldade": "fácil",
+          "enunciado": "Uma solução aquosa a 25 °C apresenta concentração de íons H⁺ igual a 1 × 10⁻³ mol/L. O pH dessa solução e sua classificação são, respectivamente:",
+          "alternativas": {
+            "A": "3; básica.",
+            "B": "11; básica.",
+            "C": "11; ácida.",
+            "D": "3; ácida.",
+            "E": "7; neutra."
+          },
+          "gabarito": "D",
+          "comentario": "pH = −log[H⁺] = −log(10⁻³) = 3. A 25 °C, pH < 7 indica solução ácida; pH > 7, básica. O valor 11 corresponde ao pOH dessa solução.",
+          "fonte": "Química – pH = −log[H⁺]; pH + pOH = 14 a 25 °C",
+          "id": "PCAC-S01-D1-P1-PAP-Q20",
+          "uid": "30fc6737e9cac524",
+          "numero": 20,
+          "origem": "inédita",
+          "banca": "IDECAN",
+          "ano": null,
+          "orgao_prova_original": null,
+          "formato": "A-E",
+          "anulada": false,
+          "concursos": [
+            "pcac-2026"
+          ],
+          "cargos": [
+            "pap"
+          ]
+        }
+      ]
+    }
+  ]
+}

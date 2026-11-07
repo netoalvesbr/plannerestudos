@@ -10,7 +10,15 @@ const DIAS = {}; // concursoId -> [{dia, data, semana, provas:[{id,titulo,turno,
 
 for (const arq of Object.values(arquivos)) {
   const cid = arq.concurso_id;
-  const diaObj = arq.dia != null ? { dia: arq.dia, semana: arq.semana, data: arq.data, provas: [] } : null;
+  // vários arquivos do mesmo dia (ex.: um por cargo) são agrupados num único dia
+  let diaObj = null;
+  if (arq.dia != null) {
+    diaObj = (DIAS[cid] ||= []).find((d) => d.data === arq.data);
+    if (!diaObj) {
+      diaObj = { dia: arq.dia, semana: arq.semana, data: arq.data, provas: [] };
+      DIAS[cid].push(diaObj);
+    }
+  }
   for (const p of arq.provas) {
     const uids = [];
     for (const q of p.questoes) {
@@ -23,7 +31,6 @@ for (const arq of Object.values(arquivos)) {
     }
     if (diaObj) diaObj.provas.push({ id: p.id, titulo: p.titulo, turno: p.turno, cargos: p.cargos || null, uids });
   }
-  if (diaObj) (DIAS[cid] ||= []).push(diaObj);
 }
 for (const l of Object.values(DIAS)) l.sort((a, b) => a.data.localeCompare(b.data));
 
