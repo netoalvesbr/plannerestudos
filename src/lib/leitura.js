@@ -58,13 +58,14 @@ export function lerEdital(linhas) {
     r.sigla = siglaDe(r.orgao);
   }
   if (/ORDEM DOS ADVOGADOS|EXAME DE ORDEM/i.test(plano)) {
-    r.nome = 'Exame de Ordem Unificado – OAB';
-    r.sigla = 'OAB';
+    const n = plano.match(/(\d{1,3})\s*[ºo°]\s*EXAME DE ORDEM/i);
+    r.nome = n ? `${n[1]}º Exame de Ordem Unificado – OAB` : 'Exame de Ordem Unificado – OAB';
+    r.sigla = n ? `OAB ${n[1]}` : 'OAB';
   }
 
   // datas importantes: só eventos do concurso (inscrição, prova, resultado...) e datas próximas de hoje
-  const EVENTO = /(inscri[çc]|isen[çc]|prova|gabarito|resultado|recurso|convoca|local|homologa|matr[íi]cula|curso de forma|teste|exame|avalia[çc][ãa]o|per[íi]cia|investiga[çc][ãa]o social|t[íi]tulos|aplica[çc][ãa]o|divulga[çc][ãa]o|entrega|pagamento|boleto)/i;
-  const LEGAL = /(provimento|lei\b|lei n|decreto|resolu[çc][ãa]o|portaria|instru[çc][ãa]o normativa|s[úu]mula|emenda|regido|publicad[oa] no d)/i;
+  const EVENTO = /(publica[çc][ãa]o do edital|inscri[çc]|isen[çc]|prova|gabarito|resultado|recurso|convoca|local|homologa|matr[íi]cula|curso de forma|teste|exame|avalia[çc][ãa]o|per[íi]cia|investiga[çc][ãa]o social|t[íi]tulos|aplica[çc][ãa]o|divulga[çc][ãa]o|entrega|pagamento|boleto)/i;
+  const LEGAL = /(provimento|publicad[oa] no di[áa]rio|lei\b|lei n|decreto|resolu[çc][ãa]o|portaria|instru[çc][ãa]o normativa|s[úu]mula|emenda|regido|publicad[oa] no d)/i;
   const anoAtual = new Date().getFullYear();
   const vistos = new Set();
   for (let i = 0; i < linhas.length && r.cronograma.length < 25; i++) {
@@ -106,27 +107,27 @@ export function lerEdital(linhas) {
     }
   }
 
-  // concursos em fases (ex.: OAB): data da prova da 1ª e da 2ª fase
-  const perto = (re) => {
-    let melhor = null;
-    let custoMin = Infinity;
-    let mm;
-    while ((mm = re.exec(texto))) {
-      for (const d of ds) {
-        const dist = d.pos - mm.index;
-        const custo = dist >= 0 ? dist : 1000 - dist;
-        if (dist >= -40 && dist < 300 && custo < custoMin) {
-          custoMin = custo;
-          melhor = d.iso;
-        }
-      }
+  // concursos em fases (ex.: OAB): data de REALIZAÇÃO de cada fase, procurada linha a linha no cronograma.
+  // Ignora linhas de divulgação de locais, gabarito, padrão de resposta, resultado e recursos.
+  const NAO_E_PROVA = /(divulga|loca(is|l)|gabarito|padr[ãa]o de resposta|resultado|recurso|vista|reaproveitamento|inscri[çc]|isen[çc]|edital complementar|cart[ãa]o)/i;
+  const APLICA = /(realiza[çc][ãa]o|aplica[çc][ãa]o|ser[áa] aplicada|ser[áa] realizada|data prov[áa]vel)/i;
+  const dataDaFase = (reFase) => {
+    // 1º: linha com "realização/aplicação" + fase + data (ou data na linha seguinte, em tabelas quebradas)
+    for (let i = 0; i < linhas.length; i++) {
+      const l = linhas[i];
+      if (!reFase.test(l) || NAO_E_PROVA.test(l)) continue;
+      if (!APLICA.test(l) && !/^\s*(prova|[12][ªa] fase)/i.test(l)) continue;
+      const juntas = [l, linhas[i + 1] || '', linhas[i + 2] || ''].join(' ');
+      const d = datasNoTexto(juntas).filter((x) => +x.iso.slice(0, 4) >= anoAtual - 1);
+      if (d.length) return d[0].iso;
     }
-    return melhor;
+    return null;
   };
   r.datasFases = {
-    primeira: perto(/prova objetiva|1[ªa] fase|primeira fase/gi) || r.dataProva || null,
-    segunda: perto(/pr[áa]tico[- ]profissional|2[ªa] fase|segunda fase|prova discursiva/gi),
+    primeira: dataDaFase(/(1[ªa] fase|primeira fase|prova objetiva)/i) || r.dataProva || null,
+    segunda: dataDaFase(/(2[ªa] fase|segunda fase|pr[áa]tico[- ]?profissional|prova discursiva)/i),
   };
+  if (r.datasFases.primeira) r.dataProva = r.datasFases.primeira;
 
   r.disciplinas = lerConteudoProgramatico(linhas);
   return r;
@@ -160,11 +161,13 @@ export function lerConteudoProgramatico(linhas) {
   const disciplinas = [];
   let bloco = '';
   let atual = null;
+  const NAO_MATERIA = /^(edital|conselho|exame|anexo|ordem dos|funda[çc][ãa]o|minist[ée]rio|cronograma|tabela|quadro|cargo|vagas|governo|secretaria|prefeitura|tribunal|pol[íi]cia|universidade|instituto|coordena|comiss[ãa]o|presid|disposi[çc]|das? |do |dos |item|cap[íi]tulo|se[çc][ãa]o|t[íi]tulo|requisito|atribui|remunera|evento|data|local|hor[áa]rio)/i;
   const fechar = () => {
     if (atual) {
       atual.topicos = dividirTopicos(atual._txt);
       delete atual._txt;
-      if (atual.topicos.length) disciplinas.push(atual);
+      const nomeOk = !NAO_MATERIA.test(atual.nome) && !/\d{2,}/.test(atual.nome) && atual.nome.split(' ').length <= 9;
+      if (atual.topicos.length && nomeOk) disciplinas.push(atual);
     }
     atual = null;
   };
@@ -314,4 +317,42 @@ export function lerGabarito(texto, formato = 'A-E') {
     }
   }
   return res;
+}
+
+// ---------------- edital verticalizado pronto (de outra plataforma ou feito pelo usuário) ----------------
+// Aceita listas com disciplinas como títulos e tópicos numerados ou com marcadores (1., 1.1, -, •, ☐, [ ], ( )).
+const RE_ITEM = /^\s*(?:\d{1,2}(?:\.\d{1,2})*\s*[.)\-–]?|[-•●▪◦*✓✔]|☐|□|■|\[\s?[xX]?\s?\]|\(\s?[xX]?\s?\))\s+/;
+export function lerVerticalizado(linhas) {
+  const discs = [];
+  let atual = null;
+  let ultimo = null;
+  const novaDisc = (nome) => {
+    atual = { nome: titulo(nome.replace(/[:.]$/, '').trim()), topicos: [] };
+    discs.push(atual);
+    ultimo = null;
+  };
+  for (const l0 of linhas) {
+    const l = l0.replace(/\s+/g, ' ').trim();
+    if (!l || /^(p[áa]gina|edital verticalizado|conte[úu]do program[áa]tico|t[óo]pico|estudado|revis)/i.test(l)) continue;
+    const inline = l.match(/^([A-ZÀ-ÖØ-Ý][^:]{3,80}):\s*(\d.*)$/);
+    if (inline) {
+      novaDisc(inline[1]);
+      atual.topicos.push(...dividirTopicos(inline[2]));
+      continue;
+    }
+    if (RE_ITEM.test(l)) {
+      if (!atual) novaDisc('Geral');
+      ultimo = l.replace(RE_ITEM, '').replace(/[;.]$/, '').trim();
+      if (ultimo) atual.topicos.push(ultimo);
+      continue;
+    }
+    const pareceTitulo = (MAIUSC.test(l) && temLetra(l) && l.length <= 90) || (/:$/.test(l) && l.length <= 90) || (l.length <= 60 && /^(direito|l[íi]ngua|portugu|racioc|matem|inform|legisla|no[çc][õo]es|conhecimentos|[ée]tica|contab|estat|administra|arquiv|f[íi]sica|qu[íi]mica|biolog|hist[óo]ria|geograf|atualidades|realidade|economia|filosofia|sociolog|medicina|criminolog|estatuto)/i.test(l));
+    if (pareceTitulo) {
+      novaDisc(l);
+      continue;
+    }
+    // continuação do tópico anterior (texto quebrado em duas linhas)
+    if (atual && ultimo && atual.topicos.length) atual.topicos[atual.topicos.length - 1] += ' ' + l;
+  }
+  return discs.filter((d) => d.topicos.length);
 }

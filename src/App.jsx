@@ -4,6 +4,7 @@ import { POR_UID, questoesDo, registrarQuestoesRemotas } from './lib/dados.js';
 import * as remoto from './lib/remoto.js';
 import NovoConcurso from './components/NovoConcurso.jsx';
 import Cronograma from './components/Cronograma.jsx';
+import BancoQuestoes from './components/BancoQuestoes.jsx';
 import ImportarProva from './components/ImportarProva.jsx';
 import * as store from './lib/store.js';
 import { EscolhaArea, EscolhaCargo, EscolhaFase, Ficha, Login, MeusConcursos, NovaSenha } from './components/Concursos.jsx';
@@ -126,6 +127,7 @@ export default function App() {
     questoesUnificado,
     unificado,
     usuario,
+    bancoVersao,
     respostas,
     prefs,
     setPrefs,
@@ -140,6 +142,7 @@ export default function App() {
       setTela({ nome: 'inicio', chave: Date.now() });
     },
     abrirFicha: (id) => setTela({ nome: 'ficha', id }),
+    irInicio: () => setTela({ nome: 'inicio' }),
     abrirNovoConcurso: () => setTela({ nome: 'novo-concurso' }),
     abrirEditarConcurso: (id) => setTela({ nome: 'editar-concurso', id }),
     abrirImportarProva: (cid, f, a) => setTela({ nome: 'importar-prova', cid: cid || concurso?.id, fase: f || fase, area: a || area }),
@@ -216,6 +219,8 @@ export default function App() {
         }}
       />
     );
+  } else if (tela.nome === 'questoes') {
+    conteudo = <BancoQuestoes ctx={ctx} />;
   } else if (tela.nome === 'concursos' || !concurso) {
     conteudo = (
       <>
@@ -227,9 +232,27 @@ export default function App() {
   } else if (precisaCargo) {
     conteudo = <EscolhaCargo concurso={concurso} aoEscolher={(v) => setPrefConc(concurso.id, { cargo: v })} />;
   } else if (precisaFase) {
-    conteudo = <EscolhaFase concurso={concurso} aoEscolher={(v) => setPrefConc(concurso.id, { fase: v, area: null })} />;
+    conteudo = (
+      <EscolhaFase
+        concurso={concurso}
+        aoEscolher={(v) => {
+          setPrefConc(concurso.id, { fase: v, area: null });
+          const f = concurso.fases.find((x) => x.id === v);
+          if (!f?.areas?.length) setTela({ nome: 'cronograma' });
+        }}
+      />
+    );
   } else if (precisaArea) {
-    conteudo = <EscolhaArea concurso={concurso} fase={faseObj} aoEscolher={(v) => setPrefConc(concurso.id, { area: v })} />;
+    conteudo = (
+      <EscolhaArea
+        concurso={concurso}
+        fase={faseObj}
+        aoEscolher={(v) => {
+          setPrefConc(concurso.id, { area: v });
+          setTela({ nome: 'cronograma' });
+        }}
+      />
+    );
   } else if (tela.nome === 'cronograma') {
     conteudo = <Cronograma key={[concurso.id, fase, area].join('|')} ctx={ctx} />;
   } else if (tela.nome === 'painel') {
@@ -280,6 +303,7 @@ export default function App() {
             <nav className="nav" aria-label="Principal">
               <button aria-current={naInicio && formato === 'diarias'} onClick={() => { setPrefConc(concurso.id, { formato: 'diarias' }); ir('inicio'); }}>📅 Provas diárias</button>
               <button aria-current={naInicio && formato === 'avulsas'} onClick={() => { setPrefConc(concurso.id, { formato: 'avulsas' }); ir('inicio'); }}>🎯 Avulsas</button>
+              <button aria-current={tela.nome === 'questoes'} onClick={() => ir('questoes')}>📝 Questões</button>
               <button aria-current={tela.nome === 'cronograma'} onClick={() => ir('cronograma')}>📆 Cronograma</button>
               <button aria-current={tela.nome === 'painel'} onClick={() => ir('painel')}>Painel</button>
               <button aria-current={tela.nome.startsWith('mapa')} onClick={() => ir('mapas')}>🧠 Mapas</button>

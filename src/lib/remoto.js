@@ -47,7 +47,8 @@ const concursoDoBanco = (r) => ({
   cargos: r.cargos || [],
   disciplinas: (r.disciplinas || []).map((d) => ({ grupo: d.bloco || 'Disciplinas', ...d })),
   cronograma: r.cronograma || [],
-  prova: r.prova || null,
+  prova: r.prova?.blocos ? r.prova : null,
+  modelo: r.prova?.modelo || null,
   criadoPor: r.criado_por,
   remoto: true,
 });
@@ -66,7 +67,7 @@ const concursoParaBanco = (c) => ({
   cargos: c.cargos || [],
   disciplinas: (c.disciplinas || []).map(({ nome, bloco, fase, area, topicos }) => ({ nome, bloco: bloco || null, fase: fase || null, area: area || null, topicos: topicos || [] })),
   cronograma: c.cronograma || [],
-  prova: c.prova || null,
+  prova: c.prova?.blocos ? { ...c.prova, modelo: c.modelo || null } : c.modelo ? { modelo: c.modelo } : null,
 });
 
 export const questaoDoBanco = (r) => ({

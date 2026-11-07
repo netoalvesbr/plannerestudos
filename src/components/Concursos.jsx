@@ -1,5 +1,7 @@
 import { useState } from 'react';
 import { todosConcursos } from '../data/concursos.js';
+import Calendario, { eventosDoConcurso, ProximaData } from './Calendario.jsx';
+import EditalVerticalizado from './EditalVerticalizado.jsx';
 import { disciplinasDo, questoesDo } from '../lib/dados.js';
 import { diasAte, fmtData, fmtPct, resumo } from '../lib/stats.js';
 import { PROVEDORES_LOGIN } from '../data/config.js';
@@ -195,7 +197,7 @@ export function MeusConcursos({ ctx }) {
         <h1 style={{ margin: 0 }}>Concursos</h1>
         <div className="linha">
           <button className="btn pri" onClick={abrirNovoConcurso}>+ Adicionar concurso</button>
-          <button className="btn" onClick={() => abrirImportarProva()}>📥 Importar prova anterior</button>
+          <button className="btn" onClick={() => abrirImportarProva()}>📥 Importar prova</button>
         </div>
       </div>
       <p className="sub">
@@ -231,7 +233,7 @@ export function MeusConcursos({ ctx }) {
               <div className="linha">
                 {seg ? (
                   <>
-                    <button className="btn pri" disabled={prefs.ativo === c.id} onClick={() => setPrefs({ ativo: c.id })}>
+                    <button className="btn pri" disabled={prefs.ativo === c.id} onClick={() => { setPrefs({ ativo: c.id }); ctx.irInicio(); }}>
                       {prefs.ativo === c.id ? '✓ Ativo' : 'Estudar este'}
                     </button>
                     <button className="btn peq" onClick={() => setPrefs({ seguindo: seguindo.filter((x) => x !== c.id), ativo: prefs.ativo === c.id ? seguindo.find((x) => x !== c.id) || null : prefs.ativo })}>
@@ -239,7 +241,7 @@ export function MeusConcursos({ ctx }) {
                     </button>
                   </>
                 ) : (
-                  <button className="btn pri" onClick={() => setPrefs({ seguindo: [...seguindo, c.id], ativo: c.id })}>+ Acompanhar</button>
+                  <button className="btn pri" onClick={() => { setPrefs({ seguindo: [...seguindo, c.id], ativo: c.id }); ctx.irInicio(); }}>+ Acompanhar</button>
                 )}
                 <button className="btn peq" onClick={() => abrirFicha(c.id)}>Ficha e edital</button>
               </div>
@@ -253,36 +255,60 @@ export function MeusConcursos({ ctx }) {
   );
 }
 
-export function EscolhaArea({ concurso, fase, aoEscolher }) {
+function EscolhaConfirmada({ titulo, texto, opcoes, aoConfirmar, rotuloBotao }) {
+  const [sel, setSel] = useState(null);
   return (
-    <section className="card login">
-      <h1>{concurso.sigla} · {fase.nome}: qual é a sua área?</h1>
-      <p className="sub">Você vai estudar só o conteúdo da área escolhida (direito material e processual correspondente). Dá para trocar depois na ficha do concurso.</p>
-      <div className="escolha">
-        {fase.areas.map((a) => (
-          <button key={a.id} className="card bloco-card" onClick={() => aoEscolher(a.id)}>
-            <h2>{a.nome}</h2>
+    <section className="card login" style={{ maxWidth: 560 }}>
+      <h1>{titulo}</h1>
+      <p className="sub">{texto}</p>
+      <div className="escolha" role="radiogroup">
+        {opcoes.map((o) => (
+          <button
+            key={o.id}
+            role="radio"
+            aria-checked={sel === o.id}
+            className="card bloco-card"
+            style={{ borderColor: sel === o.id ? 'var(--pri)' : undefined, borderWidth: 2, background: sel === o.id ? 'var(--pri-claro)' : undefined, margin: 0 }}
+            onClick={() => setSel(o.id)}
+          >
+            <h2 style={{ marginBottom: 2 }}>{sel === o.id ? '◉' : '○'} {o.nome}</h2>
+            {o.desc && <p className="sub" style={{ margin: 0 }}>{o.desc}</p>}
           </button>
         ))}
       </div>
+      <button className="btn pri" style={{ marginTop: 14, width: '100%' }} disabled={!sel} onClick={() => aoConfirmar(sel)}>
+        {sel ? rotuloBotao : 'Selecione uma opção'}
+      </button>
     </section>
   );
 }
 
-export function EscolhaFase({ concurso, aoEscolher }) {
+export function EscolhaArea({ concurso, fase, aoEscolher }) {
   return (
-    <section className="card login">
-      <h1>{concurso.sigla}: qual fase você vai estudar?</h1>
-      <p className="sub">As disciplinas e as questões seguem esta escolha. Você pode trocar depois na ficha do concurso.</p>
-      <div className="escolha">
-        {concurso.fases.map((f) => (
-          <button key={f.id} className="card bloco-card" onClick={() => aoEscolher(f.id)}>
-            <h2>{f.nome}</h2>
-            <p className="sub">{{ 'A-E': 'Múltipla escolha (A a E)', 'A-D': 'Múltipla escolha (A a D)', CE: 'Certo ou Errado', discursiva: 'Discursiva / peça' }[f.formato] || ''}{f.data ? ` · ${fmtData(f.data)}` : ''}</p>
-          </button>
-        ))}
-      </div>
-    </section>
+    <EscolhaConfirmada
+      titulo={`${concurso.sigla} · ${fase.nome}`}
+      texto="Qual matéria você vai fazer na 2ª fase? Você estuda só o conteúdo dela (direito material, processual e as peças). Depois de confirmar, sugerimos o seu cronograma."
+      opcoes={fase.areas.map((a) => ({ id: a.id, nome: a.nome }))}
+      rotuloBotao="Confirmar e montar meu cronograma"
+      aoConfirmar={aoEscolher}
+    />
+  );
+}
+
+export function EscolhaFase({ concurso, aoEscolher }) {
+  const desc = { 'A-E': 'Múltipla escolha (A a E)', 'A-D': 'Múltipla escolha (A a D)', CE: 'Certo ou Errado', discursiva: 'Discursiva / peça' };
+  return (
+    <EscolhaConfirmada
+      titulo={`${concurso.sigla}: para qual fase você vai estudar?`}
+      texto="As matérias, as questões e o cronograma seguem esta escolha. Você pode trocar depois na ficha do concurso."
+      opcoes={concurso.fases.map((f) => ({
+        id: f.id,
+        nome: f.nome,
+        desc: [desc[f.formato], f.data ? `prova em ${fmtData(f.data)}` : null, f.areas?.length ? `escolha entre ${f.areas.length} matérias` : 'todas as matérias'].filter(Boolean).join(' · '),
+      }))}
+      rotuloBotao="Confirmar"
+      aoConfirmar={aoEscolher}
+    />
   );
 }
 
@@ -338,10 +364,9 @@ export function Ficha({ ctx, concurso, voltar }) {
       <button className="btn peq" onClick={voltar} style={{ marginBottom: 10 }}>← Voltar</button>
       <section className="card">
         <h1>{concurso.nome} ({concurso.sigla})</h1>
-        <p className="sub">{[concurso.edital, concurso.banca && `Banca ${concurso.banca}`, concurso.orgao].filter(Boolean).join(' · ')}</p>
+        <p className="sub">{[concurso.banca && `Banca ${concurso.banca}`, concurso.orgao].filter(Boolean).join(' · ')}</p>
         <div className="linha">
-          {concurso.editalUrl && <a className="btn" href={concurso.editalUrl} target="_blank" rel="noreferrer">📄 Abrir edital (PDF)</a>}
-          <button className="btn" onClick={() => abrirImportarProva(concurso.id, fase, area)}>📥 Importar prova deste concurso</button>
+          <button className="btn" onClick={() => abrirImportarProva(concurso.id, fase, area)}>📥 Importar prova</button>
           {podeEditar && <button className="btn" onClick={() => abrirEditarConcurso(concurso.id)}>✏️ Editar</button>}
           {podeEditar && !confirmar && <button className="btn perigo" onClick={() => setConfirmar(true)}>Excluir</button>}
           {confirmar && (
@@ -380,55 +405,18 @@ export function Ficha({ ctx, concurso, voltar }) {
       </section>
 
       <section className="card">
-        <h2>📋 Edital verticalizado</h2>
-        {!totalT ? (
-          <>
-            <p className="sub">
-              O edital deste concurso ainda não foi importado, por isso não há os tópicos do conteúdo programático.
-              {podeEditar ? ' Use "✏️ Editar" e importe o PDF do edital para gerar o edital verticalizado completo.' : ' Quem cadastrou o concurso pode importar o PDF do edital.'}
-            </p>
-            {discs.length > 0 && (
-              <>
-                <p><b>✨ Sugestão de edital verticalizado</b> <span className="sub">(por disciplina, a partir das matérias cadastradas)</span>: {feitosD} de {discs.length} concluídas</p>
-                <div className="barra" aria-hidden="true"><i style={{ width: `${(feitosD / discs.length) * 100}%` }} /></div>
-                <ul style={{ listStyle: 'none', paddingLeft: 4 }}>
-                  {discs.map((d) => (
-                    <li key={d.nome} style={{ margin: '6px 0' }}>
-                      <label className="linha" style={{ gap: 8, flexWrap: 'nowrap' }}>
-                        <input type="checkbox" checked={(marcados.__disciplinas || []).includes(d.nome)} onChange={() => marcarDisc(d.nome)} />
-                        <span>{d.nome}{d.bloco ? <span className="sub peq"> · {d.bloco}</span> : null}</span>
-                      </label>
-                    </li>
-                  ))}
-                </ul>
-              </>
-            )}
-          </>
+        <h2>📅 Datas importantes</h2>
+        <ProximaData eventos={eventosDoConcurso(concurso)} />
+        <Calendario eventos={eventosDoConcurso(concurso)} />
+        {concurso.editalUrl && <p className="peq" style={{ marginTop: 10 }}><a href={concurso.editalUrl} target="_blank" rel="noreferrer">📄 Edital de abertura (PDF)</a></p>}
+      </section>
+
+      <section className="card">
+        <h2>📋 Edital verticalizado{faseObj ? ` – ${faseObj.nome}` : ''}{faseObj?.areas?.find((a) => a.id === area) ? ` – ${faseObj.areas.find((a) => a.id === area).nome}` : ''}</h2>
+        {faseObj?.areas?.length > 0 && !area ? (
+          <p className="sub">Escolha a sua área acima para montar o edital verticalizado.</p>
         ) : (
-          <>
-            <p className="sub">Marque os tópicos que você já estudou. Progresso: <b>{feitosT} de {totalT}</b> ({Math.round((feitosT / totalT) * 100)}%)</p>
-            <div className="barra" aria-hidden="true"><i style={{ width: `${(feitosT / totalT) * 100}%` }} /></div>
-            {discs.filter((d) => d.topicos?.length).map((d) => {
-              const feitos = (marcados[d.nome] || []).filter((i) => i < d.topicos.length).length;
-              return (
-                <details key={d.nome} style={{ borderTop: '1px solid var(--borda)', padding: '8px 0' }}>
-                  <summary>
-                    <b>{d.nome}</b> <span className="sub peq">{d.bloco ? `· ${d.bloco} ` : ''}· {feitos}/{d.topicos.length} {feitos === d.topicos.length ? '✓' : ''}</span>
-                  </summary>
-                  <ul style={{ listStyle: 'none', paddingLeft: 4, margin: '8px 0 0' }}>
-                    {d.topicos.map((t, i) => (
-                      <li key={i} style={{ margin: '4px 0' }}>
-                        <label className="linha" style={{ gap: 8, alignItems: 'flex-start', flexWrap: 'nowrap' }}>
-                          <input type="checkbox" checked={(marcados[d.nome] || []).includes(i)} onChange={() => marcar(d.nome, i)} style={{ marginTop: 4 }} />
-                          <span>{t}</span>
-                        </label>
-                      </li>
-                    ))}
-                  </ul>
-                </details>
-              );
-            })}
-          </>
+          <EditalVerticalizado key={[concurso.id, fase, area].join('|')} ctx={ctx} concurso={concurso} cargo={cargo} fase={fase || null} area={area || null} />
         )}
       </section>
 
@@ -456,21 +444,6 @@ export function Ficha({ ctx, concurso, voltar }) {
             </tbody>
           </table>
           <p style={{ marginTop: 8 }}><b>Aprovação:</b> {p.aprovacao}<br /><b>Discursiva:</b> {p.discursiva}</p>
-        </section>
-      )}
-      {concurso.cronograma?.length > 0 && (
-        <section className="card">
-          <h2>Datas importantes</h2>
-          <table>
-            <tbody>
-              {concurso.cronograma.map((e, i) => (
-                <tr key={i}>
-                  <td>{e.evento}</td>
-                  <td>{fmtData(e.data)}{e.fim ? ` a ${fmtData(e.fim)}` : ''}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
         </section>
       )}
     </div>

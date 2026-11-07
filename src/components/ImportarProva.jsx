@@ -143,7 +143,7 @@ export default function ImportarProva({ concursos, concursoInicial, faseInicial,
   return (
     <div>
       <button className="btn peq" onClick={aoCancelar} style={{ marginBottom: 10 }}>← Voltar</button>
-      <h1>Importar prova anterior</h1>
+      <h1>Importar prova</h1>
       <p className="sub">As questões vão para o <b>banco unificado</b>: ficam disponíveis para todos os usuários. Questões repetidas (mesmo enunciado) não são duplicadas.</p>
 
       <section className="card">

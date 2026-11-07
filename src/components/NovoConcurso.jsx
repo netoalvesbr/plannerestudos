@@ -130,7 +130,28 @@ export default function NovoConcurso({ inicial, aoSalvar, aoCancelar }) {
         </div>
       </section>
 
-      <section className="card">
+      {c.modelo === 'oab' ? (
+        <section className="card">
+          <h2>⚖️ Fases do Exame de Ordem (modelo OAB/FGV)</h2>
+          <p className="sub">As fases e as 7 áreas da 2ª fase são fixas. Confira só as datas das provas (lidas do edital). Cada candidato escolhe depois se vai estudar para a 1ª ou para a 2ª fase.</p>
+          {c.fases.map((f, i) => (
+            <div key={f.id} className="card" style={{ boxShadow: 'none', background: 'var(--bg)' }}>
+              <div className="linha entre">
+                <b>{f.nome}</b>
+                <span className="sub peq">{f.formato === 'A-D' ? 'Objetiva · 80 questões (A a D)' : 'Peça prático-profissional + 4 questões discursivas'}</span>
+              </div>
+              <label className="campo" style={{ maxWidth: 260, marginTop: 6 }}>Data da prova
+                <input type="date" style={campo} value={f.data || ''} onChange={(e) => setItem('fases', i, 'data', e.target.value)} />
+              </label>
+              {f.areas?.length > 0 && (
+                <p className="peq" style={{ marginTop: 8 }}>Áreas: {f.areas.map((a) => a.nome).join(' · ')}</p>
+              )}
+            </div>
+          ))}
+          <button type="button" className="btn peq" onClick={() => setC((x) => ({ ...x, modelo: null }))}>Personalizar fases manualmente</button>
+        </section>
+      ) : (
+        <section className="card">
         <h2>Fases</h2>
         <p className="sub">Opcional. Ex.: OAB – "1ª fase" (A a D) e "2ª fase" (discursiva). Quem acompanha o concurso escolhe a fase que vai estudar. Se a fase tiver <b>áreas</b> (como a 2ª fase da OAB), escreva uma por linha: o candidato escolhe a dele e estuda só o conteúdo daquela área.</p>
         <button type="button" className="btn peq" style={{ marginBottom: 10 }} onClick={() => setC((x) => aplicarModeloOAB(x))}>⚖️ Usar modelo OAB (FGV)</button>
@@ -159,10 +180,13 @@ export default function NovoConcurso({ inicial, aoSalvar, aoCancelar }) {
         ))}
         <button type="button" className="btn peq" onClick={() => incluir('fases', { id: 'f' + Math.random().toString(36).slice(2, 8), nome: `${c.fases.length + 1}ª fase`, formato: c.formato, data: '' })}>+ Adicionar fase</button>
       </section>
+      )}
 
       <section className="card">
         <h2>Datas importantes do edital</h2>
-        <p className="sub">Inscrições, provas, resultados e recursos. (O <b>cronograma de estudos</b> é montado na aba 📆 Cronograma, a partir das disciplinas.)</p>
+        <p className="sub">{c.cronograma.length} datas (inscrições, provas, resultados). Elas aparecem no <b>calendário</b> da ficha do concurso, com a próxima data em destaque.</p>
+        <details>
+          <summary className="sub">Conferir ou editar as datas</summary>
         {c.cronograma.map((x, i) => (
           <div key={i} className="linha" style={{ marginBottom: 8, flexWrap: 'nowrap' }}>
             <input type="date" style={{ ...campo, flex: 1.3 }} value={x.data || ''} onChange={(e) => setItem('cronograma', i, 'data', e.target.value)} aria-label="Data" />
@@ -171,11 +195,18 @@ export default function NovoConcurso({ inicial, aoSalvar, aoCancelar }) {
           </div>
         ))}
         <button type="button" className="btn peq" onClick={() => incluir('cronograma', { data: '', evento: '' })}>+ Adicionar data</button>
+        </details>
       </section>
 
       <section className="card">
-        <h2>Conteúdo programático (edital verticalizado)</h2>
-        <p className="sub">Uma disciplina por bloco; um tópico por linha. Indique a fase (e a área, se houver) de cada disciplina.</p>
+        <h2>Matérias do conteúdo programático</h2>
+        <p className="sub">
+          {c.modelo === 'oab'
+            ? `Automático pelo modelo OAB/FGV: ${c.disciplinas.filter((d) => d.fase === 'f1').length} matérias da 1ª fase e as 7 áreas da 2ª fase. O candidato monta o edital verticalizado dele na ficha do concurso.`
+            : 'Uma disciplina por bloco; um tópico por linha. Indique a fase (e a área, se houver) de cada disciplina.'}
+        </p>
+        <details open={c.modelo !== 'oab'}>
+          <summary className="sub">{c.modelo === 'oab' ? 'Ver ou ajustar as matérias' : 'Disciplinas'}</summary>
         {c.disciplinas.map((d, i) => (
           <div key={i} className="card" style={{ boxShadow: 'none', background: 'var(--bg)' }}>
             <div className="linha" style={{ flexWrap: 'nowrap', marginBottom: 6 }}>
@@ -201,6 +232,7 @@ export default function NovoConcurso({ inicial, aoSalvar, aoCancelar }) {
           </div>
         ))}
         <button type="button" className="btn peq" onClick={() => incluir('disciplinas', { nome: '', bloco: '', fase: '', topicosTxt: '' })}>+ Adicionar disciplina</button>
+        </details>
       </section>
 
       {erro && <p className="aviso" role="alert">{erro}</p>}

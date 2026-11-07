@@ -196,3 +196,9 @@ td.erro { color: var(--erro); }
   th { font-size: 0.74rem; }
   .card { padding: 13px; }
 }
+
+@media print {
+  .topo, .fab, .nav, button, .no-print { display: none !important; }
+  .card { box-shadow: none; break-inside: avoid; }
+  body { background: #fff; }
+}

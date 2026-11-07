@@ -2,6 +2,8 @@ import { useMemo, useState } from 'react';
 import { disciplinasDo } from '../lib/dados.js';
 import { chaveSessao, configPadrao, DIAS_SEMANA, gerarCronograma, gerarIcs, vespera } from '../lib/cronograma.js';
 import { fmtData } from '../lib/stats.js';
+import { verticalizadoDe } from './EditalVerticalizado.jsx';
+import { eventosDoConcurso, ProximaData } from './Calendario.jsx';
 
 const campo = { width: '100%', minHeight: 40, padding: '6px 9px', borderRadius: 9, border: '1px solid var(--borda)', background: 'var(--card)', color: 'var(--txt)', font: 'inherit' };
 const nomeDia = (iso) => DIAS_SEMANA[new Date(iso + 'T12:00:00').getDay()];
@@ -18,7 +20,9 @@ export default function Cronograma({ ctx }) {
   const [todos, setTodos] = useState(false);
   const set = (k, v) => setCfg((c) => ({ ...c, [k]: v }));
 
-  const discs = disciplinasDo(concurso.id, cargo, fase, area);
+  const vert = verticalizadoDe(prefs, concurso.id, fase, area);
+  // usa o edital verticalizado do aluno (se houver); senão, as matérias do concurso
+  const discs = vert ? vert.disciplinas : disciplinasDo(concurso.id, cargo, fase, area);
   const usar = editando ? cfg : salvo?.cfg || cfg;
   const discursiva = (faseObj?.formato || concurso.formato) === 'discursiva';
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -49,8 +53,9 @@ export default function Cronograma({ ctx }) {
   if (editando) {
     return (
       <div>
-        <h1>📆 Cronograma de estudos</h1>
-        <p className="sub">{titulo} · {discs.length} disciplinas · {discs.reduce((s, d) => s + (d.topicos?.length || 0), 0)} tópicos do edital</p>
+        <h1>📆 {salvo ? 'Ajustar cronograma' : 'Seu cronograma sugerido'}</h1>
+        <p className="sub">{titulo} · {discs.length} {discs.length === 1 ? 'matéria' : 'matérias'} · {discs.reduce((s, d) => s + (d.topicos?.length || 0), 0)} tópicos</p>
+        {!salvo && <p className="aviso" style={{ background: 'var(--pri-claro)', color: 'var(--txt)' }}>Já deixamos uma sugestão pronta, de hoje até a véspera da prova. Ajuste os dias e horários, se quiser, e clique em <b>Confirmar cronograma</b>.</p>}
         <section className="card">
           <h2>Período</h2>
           <div className="filtros">
@@ -88,7 +93,7 @@ export default function Cronograma({ ctx }) {
           </p>
           {!discs.length && <p className="aviso">Este concurso ainda não tem disciplinas cadastradas. Importe o edital na ficha do concurso.</p>}
           <div className="linha">
-            <button className="btn pri" disabled={!sessoes.length} onClick={() => { salvar({ cfg, feitos: salvo?.feitos || {} }); setEditando(false); }}>Gerar cronograma</button>
+            <button className="btn pri" disabled={!sessoes.length} onClick={() => { salvar({ cfg, feitos: salvo?.feitos || {} }); setEditando(false); }}>{salvo ? 'Salvar alterações' : 'Confirmar cronograma'}</button>
             {salvo && <button className="btn" onClick={() => setEditando(false)}>Cancelar</button>}
           </div>
         </section>
@@ -129,9 +134,11 @@ export default function Cronograma({ ctx }) {
         <div className="linha">
           <button className="btn peq" onClick={() => setEditando(true)}>⚙️ Ajustar</button>
           <button className="btn peq" onClick={baixarIcs}>📅 Baixar para a agenda (.ics)</button>
+          <button className="btn peq" onClick={() => { setTodos(true); setTimeout(() => window.print(), 300); }}>🖨️ Imprimir / PDF</button>
         </div>
       </div>
-      <p className="sub">{titulo}{dataProva ? ` · prova em ${fmtData(dataProva)}` : ''}</p>
+      <p className="sub">{titulo}{dataProva ? ` · prova em ${fmtData(dataProva)}` : ''}{vert ? ' · baseado no seu edital verticalizado' : ''}</p>
+      <ProximaData eventos={eventosDoConcurso(concurso)} />
       <div className="resumos">
         <div className="card"><div className="sub">Sessões feitas</div><div className="numero">{feitas}/{sessoes.length}</div><div className="barra"><i style={{ width: `${(feitas / Math.max(1, sessoes.length)) * 100}%` }} /></div></div>
         <div className="card"><div className="sub">Carga total</div><div className="numero">{horas} h</div><div className="peq sub">{dias.length} dias de estudo</div></div>
