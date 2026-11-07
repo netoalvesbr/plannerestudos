@@ -1,0 +1,215 @@
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { getConcurso } from './data/concursos.js';
+import { POR_UID, questoesDo } from './lib/dados.js';
+import * as store from './lib/store.js';
+import { EscolhaCargo, Ficha, Login, MeusConcursos, NovaSenha } from './components/Concursos.jsx';
+import { EscolhaFormato, ProvasDiarias, QuestoesAvulsas } from './components/Inicio.jsx';
+import Questao, { Conclusao } from './components/Questao.jsx';
+import Painel from './components/Painel.jsx';
+import { ListaMapas, Mapa } from './components/Mapas.jsx';
+import MenuDesempenho from './components/MenuDesempenho.jsx';
+
+export default function App() {
+  const [carregando, setCarregando] = useState(true);
+  const [usuario, setUsuario] = useState(null);
+  const [respostas, setRespostas] = useState({});
+  const [prefs, setPrefsState] = useState({});
+  const [somenteLocal, setSomenteLocal] = useState(false);
+  const [tela, setTela] = useState({ nome: 'inicio' });
+  const [recuperando, setRecuperando] = useState(false);
+  const [copiouLink, setCopiouLink] = useState(false);
+
+  const iniciar = useCallback(async () => {
+    setCarregando(true);
+    const u = await store.obterUsuario();
+    setUsuario(u);
+    if (u) {
+      const d = await store.carregarDados();
+      setRespostas(d.respostas);
+      setPrefsState(d.prefs);
+      setSomenteLocal(d.somenteLocal);
+    }
+    setCarregando(false);
+  }, []);
+
+  useEffect(() => {
+    iniciar();
+    return store.aoMudarSessao((ev) => (ev === 'recuperar' ? setRecuperando(true) : iniciar()));
+  }, [iniciar]);
+
+  // tema: escolha do usuário ou o do sistema
+  const tema = prefs.tema || (window.matchMedia?.('(prefers-color-scheme: dark)').matches ? 'escuro' : 'claro');
+  useEffect(() => {
+    document.documentElement.dataset.tema = tema;
+  }, [tema]);
+
+  const setPrefs = useCallback((parcial) => {
+    setPrefsState((p) => {
+      const n = { ...p, ...parcial };
+      store.salvarPrefs(n).then((ok) => store.getModo() !== 'local' && !ok && setSomenteLocal(true));
+      return n;
+    });
+  }, []);
+  const setPrefConc = (cid, parcial) =>
+    setPrefs({ concursos: { ...(prefs.concursos || {}), [cid]: { ...(prefs.concursos?.[cid] || {}), ...parcial } } });
+
+  const concurso = getConcurso(prefs.ativo);
+  const pc = (concurso && prefs.concursos?.[concurso.id]) || {};
+  const cargo = concurso?.cargos.length > 1 ? pc.cargo : concurso?.cargos[0]?.id;
+  const questoes = useMemo(() => (concurso ? questoesDo(concurso.id, cargo) : []), [concurso, cargo]);
+
+  function responder(uid, letra, segundos) {
+    const q = POR_UID[uid];
+    setRespostas((r) => {
+      if (r[uid]) return r; // resposta travada
+      const n = { ...r, [uid]: [letra, letra === q.gabarito ? 1 : 0, Date.now(), segundos || 0] };
+      store.salvarResposta(n, uid).then((ok) => store.getModo() !== 'local' && !ok && setSomenteLocal(true));
+      return n;
+    });
+  }
+
+  async function zerar() {
+    const uids = questoes.map((q) => q.uid);
+    const n = { ...respostas };
+    uids.forEach((u) => delete n[u]);
+    setRespostas(n);
+    await store.zerarRespostas(n, uids);
+  }
+
+  const anotar = (uid, texto) => {
+    if ((prefs.notas?.[uid] || '') === texto) return;
+    setPrefs({ notas: { ...(prefs.notas || {}), [uid]: texto } });
+  };
+
+  if (recuperando) return <div className="app"><NovaSenha aoConcluir={() => { setRecuperando(false); iniciar(); }} /></div>;
+  if (carregando) return <div className="app centro" style={{ paddingTop: '30vh' }}>Carregando…</div>;
+  if (!usuario) return <div className="app"><Login aoEntrar={iniciar} /></div>;
+
+  const formato = pc.formato;
+  const ctx = {
+    concurso,
+    cargo,
+    questoes,
+    respostas,
+    prefs,
+    setPrefs,
+    abrirSessao: (s) => setTela({ nome: 'questao', sessao: s }),
+    abrirAvulsas: (filtro) => {
+      setPrefConc(concurso.id, { formato: 'avulsas' });
+      setTela({ nome: 'inicio', filtro, chave: Date.now() });
+    },
+    abrirMapa: (d) => setTela({ nome: 'mapa', disciplina: d }),
+    abrirFicha: (id) => setTela({ nome: 'ficha', id }),
+    abrirPainel: () => setTela({ nome: 'painel' }),
+    voltar: () => setTela({ nome: 'mapas' }),
+    zerar,
+    historicoTexto: () => store.historicoComoTexto(respostas, prefs),
+  };
+
+  // ----- telas sem o topo comum -----
+  let conteudo;
+  let semTopo = false;
+  if (tela.nome === 'questao') {
+    semTopo = true;
+    conteudo = (
+      <Questao
+        key={tela.sessao.titulo + tela.sessao.idx}
+        sessao={tela.sessao}
+        respostas={respostas}
+        responder={responder}
+        notas={prefs.notas}
+        aoAnotar={anotar}
+        aoSair={() => setTela({ nome: 'inicio' })}
+        aoConcluir={(info) => setTela({ nome: 'conclusao', sessao: tela.sessao, info })}
+      />
+    );
+  } else if (tela.nome === 'conclusao') {
+    conteudo = (
+      <Conclusao
+        sessao={tela.sessao}
+        info={tela.info}
+        respostas={respostas}
+        aoRevisar={(i) => setTela({ nome: 'questao', sessao: { ...tela.sessao, modo: 'estudo', idx: i, titulo: tela.sessao.titulo.replace(/^Simulado · /, 'Revisão · ') } })}
+        aoVoltar={() => setTela({ nome: 'inicio' })}
+      />
+    );
+  } else if (tela.nome === 'ficha') {
+    const c = getConcurso(tela.id);
+    conteudo = (
+      <Ficha
+        concurso={c}
+        cargo={prefs.concursos?.[c.id]?.cargo || 'ambos'}
+        aoTrocarCargo={(v) => setPrefConc(c.id, { cargo: v })}
+        voltar={() => setTela({ nome: 'concursos' })}
+      />
+    );
+  } else if (tela.nome === 'concursos' || !concurso) {
+    conteudo = (
+      <>
+        {!concurso && <p className="aviso">Olá, {usuario.nome.split(' ')[0]}! Para começar, acompanhe um concurso.</p>}
+        <MeusConcursos ctx={ctx} />
+      </>
+    );
+  } else if (!cargo) {
+    conteudo = <EscolhaCargo concurso={concurso} aoEscolher={(v) => setPrefConc(concurso.id, { cargo: v })} />;
+  } else if (tela.nome === 'painel') {
+    conteudo = <Painel ctx={ctx} />;
+  } else if (tela.nome === 'mapas') {
+    conteudo = <ListaMapas ctx={ctx} />;
+  } else if (tela.nome === 'mapa') {
+    conteudo = <Mapa ctx={ctx} disciplina={tela.disciplina} />;
+  } else if (!formato) {
+    conteudo = <EscolhaFormato aoEscolher={(f) => setPrefConc(concurso.id, { formato: f })} />;
+  } else if (formato === 'diarias') {
+    conteudo = <ProvasDiarias ctx={ctx} />;
+  } else {
+    conteudo = <QuestoesAvulsas key={tela.chave} ctx={{ ...ctx, filtroInicial: tela.filtro }} />;
+  }
+
+  const ir = (nome) => setTela({ nome });
+  const naInicio = tela.nome === 'inicio';
+  const seguindo = prefs.seguindo || [];
+
+  return (
+    <div className="app">
+      {!semTopo && (
+        <header className="topo">
+          <div className="topo-linha" style={{ paddingRight: concurso ? 56 : 0 }}>
+            <button className="logo" onClick={() => ir('inicio')}>EstudaAí</button>
+            <span className="sub">Olá, {usuario.nome.split(' ')[0]}{usuario.admin && <b title="Administrador"> · 👑 Admin</b>}</span>
+            {store.getModo() === 'conta' && (
+              <button
+                className="btn peq"
+                onClick={() => navigator.clipboard?.writeText(window.location.origin).then(() => { setCopiouLink(true); setTimeout(() => setCopiouLink(false), 2500); }).catch(() => {})}
+                title="Copia o link da plataforma para enviar a outras pessoas"
+              >
+                {copiouLink ? '✓ Link copiado' : '🔗 Compartilhar'}
+              </button>
+            )}
+            {seguindo.length > 1 && (
+              <select aria-label="Concurso ativo" value={prefs.ativo || ''} onChange={(e) => { setPrefs({ ativo: e.target.value }); ir('inicio'); }} style={{ width: 'auto' }}>
+                {seguindo.map((id) => <option key={id} value={id}>{getConcurso(id)?.sigla}</option>)}
+              </select>
+            )}
+            <button className="btn peq" aria-label={tema === 'escuro' ? 'Usar modo claro' : 'Usar modo escuro'} onClick={() => setPrefs({ tema: tema === 'escuro' ? 'claro' : 'escuro' })}>
+              {tema === 'escuro' ? '☀️' : '🌙'}
+            </button>
+            {store.getModo() !== 'claude' && <button className="btn peq" onClick={() => store.sair().then(iniciar)}>Sair</button>}
+          </div>
+          {concurso && cargo && (
+            <nav className="nav" aria-label="Principal">
+              <button aria-current={naInicio && formato === 'diarias'} onClick={() => { setPrefConc(concurso.id, { formato: 'diarias' }); ir('inicio'); }}>📅 Provas diárias</button>
+              <button aria-current={naInicio && formato === 'avulsas'} onClick={() => { setPrefConc(concurso.id, { formato: 'avulsas' }); ir('inicio'); }}>🎯 Avulsas</button>
+              <button aria-current={tela.nome === 'painel'} onClick={() => ir('painel')}>Painel</button>
+              <button aria-current={tela.nome.startsWith('mapa')} onClick={() => ir('mapas')}>🧠 Mapas</button>
+              <button aria-current={tela.nome === 'concursos' || tela.nome === 'ficha'} onClick={() => ir('concursos')}>Concursos</button>
+            </nav>
+          )}
+        </header>
+      )}
+      {somenteLocal && !semTopo && naInicio && <p className="aviso">Respostas salvas apenas neste aparelho.</p>}
+      <main>{conteudo}</main>
+      {concurso && cargo && <MenuDesempenho questoes={questoes} respostas={respostas} aoAbrirPainel={() => ir('painel')} />}
+    </div>
+  );
+}

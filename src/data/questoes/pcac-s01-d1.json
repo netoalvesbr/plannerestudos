@@ -1,0 +1,686 @@
+{
+  "versao_esquema": "2.0",
+  "concurso_id": "pcac-2026",
+  "semana": 1,
+  "dia": 1,
+  "data": "2026-11-09",
+  "provas": [
+    {
+      "id": "PCAC-S01-D1-P1",
+      "titulo": "Prova 1 – Manhã",
+      "turno": "Manhã",
+      "cargos": [
+        "oi"
+      ],
+      "distribuicao_gabarito": {
+        "A": 4,
+        "B": 4,
+        "C": 4,
+        "D": 4,
+        "E": 4
+      },
+      "questoes": [
+        {
+          "materia": "Língua Portuguesa",
+          "assunto": "Crase",
+          "bloco": "Conhecimentos Básicos",
+          "item_edital": "1",
+          "dificuldade": "fácil",
+          "enunciado": "Assinale a alternativa em que o acento grave indicativo de crase está empregado corretamente.",
+          "alternativas": {
+            "A": "O investigador referiu-se à pessoas que estavam no local.",
+            "B": "A equipe chegou à delegacia às 7h para iniciar o plantão.",
+            "C": "O depoimento começou à partir das 8h.",
+            "D": "O escrivão entregou o termo à ele ainda pela manhã.",
+            "E": "O policial ficou frente à frente com o suspeito."
+          },
+          "gabarito": "B",
+          "comentario": "Correta a B: \"chegar a\" + \"a delegacia\" = à; \"às 7h\" indica hora determinada, locução feminina. Nas demais: não há crase diante de palavra no plural quando o \"a\" está no singular (à pessoas), diante de verbo (a partir), diante de pronome pessoal (a ele) e entre palavras repetidas (frente a frente).",
+          "fonte": "Regras de emprego do acento grave (crase) – norma-padrão",
+          "id": "PCAC-S01-D1-P1-Q01",
+          "uid": "91522087b2176b7c",
+          "numero": 1,
+          "origem": "inédita",
+          "banca": "IDECAN",
+          "ano": null,
+          "orgao_prova_original": null,
+          "formato": "A-E",
+          "anulada": false,
+          "concursos": [
+            "pcac-2026"
+          ],
+          "cargos": [
+            "oi"
+          ]
+        },
+        {
+          "materia": "Língua Portuguesa",
+          "assunto": "Concordância verbal",
+          "bloco": "Conhecimentos Básicos",
+          "item_edital": "1",
+          "dificuldade": "média",
+          "enunciado": "Considerando a norma-padrão da língua portuguesa, assinale a alternativa em que a concordância verbal está correta.",
+          "alternativas": {
+            "A": "Fazem três anos que o crime ocorreu.",
+            "B": "Houveram muitas denúncias anônimas sobre o caso.",
+            "C": "Existe várias provas juntadas ao inquérito.",
+            "D": "Haviam testemunhas no local quando a viatura chegou.",
+            "E": "Devem existir outras evidências no local do crime."
+          },
+          "gabarito": "E",
+          "comentario": "Correta a E: \"existir\" é verbo pessoal e concorda com o sujeito \"outras evidências\"; na locução, o auxiliar \"devem\" vai para o plural. Erros: \"fazer\" indicando tempo é impessoal (Faz três anos); \"haver\" no sentido de existir é impessoal (Houve muitas denúncias; Havia testemunhas); \"existir\" deveria concordar com \"várias provas\" (Existem).",
+          "fonte": "Concordância verbal – verbos impessoais (haver, fazer) e verbo existir",
+          "id": "PCAC-S01-D1-P1-Q02",
+          "uid": "254af9d6141c3c7f",
+          "numero": 2,
+          "origem": "inédita",
+          "banca": "IDECAN",
+          "ano": null,
+          "orgao_prova_original": null,
+          "formato": "A-E",
+          "anulada": false,
+          "concursos": [
+            "pcac-2026"
+          ],
+          "cargos": [
+            "oi"
+          ]
+        },
+        {
+          "materia": "Raciocínio Lógico",
+          "assunto": "Negação de proposições",
+          "bloco": "Conhecimentos Básicos",
+          "item_edital": "2",
+          "dificuldade": "média",
+          "enunciado": "Considere a proposição: \"Se o suspeito fugiu, então a viatura chegou atrasada.\"\nA negação lógica dessa proposição é:",
+          "alternativas": {
+            "A": "Se o suspeito não fugiu, então a viatura não chegou atrasada.",
+            "B": "O suspeito não fugiu e a viatura chegou atrasada.",
+            "C": "O suspeito fugiu e a viatura não chegou atrasada.",
+            "D": "O suspeito não fugiu ou a viatura chegou atrasada.",
+            "E": "Se a viatura não chegou atrasada, então o suspeito não fugiu."
+          },
+          "gabarito": "C",
+          "comentario": "A negação de \"Se p, então q\" é \"p e não q\" (C). A alternativa D (¬p ∨ q) e a E (contrapositiva ¬q → ¬p) são EQUIVALENTES à proposição original, e não sua negação. A A é a inversa, que não é equivalente nem negação.",
+          "fonte": "¬(p → q) ≡ p ∧ ¬q",
+          "id": "PCAC-S01-D1-P1-Q03",
+          "uid": "013139e7441b1b43",
+          "numero": 3,
+          "origem": "inédita",
+          "banca": "IDECAN",
+          "ano": null,
+          "orgao_prova_original": null,
+          "formato": "A-E",
+          "anulada": false,
+          "concursos": [
+            "pcac-2026"
+          ],
+          "cargos": [
+            "oi"
+          ]
+        },
+        {
+          "materia": "Raciocínio Lógico",
+          "assunto": "Análise combinatória",
+          "bloco": "Conhecimentos Básicos",
+          "item_edital": "2",
+          "dificuldade": "média",
+          "enunciado": "Uma equipe de 3 policiais será formada a partir de um grupo com 5 oficiais investigadores e 3 papiloscopistas. A equipe deve ter exatamente 1 papiloscopista. O número de equipes distintas que podem ser formadas é:",
+          "alternativas": {
+            "A": "56",
+            "B": "10",
+            "C": "60",
+            "D": "30",
+            "E": "13"
+          },
+          "gabarito": "D",
+          "comentario": "Escolhe-se 1 papiloscopista entre 3: C(3,1) = 3; e 2 investigadores entre 5: C(5,2) = 10. Pelo princípio multiplicativo: 3 × 10 = 30. Usar arranjo (60) conta a ordem, que não importa numa equipe; C(8,3) = 56 ignora a restrição.",
+          "fonte": "Combinação simples: C(n,p) = n! / [p!(n−p)!]; princípio multiplicativo",
+          "id": "PCAC-S01-D1-P1-Q04",
+          "uid": "adc6aaceead06cd9",
+          "numero": 4,
+          "origem": "inédita",
+          "banca": "IDECAN",
+          "ano": null,
+          "orgao_prova_original": null,
+          "formato": "A-E",
+          "anulada": false,
+          "concursos": [
+            "pcac-2026"
+          ],
+          "cargos": [
+            "oi"
+          ]
+        },
+        {
+          "materia": "Informática",
+          "assunto": "Planilhas eletrônicas",
+          "bloco": "Conhecimentos Básicos",
+          "item_edital": "3",
+          "dificuldade": "fácil",
+          "enunciado": "Em uma planilha do Microsoft Excel (versão em português), as células A1, A2 e A3 contêm, respectivamente, os valores 10, 20 e 30. Ao digitar na célula B1 a fórmula =MÉDIA(A1:A3)*2, o resultado exibido será:",
+          "alternativas": {
+            "A": "40",
+            "B": "20",
+            "C": "60",
+            "D": "120",
+            "E": "30"
+          },
+          "gabarito": "A",
+          "comentario": "MÉDIA(A1:A3) = (10 + 20 + 30) / 3 = 20. Multiplicado por 2: 40. 60 seria o resultado de SOMA(A1:A3) e 120 o de SOMA(A1:A3)*2.",
+          "fonte": "Excel – funções MÉDIA e SOMA; intervalo A1:A3",
+          "id": "PCAC-S01-D1-P1-Q05",
+          "uid": "7bce1752558c3b67",
+          "numero": 5,
+          "origem": "inédita",
+          "banca": "IDECAN",
+          "ano": null,
+          "orgao_prova_original": null,
+          "formato": "A-E",
+          "anulada": false,
+          "concursos": [
+            "pcac-2026"
+          ],
+          "cargos": [
+            "oi"
+          ]
+        },
+        {
+          "materia": "Direito Constitucional",
+          "assunto": "Inviolabilidade do domicílio",
+          "bloco": "Conhecimentos Jurídicos",
+          "item_edital": "1",
+          "dificuldade": "média",
+          "enunciado": "Durante a madrugada, policiais civis percebem, pela janela de uma residência, que um homem mantém uma pessoa amarrada e sob ameaça de faca. O morador não autoriza a entrada. À luz da Constituição Federal, os policiais:",
+          "alternativas": {
+            "A": "só podem ingressar com determinação judicial, que, no caso, pode ser cumprida a qualquer hora.",
+            "B": "podem ingressar imediatamente na casa, pois há flagrante delito, hipótese que autoriza a entrada a qualquer hora.",
+            "C": "devem aguardar o amanhecer, pois o ingresso noturno é vedado em qualquer hipótese.",
+            "D": "podem ingressar somente com autorização escrita do delegado de polícia.",
+            "E": "podem ingressar apenas se houver mandado de prisão contra o morador, ainda que à noite."
+          },
+          "gabarito": "B",
+          "comentario": "Art. 5º, XI, da CF: a casa é asilo inviolável, salvo em caso de flagrante delito ou desastre, para prestar socorro, ou, durante o dia, por determinação judicial. Flagrante, desastre e socorro autorizam o ingresso a qualquer hora, mesmo sem consentimento. A ordem judicial só pode ser cumprida durante o dia; o delegado não expede ordem de ingresso.",
+          "fonte": "CF, art. 5º, XI",
+          "id": "PCAC-S01-D1-P1-Q06",
+          "uid": "7384751cc815a3b0",
+          "numero": 6,
+          "origem": "inédita",
+          "banca": "IDECAN",
+          "ano": null,
+          "orgao_prova_original": null,
+          "formato": "A-E",
+          "anulada": false,
+          "concursos": [
+            "pcac-2026"
+          ],
+          "cargos": [
+            "oi"
+          ]
+        },
+        {
+          "materia": "Direito Administrativo",
+          "assunto": "Atributos do ato administrativo",
+          "bloco": "Conhecimentos Jurídicos",
+          "item_edital": "2",
+          "dificuldade": "fácil",
+          "enunciado": "O atributo do ato administrativo que permite à Administração Pública executar diretamente suas decisões, sem necessidade de prévia autorização do Poder Judiciário, denomina-se:",
+          "alternativas": {
+            "A": "presunção de legitimidade.",
+            "B": "imperatividade.",
+            "C": "autoexecutoriedade.",
+            "D": "tipicidade.",
+            "E": "motivação."
+          },
+          "gabarito": "C",
+          "comentario": "Autoexecutoriedade é a possibilidade de a Administração pôr em execução suas decisões por meios próprios (ex.: apreensão de mercadoria imprópria, interdição de estabelecimento). Imperatividade é impor obrigações a terceiros independentemente de concordância; presunção de legitimidade é a presunção de que o ato é conforme a lei; tipicidade é a correspondência a figuras previstas em lei; motivação não é atributo, e sim exposição dos motivos (elemento formal).",
+          "fonte": "Doutrina – atributos do ato administrativo (presunção de legitimidade, imperatividade, autoexecutoriedade, tipicidade)",
+          "id": "PCAC-S01-D1-P1-Q07",
+          "uid": "cd4fab16e8df4322",
+          "numero": 7,
+          "origem": "inédita",
+          "banca": "IDECAN",
+          "ano": null,
+          "orgao_prova_original": null,
+          "formato": "A-E",
+          "anulada": false,
+          "concursos": [
+            "pcac-2026"
+          ],
+          "cargos": [
+            "oi"
+          ]
+        },
+        {
+          "materia": "Direito Penal e Processual Penal",
+          "assunto": "Inquérito policial",
+          "bloco": "Conhecimentos Jurídicos",
+          "item_edital": "3",
+          "dificuldade": "média",
+          "enunciado": "Sobre o inquérito policial, de acordo com o Código de Processo Penal e a jurisprudência do STF, é correto afirmar que:",
+          "alternativas": {
+            "A": "o inquérito é indispensável ao oferecimento da denúncia pelo Ministério Público.",
+            "B": "a autoridade policial pode arquivar o inquérito quando não houver indícios de autoria.",
+            "C": "o inquérito é procedimento contraditório, sendo obrigatória a ampla defesa do investigado.",
+            "D": "a autoridade policial não poderá mandar arquivar autos de inquérito.",
+            "E": "o defensor não tem acesso aos elementos de prova já documentados, em razão do sigilo."
+          },
+          "gabarito": "D",
+          "comentario": "Art. 17 do CPP: a autoridade policial não poderá mandar arquivar autos de inquérito. O inquérito é dispensável quando o titular da ação já dispõe de elementos (art. 39, § 5º, e art. 46, § 1º, do CPP), é inquisitivo (sem contraditório obrigatório) e a Súmula Vinculante 14 garante ao defensor acesso aos elementos já documentados.",
+          "fonte": "CPP, art. 17; Súmula Vinculante 14 do STF",
+          "id": "PCAC-S01-D1-P1-Q08",
+          "uid": "db9bb79ec9d37d76",
+          "numero": 8,
+          "origem": "inédita",
+          "banca": "IDECAN",
+          "ano": null,
+          "orgao_prova_original": null,
+          "formato": "A-E",
+          "anulada": false,
+          "concursos": [
+            "pcac-2026"
+          ],
+          "cargos": [
+            "oi"
+          ]
+        },
+        {
+          "materia": "Contabilidade e Análise Financeira",
+          "assunto": "Equação patrimonial",
+          "bloco": "Conhecimentos Específicos",
+          "item_edital": "1",
+          "dificuldade": "fácil",
+          "enunciado": "Uma empresa investigada apresenta, em seu balanço, ativo total de R$ 500.000 e passivo exigível de R$ 320.000. O valor do seu patrimônio líquido é de:",
+          "alternativas": {
+            "A": "R$ 820.000.",
+            "B": "R$ 320.000.",
+            "C": "R$ 500.000.",
+            "D": "R$ 90.000.",
+            "E": "R$ 180.000."
+          },
+          "gabarito": "E",
+          "comentario": "Equação fundamental: Ativo = Passivo + Patrimônio Líquido, logo PL = A − P = 500.000 − 320.000 = 180.000.",
+          "fonte": "Equação patrimonial: A = P + PL",
+          "id": "PCAC-S01-D1-P1-Q09",
+          "uid": "39af908ee01637f5",
+          "numero": 9,
+          "origem": "inédita",
+          "banca": "IDECAN",
+          "ano": null,
+          "orgao_prova_original": null,
+          "formato": "A-E",
+          "anulada": false,
+          "concursos": [
+            "pcac-2026"
+          ],
+          "cargos": [
+            "oi"
+          ]
+        },
+        {
+          "materia": "Contabilidade e Análise Financeira",
+          "assunto": "Classificação de contas",
+          "bloco": "Conhecimentos Específicos",
+          "item_edital": "1",
+          "dificuldade": "fácil",
+          "enunciado": "Entre as contas abaixo, aquela que integra o passivo de uma empresa é:",
+          "alternativas": {
+            "A": "Caixa.",
+            "B": "Estoques.",
+            "C": "Fornecedores.",
+            "D": "Veículos.",
+            "E": "Duplicatas a receber."
+          },
+          "gabarito": "C",
+          "comentario": "Fornecedores representa obrigação a pagar, logo é conta do passivo (circulante). Caixa, estoques e duplicatas a receber são do ativo circulante; veículos, do ativo não circulante (imobilizado).",
+          "fonte": "Lei 6.404/1976, arts. 178 a 180 – grupos do balanço patrimonial",
+          "id": "PCAC-S01-D1-P1-Q10",
+          "uid": "25769193ac1fef37",
+          "numero": 10,
+          "origem": "inédita",
+          "banca": "IDECAN",
+          "ano": null,
+          "orgao_prova_original": null,
+          "formato": "A-E",
+          "anulada": false,
+          "concursos": [
+            "pcac-2026"
+          ],
+          "cargos": [
+            "oi"
+          ]
+        },
+        {
+          "materia": "Contabilidade e Análise Financeira",
+          "assunto": "Índices de liquidez",
+          "bloco": "Conhecimentos Específicos",
+          "item_edital": "2",
+          "dificuldade": "média",
+          "enunciado": "Na análise das demonstrações de uma empresa suspeita de fraude, verificou-se ativo circulante de R$ 240.000 e passivo circulante de R$ 160.000. O índice de liquidez corrente da empresa é:",
+          "alternativas": {
+            "A": "1,50",
+            "B": "0,67",
+            "C": "2,50",
+            "D": "0,33",
+            "E": "3"
+          },
+          "gabarito": "A",
+          "comentario": "Liquidez corrente = Ativo circulante ÷ Passivo circulante = 240.000 ÷ 160.000 = 1,50. Significa que a empresa tem R$ 1,50 de bens e direitos de curto prazo para cada R$ 1,00 de dívida de curto prazo.",
+          "fonte": "Análise de balanços – índice de liquidez corrente (AC/PC)",
+          "id": "PCAC-S01-D1-P1-Q11",
+          "uid": "5959593e7fc4efa1",
+          "numero": 11,
+          "origem": "inédita",
+          "banca": "IDECAN",
+          "ano": null,
+          "orgao_prova_original": null,
+          "formato": "A-E",
+          "anulada": false,
+          "concursos": [
+            "pcac-2026"
+          ],
+          "cargos": [
+            "oi"
+          ]
+        },
+        {
+          "materia": "Estatística",
+          "assunto": "Medidas de tendência central",
+          "bloco": "Conhecimentos Específicos",
+          "item_edital": "1",
+          "dificuldade": "fácil",
+          "enunciado": "O número de ocorrências registradas por dia em uma delegacia, durante uma semana, foi: 2, 4, 4, 5, 7, 8, 12. A média, a mediana e a moda desses dados são, respectivamente:",
+          "alternativas": {
+            "A": "5, 6 e 4.",
+            "B": "6, 5 e 4.",
+            "C": "6, 4 e 5.",
+            "D": "4, 5 e 6.",
+            "E": "6, 12 e 4."
+          },
+          "gabarito": "B",
+          "comentario": "Média = soma ÷ n = 42 ÷ 7 = 6. Com os dados em ordem, a mediana é o termo central (4º de 7) = 5. Moda é o valor mais frequente = 4.",
+          "fonte": "Estatística descritiva – média aritmética, mediana e moda",
+          "id": "PCAC-S01-D1-P1-Q12",
+          "uid": "ddb1b2e6e6cae5db",
+          "numero": 12,
+          "origem": "inédita",
+          "banca": "IDECAN",
+          "ano": null,
+          "orgao_prova_original": null,
+          "formato": "A-E",
+          "anulada": false,
+          "concursos": [
+            "pcac-2026"
+          ],
+          "cargos": [
+            "oi"
+          ]
+        },
+        {
+          "materia": "Estatística",
+          "assunto": "Probabilidade",
+          "bloco": "Conhecimentos Específicos",
+          "item_edital": "2",
+          "dificuldade": "média",
+          "enunciado": "Um dado honesto de seis faces é lançado uma vez. A probabilidade de se obter um número par ou um número maior que 4 é:",
+          "alternativas": {
+            "A": "5/6",
+            "B": "1/2",
+            "C": "1/6",
+            "D": "1/3",
+            "E": "2/3"
+          },
+          "gabarito": "E",
+          "comentario": "P(A ∪ B) = P(A) + P(B) − P(A ∩ B) = 3/6 + 2/6 − 1/6 = 4/6 = 2/3. Os resultados favoráveis são 2, 4, 5 e 6. Somar sem descontar a interseção (o 6) leva ao erro 5/6.",
+          "fonte": "Probabilidade da união de eventos: P(A∪B) = P(A) + P(B) − P(A∩B)",
+          "id": "PCAC-S01-D1-P1-Q13",
+          "uid": "7ddf408c2e7f22cc",
+          "numero": 13,
+          "origem": "inédita",
+          "banca": "IDECAN",
+          "ano": null,
+          "orgao_prova_original": null,
+          "formato": "A-E",
+          "anulada": false,
+          "concursos": [
+            "pcac-2026"
+          ],
+          "cargos": [
+            "oi"
+          ]
+        },
+        {
+          "materia": "Estatística",
+          "assunto": "Medidas de dispersão",
+          "bloco": "Conhecimentos Específicos",
+          "item_edital": "2",
+          "dificuldade": "difícil",
+          "enunciado": "Os tempos de resposta (em minutos) de uma equipe a quatro chamados foram 2, 4, 6, 12. A variância populacional desses tempos é:",
+          "alternativas": {
+            "A": "3,74",
+            "B": "6",
+            "C": "18,67",
+            "D": "14",
+            "E": "56"
+          },
+          "gabarito": "D",
+          "comentario": "Média = 6. Desvios ao quadrado: 16, 4, 0, 36 (soma = 56). Variância populacional = soma ÷ n = 14. Dividir por n − 1 dá a variância amostral; a raiz da variância é o desvio-padrão.",
+          "fonte": "Variância populacional: σ² = Σ(xi − μ)² / N",
+          "id": "PCAC-S01-D1-P1-Q14",
+          "uid": "2cdc108c6ba8999b",
+          "numero": 14,
+          "origem": "inédita",
+          "banca": "IDECAN",
+          "ano": null,
+          "orgao_prova_original": null,
+          "formato": "A-E",
+          "anulada": false,
+          "concursos": [
+            "pcac-2026"
+          ],
+          "cargos": [
+            "oi"
+          ]
+        },
+        {
+          "materia": "Arquivologia",
+          "assunto": "Teoria das três idades",
+          "bloco": "Conhecimentos Específicos",
+          "item_edital": "1",
+          "dificuldade": "fácil",
+          "enunciado": "Os documentos que perderam o valor administrativo, mas que, por seu valor histórico, probatório e informativo, devem ser definitivamente preservados, compõem o arquivo:",
+          "alternativas": {
+            "A": "permanente.",
+            "B": "corrente.",
+            "C": "intermediário.",
+            "D": "setorial.",
+            "E": "especial."
+          },
+          "gabarito": "A",
+          "comentario": "Pela teoria das três idades: corrente (uso frequente pela administração), intermediário (uso eventual, aguardando destinação) e permanente (guarda definitiva por valor histórico, probatório e informativo). Arquivo setorial e especial dizem respeito à localização e ao suporte, não à idade.",
+          "fonte": "Lei 8.159/1991, art. 8º – arquivos correntes, intermediários e permanentes",
+          "id": "PCAC-S01-D1-P1-Q15",
+          "uid": "8a605d113429b426",
+          "numero": 15,
+          "origem": "inédita",
+          "banca": "IDECAN",
+          "ano": null,
+          "orgao_prova_original": null,
+          "formato": "A-E",
+          "anulada": false,
+          "concursos": [
+            "pcac-2026"
+          ],
+          "cargos": [
+            "oi"
+          ]
+        },
+        {
+          "materia": "Arquivologia",
+          "assunto": "Princípios arquivísticos",
+          "bloco": "Conhecimentos Específicos",
+          "item_edital": "1",
+          "dificuldade": "média",
+          "enunciado": "O princípio segundo o qual os documentos devem ser mantidos agrupados conforme a entidade que os produziu, sem mistura com documentos de outras entidades, é o princípio da:",
+          "alternativas": {
+            "A": "pertinência.",
+            "B": "ordem original.",
+            "C": "proveniência.",
+            "D": "indivisibilidade.",
+            "E": "cumulatividade."
+          },
+          "gabarito": "C",
+          "comentario": "Proveniência (ou respeito aos fundos): o arquivo de uma entidade deve manter sua individualidade, sem mistura com documentos de outras origens. Ordem original trata da organização interna do fundo; indivisibilidade, de não dispersar o fundo; cumulatividade, da formação natural do arquivo. Pertinência (temática) é o critério oposto, rejeitado pela arquivologia.",
+          "fonte": "Princípios arquivísticos – proveniência, ordem original, organicidade, indivisibilidade, cumulatividade",
+          "id": "PCAC-S01-D1-P1-Q16",
+          "uid": "bfe8c394303933be",
+          "numero": 16,
+          "origem": "inédita",
+          "banca": "IDECAN",
+          "ano": null,
+          "orgao_prova_original": null,
+          "formato": "A-E",
+          "anulada": false,
+          "concursos": [
+            "pcac-2026"
+          ],
+          "cargos": [
+            "oi"
+          ]
+        },
+        {
+          "materia": "TI e Segurança da Informação",
+          "assunto": "Ameaças e golpes",
+          "bloco": "Conhecimentos Específicos",
+          "item_edital": "4",
+          "dificuldade": "fácil",
+          "enunciado": "Um servidor recebe um e-mail que imita a identidade visual de um banco e pede que ele clique em um link e \"confirme\" seus dados de acesso. Esse tipo de golpe é denominado:",
+          "alternativas": {
+            "A": "ransomware.",
+            "B": "worm.",
+            "C": "keylogger.",
+            "D": "DDoS.",
+            "E": "phishing."
+          },
+          "gabarito": "E",
+          "comentario": "Phishing é a fraude que usa mensagens falsas que imitam instituições confiáveis para induzir a vítima a fornecer dados. Ransomware sequestra dados e exige resgate; worm se propaga sozinho pela rede; keylogger captura o que é digitado; DDoS é ataque de negação de serviço distribuído.",
+          "fonte": "Segurança da informação – engenharia social e códigos maliciosos",
+          "id": "PCAC-S01-D1-P1-Q17",
+          "uid": "767fa2294259430a",
+          "numero": 17,
+          "origem": "inédita",
+          "banca": "IDECAN",
+          "ano": null,
+          "orgao_prova_original": null,
+          "formato": "A-E",
+          "anulada": false,
+          "concursos": [
+            "pcac-2026"
+          ],
+          "cargos": [
+            "oi"
+          ]
+        },
+        {
+          "materia": "TI e Segurança da Informação",
+          "assunto": "Princípios da segurança da informação",
+          "bloco": "Conhecimentos Específicos",
+          "item_edital": "4",
+          "dificuldade": "fácil",
+          "enunciado": "O princípio da segurança da informação que garante que a informação não foi alterada de forma indevida, mantendo-se exata e completa, é a:",
+          "alternativas": {
+            "A": "confidencialidade.",
+            "B": "integridade.",
+            "C": "disponibilidade.",
+            "D": "autenticidade.",
+            "E": "irretratabilidade."
+          },
+          "gabarito": "B",
+          "comentario": "Integridade: a informação não sofre alteração não autorizada. Confidencialidade: acesso só por autorizados; disponibilidade: acesso quando necessário; autenticidade: garantia da origem; irretratabilidade (não repúdio): o autor não pode negar a autoria.",
+          "fonte": "ABNT NBR ISO/IEC 27001 e 27002 – tríade CID (confidencialidade, integridade, disponibilidade)",
+          "id": "PCAC-S01-D1-P1-Q18",
+          "uid": "bd95ae3f882ff7ca",
+          "numero": 18,
+          "origem": "inédita",
+          "banca": "IDECAN",
+          "ano": null,
+          "orgao_prova_original": null,
+          "formato": "A-E",
+          "anulada": false,
+          "concursos": [
+            "pcac-2026"
+          ],
+          "cargos": [
+            "oi"
+          ]
+        },
+        {
+          "materia": "Análise de Dados",
+          "assunto": "SQL",
+          "bloco": "Conhecimentos Específicos",
+          "item_edital": "5",
+          "dificuldade": "média",
+          "enunciado": "Em uma consulta SQL sobre a tabela de ocorrências, um analista agrupou os registros por bairro e quer exibir apenas os bairros com mais de 50 ocorrências. A cláusula adequada para filtrar o resultado após o agrupamento é:",
+          "alternativas": {
+            "A": "HAVING",
+            "B": "WHERE",
+            "C": "ORDER BY",
+            "D": "DISTINCT",
+            "E": "JOIN"
+          },
+          "gabarito": "A",
+          "comentario": "HAVING filtra grupos depois do GROUP BY, podendo usar funções de agregação (HAVING COUNT(*) > 50). WHERE filtra linhas antes do agrupamento e não aceita agregação; ORDER BY ordena; DISTINCT elimina repetições; JOIN combina tabelas.",
+          "fonte": "SQL – SELECT … GROUP BY … HAVING",
+          "id": "PCAC-S01-D1-P1-Q19",
+          "uid": "fa17542a8af29326",
+          "numero": 19,
+          "origem": "inédita",
+          "banca": "IDECAN",
+          "ano": null,
+          "orgao_prova_original": null,
+          "formato": "A-E",
+          "anulada": false,
+          "concursos": [
+            "pcac-2026"
+          ],
+          "cargos": [
+            "oi"
+          ]
+        },
+        {
+          "materia": "Noções de Administração",
+          "assunto": "Funções administrativas",
+          "bloco": "Conhecimentos Específicos",
+          "item_edital": "6",
+          "dificuldade": "fácil",
+          "enunciado": "A função administrativa que consiste em acompanhar o desempenho, compará-lo com os padrões estabelecidos e adotar medidas para corrigir desvios é denominada:",
+          "alternativas": {
+            "A": "planejamento.",
+            "B": "organização.",
+            "C": "direção.",
+            "D": "controle.",
+            "E": "coordenação."
+          },
+          "gabarito": "D",
+          "comentario": "No processo administrativo (PODC), o controle mede e corrige o desempenho em relação aos objetivos. Planejamento define objetivos e meios; organização distribui recursos e tarefas; direção conduz e motiva pessoas. Coordenação aparece em Fayol, mas não corresponde à descrição.",
+          "fonte": "Teoria da Administração – processo administrativo (planejar, organizar, dirigir, controlar)",
+          "id": "PCAC-S01-D1-P1-Q20",
+          "uid": "26b58e9b46f7eb60",
+          "numero": 20,
+          "origem": "inédita",
+          "banca": "IDECAN",
+          "ano": null,
+          "orgao_prova_original": null,
+          "formato": "A-E",
+          "anulada": false,
+          "concursos": [
+            "pcac-2026"
+          ],
+          "cargos": [
+            "oi"
+          ]
+        }
+      ]
+    }
+  ]
+}
