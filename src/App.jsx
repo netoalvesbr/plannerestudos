@@ -197,8 +197,18 @@ export default function App() {
         key={tela.id || 'novo'}
         inicial={tela.id ? getConcurso(tela.id) : null}
         aoCancelar={() => setTela({ nome: tela.id ? 'ficha' : 'concursos', id: tela.id })}
-        aoSalvar={async (id) => {
+        escolhaInicial={tela.id ? prefs.concursos?.[tela.id] : null}
+        aoSalvar={async (id, escolha) => {
           await recarregarBanco();
+          if (escolha) {
+            setPrefs({
+              seguindo: [...new Set([...(prefs.seguindo || []), id])],
+              ativo: id,
+              concursos: { ...(prefs.concursos || {}), [id]: { ...(prefs.concursos?.[id] || {}), fase: escolha.fase, area: escolha.area } },
+            });
+            setTela({ nome: 'cronograma' });
+            return;
+          }
           if (!tela.id) setPrefs({ seguindo: [...new Set([...(prefs.seguindo || []), id])], ativo: id });
           setTela({ nome: 'ficha', id });
         }}

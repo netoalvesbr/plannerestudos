@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { lerEdital } from '../lib/leitura.js';
 import { salvarConcurso } from '../lib/remoto.js';
+import { diasAte, fmtData } from '../lib/stats.js';
 import { aplicarModeloOAB, ehOAB } from '../data/modelos.js';
 
 const slug = (t) => t.toLowerCase().normalize('NFKD').replace(/[^\p{L}\p{N}]+/gu, '-').replace(/^-|-$/g, '');
@@ -27,12 +28,16 @@ const vazio = {
 
 const campo = { width: '100%', minHeight: 40, padding: '6px 9px', borderRadius: 9, border: '1px solid var(--borda)', background: 'var(--card)', color: 'var(--txt)', font: 'inherit' };
 
-export default function NovoConcurso({ inicial, aoSalvar, aoCancelar }) {
+export default function NovoConcurso({ inicial, escolhaInicial, aoSalvar, aoCancelar }) {
   const [c, setC] = useState(() => ({ ...vazio, ...(inicial || {}), disciplinas: (inicial?.disciplinas || []).map((d) => ({ ...d, topicosTxt: (d.topicos || []).join('\n') })) }));
   const [pdf, setPdf] = useState(null);
   const [lendo, setLendo] = useState(null);
   const [erro, setErro] = useState(null);
   const [salvando, setSalvando] = useState(false);
+  // escolha pessoal de quem está cadastrando: fase que vai estudar, fases descartadas e área
+  const [estudar, setEstudar] = useState(escolhaInicial?.fase || null);
+  const [area, setArea] = useState(escolhaInicial?.area || null);
+  const [descartadas, setDescartadas] = useState([]);
   const set = (k, v) => setC((x) => ({ ...x, [k]: v }));
   const setItem = (lista, i, k, v) => setC((x) => ({ ...x, [lista]: x[lista].map((it, j) => (j === i ? { ...it, [k]: v } : it)) }));
   const remover = (lista, i) => setC((x) => ({ ...x, [lista]: x[lista].filter((_, j) => j !== i) }));
@@ -78,6 +83,8 @@ export default function NovoConcurso({ inicial, aoSalvar, aoCancelar }) {
     e.preventDefault();
     setErro(null);
     if (!c.sigla.trim() || !c.nome.trim()) return setErro('Preencha pelo menos a sigla e o nome do concurso.');
+    const fEsc = c.fases.find((f) => f.id === estudar);
+    if (fEsc?.areas?.length && !area) return setErro(`Escolha a sua matéria da ${fEsc.nome.split(' –')[0]} (uma das ${fEsc.areas.length} áreas).`);
     setSalvando(true);
     try {
       const dados = {
@@ -91,7 +98,7 @@ export default function NovoConcurso({ inicial, aoSalvar, aoCancelar }) {
           .map(({ topicosTxt, ...d }) => ({ ...d, nome: d.nome.trim(), topicos: (topicosTxt || '').split('\n').map((t) => t.trim()).filter(Boolean) })),
       };
       const id = await salvarConcurso(dados, pdf, inicial?.id || null);
-      aoSalvar(id);
+      aoSalvar(id, estudar ? { fase: estudar, area: area || null } : null);
     } catch (er) {
       setErro(er.message);
     } finally {
@@ -133,21 +140,72 @@ export default function NovoConcurso({ inicial, aoSalvar, aoCancelar }) {
       {c.modelo === 'oab' ? (
         <section className="card">
           <h2>⚖️ Fases do Exame de Ordem (modelo OAB/FGV)</h2>
-          <p className="sub">As fases e as 7 áreas da 2ª fase são fixas. Confira só as datas das provas (lidas do edital). Cada candidato escolhe depois se vai estudar para a 1ª ou para a 2ª fase.</p>
-          {c.fases.map((f, i) => (
-            <div key={f.id} className="card" style={{ boxShadow: 'none', background: 'var(--bg)' }}>
-              <div className="linha entre">
-                <b>{f.nome}</b>
-                <span className="sub peq">{f.formato === 'A-D' ? 'Objetiva · 80 questões (A a D)' : 'Peça prático-profissional + 4 questões discursivas'}</span>
+          <p className="sub">Confira as datas das provas (lidas do edital) e escolha para qual fase <b>você</b> vai estudar. Use ✕ na fase que você não vai fazer. Na 2ª fase, escolha a sua matéria.</p>
+          {c.fases.map((f, i) => {
+            if (descartadas.includes(f.id)) {
+              return (
+                <div key={f.id} className="linha entre peq sub" style={{ padding: '8px 4px' }}>
+                  <span>✕ {f.nome}: você não vai estudar esta fase.</span>
+                  <button type="button" className="praticar" onClick={() => setDescartadas((d) => d.filter((x) => x !== f.id))}>Desfazer</button>
+                </div>
+              );
+            }
+            const faltam = f.data ? diasAte(f.data) : null;
+            const escolhida = estudar === f.id;
+            return (
+              <div key={f.id} className="card" style={{ boxShadow: 'none', background: escolhida ? 'var(--pri-claro)' : 'var(--bg)', borderColor: escolhida ? 'var(--pri)' : undefined, borderWidth: escolhida ? 2 : 1 }}>
+                <div className="linha entre" style={{ alignItems: 'flex-start' }}>
+                  <div>
+                    <b>{f.nome}</b>
+                    <div className="sub peq">{f.formato === 'A-D' ? 'Objetiva · 80 questões (A a D)' : 'Peça prático-profissional + 4 questões discursivas'}</div>
+                    {faltam != null && (
+                      <span className="peq" style={{ display: 'inline-block', marginTop: 4, padding: '2px 8px', borderRadius: 99, background: faltam <= 30 ? 'var(--erro-bg)' : 'var(--ok-bg)', color: faltam <= 30 ? 'var(--erro)' : 'var(--ok)', fontWeight: 700 }}>
+                        ⏳ {faltam < 0 ? 'prova já realizada' : faltam === 0 ? 'a prova é hoje' : `faltam ${faltam} dias`} · {fmtData(f.data)}
+                      </span>
+                    )}
+                  </div>
+                  <div className="linha" style={{ justifyContent: 'flex-end' }}>
+                    {!escolhida ? (
+                      <button type="button" className="btn peq pri" onClick={() => { setEstudar(f.id); setArea(null); }}>✓ Vou estudar esta fase</button>
+                    ) : (
+                      <span className="peq" style={{ fontWeight: 700, color: 'var(--pri)' }}>✓ Você vai estudar esta fase</span>
+                    )}
+                    <button type="button" className="btn peq perigo" title="Não vou estudar esta fase" aria-label={`Não vou estudar a ${f.nome}`} onClick={() => {
+                        setDescartadas((d) => [...d, f.id]);
+                        if (escolhida || !estudar) {
+                          const outra = c.fases.find((x) => x.id !== f.id && !descartadas.includes(x.id));
+                          setEstudar(outra ? outra.id : null);
+                          setArea(null);
+                        }
+                      }}>✕</button>
+                  </div>
+                </div>
+                <label className="campo" style={{ maxWidth: 260, marginTop: 8 }}>Data da prova
+                  <input type="date" style={campo} value={f.data || ''} onChange={(e) => setItem('fases', i, 'data', e.target.value)} />
+                </label>
+                {f.areas?.length > 0 && !escolhida && <p className="peq" style={{ marginTop: 8 }}>Áreas: {f.areas.map((a) => a.nome).join(' · ')}</p>}
+                {f.areas?.length > 0 && escolhida && (
+                  <div style={{ marginTop: 10 }}>
+                    <b className="peq">Qual a sua matéria da peça?</b>
+                    <div className="linha" role="radiogroup" style={{ marginTop: 6 }}>
+                      {f.areas.map((a) => (
+                        <button key={a.id} type="button" role="radio" aria-checked={area === a.id} className="btn peq" style={area === a.id ? { background: 'var(--pri)', color: 'var(--pri-txt)', borderColor: 'var(--pri)' } : {}} onClick={() => setArea(a.id)}>
+                          {area === a.id ? '✓ ' : ''}{a.nome}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
-              <label className="campo" style={{ maxWidth: 260, marginTop: 6 }}>Data da prova
-                <input type="date" style={campo} value={f.data || ''} onChange={(e) => setItem('fases', i, 'data', e.target.value)} />
-              </label>
-              {f.areas?.length > 0 && (
-                <p className="peq" style={{ marginTop: 8 }}>Áreas: {f.areas.map((a) => a.nome).join(' · ')}</p>
-              )}
-            </div>
-          ))}
+            );
+          })}
+          {estudar && (
+            <p className="aviso" style={{ background: 'var(--ok-bg)', color: 'var(--ok)' }}>
+              Ao salvar, você passa a acompanhar este concurso na {c.fases.find((f) => f.id === estudar)?.nome.split(' –')[0]}
+              {area ? ` – ${c.fases.find((f) => f.id === estudar)?.areas?.find((a) => a.id === area)?.nome}` : ''} e já recebe o seu cronograma sugerido.
+              As fases continuam completas no concurso para os outros usuários.
+            </p>
+          )}
           <button type="button" className="btn peq" onClick={() => setC((x) => ({ ...x, modelo: null }))}>Personalizar fases manualmente</button>
         </section>
       ) : (
