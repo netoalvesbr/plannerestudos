@@ -223,7 +223,7 @@ export function Conclusao({ sessao, info, respostas, aoRevisar, aoVoltar }) {
           })}
         </div>
       </section>
-      <button className="btn pri" onClick={aoVoltar}>Voltar ao início</button>
+      <button className="btn pri" onClick={aoVoltar}>Voltar às questões</button>
     </div>
   );
 }

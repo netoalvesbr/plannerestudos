@@ -4,11 +4,10 @@ import { POR_UID, questoesDo, registrarQuestoesRemotas } from './lib/dados.js';
 import * as remoto from './lib/remoto.js';
 import NovoConcurso from './components/NovoConcurso.jsx';
 import Cronograma from './components/Cronograma.jsx';
-import BancoQuestoes from './components/BancoQuestoes.jsx';
+import Questoes from './components/Questoes.jsx';
 import ImportarProva from './components/ImportarProva.jsx';
 import * as store from './lib/store.js';
 import { EscolhaArea, EscolhaCargo, EscolhaFase, Ficha, Login, MeusConcursos, NovaSenha } from './components/Concursos.jsx';
-import { EscolhaFormato, ProvasDiarias, QuestoesAvulsas } from './components/Inicio.jsx';
 import Questao, { Conclusao } from './components/Questao.jsx';
 import Painel from './components/Painel.jsx';
 import { ListaMapas, Mapa } from './components/Mapas.jsx';
@@ -24,6 +23,7 @@ export default function App() {
   const [recuperando, setRecuperando] = useState(false);
   const [copiouLink, setCopiouLink] = useState(false);
   const [bancoVersao, setBancoVersao] = useState(0);
+  const [ultimaAba, setUltimaAba] = useState(null);
   const [avisoBanco, setAvisoBanco] = useState(null);
 
   const recarregarBanco = useCallback(async () => {
@@ -117,7 +117,6 @@ export default function App() {
   if (carregando) return <div className="app centro" style={{ paddingTop: '30vh' }}>Carregando…</div>;
   if (!usuario) return <div className="app"><Login aoEntrar={iniciar} /></div>;
 
-  const formato = pc.formato;
   const ctx = {
     concurso,
     cargo,
@@ -131,21 +130,18 @@ export default function App() {
     respostas,
     prefs,
     setPrefs,
-    abrirSessao: (s) => setTela({ nome: 'questao', sessao: s }),
-    abrirAvulsas: (filtro) => {
-      setPrefConc(concurso.id, { formato: 'avulsas' });
-      setTela({ nome: 'inicio', filtro, chave: Date.now() });
+    abrirSessao: (s) => {
+      setUltimaAba(tela.aba || null);
+      setTela({ nome: 'questao', sessao: s });
     },
+    abrirAvulsas: (filtro) => setTela({ nome: 'questoes', aba: 'praticar', filtro, chave: Date.now() }),
     abrirMapa: (d) => setTela({ nome: 'mapa', disciplina: d }),
-    irAvulsas: () => {
-      setPrefConc(concurso.id, { formato: 'avulsas' });
-      setTela({ nome: 'inicio', chave: Date.now() });
-    },
+    irAvulsas: () => setTela({ nome: 'questoes', aba: 'praticar' }),
     abrirFicha: (id) => setTela({ nome: 'ficha', id }),
     irInicio: () => setTela({ nome: 'inicio' }),
     abrirNovoConcurso: () => setTela({ nome: 'novo-concurso' }),
     abrirEditarConcurso: (id) => setTela({ nome: 'editar-concurso', id }),
-    abrirImportarProva: (cid, f, a) => setTela({ nome: 'importar-prova', cid: cid || concurso?.id, fase: f || fase, area: a || area }),
+    abrirImportarProva: (cid, f, a) => setTela({ nome: 'questoes', aba: 'importar', importar: { cid: cid || concurso?.id, fase: f || fase, area: a || area } }),
     excluir: async (id) => {
       try {
         await remoto.excluirConcurso(id);
@@ -162,6 +158,21 @@ export default function App() {
     historicoTexto: () => store.historicoComoTexto(respostas, prefs),
   };
 
+  // aba única de questões (também é a tela inicial)
+  const hub = () => (
+    <Questoes
+      ctx={ctx}
+      aba={tela.aba}
+      filtro={tela.filtro}
+      importar={tela.importar}
+      aoTrocarAba={(a) => setTela({ nome: 'questoes', aba: a })}
+      aoImportado={async (r) => {
+        await recarregarBanco();
+        setTela({ nome: 'questoes', aba: 'praticar', msg: `✓ Importação concluída: ${r.novas} questões novas no banco${r.repetidas ? ` (${r.repetidas} já existiam e não foram duplicadas)` : ''}.` });
+      }}
+    />
+  );
+
   // ----- telas sem o topo comum -----
   let conteudo;
   let semTopo = false;
@@ -175,7 +186,7 @@ export default function App() {
         responder={responder}
         notas={prefs.notas}
         aoAnotar={anotar}
-        aoSair={() => setTela({ nome: 'inicio' })}
+        aoSair={() => setTela({ nome: 'questoes', aba: ultimaAba })}
         aoConcluir={(info) => setTela({ nome: 'conclusao', sessao: tela.sessao, info })}
       />
     );
@@ -186,7 +197,7 @@ export default function App() {
         info={tela.info}
         respostas={respostas}
         aoRevisar={(i) => setTela({ nome: 'questao', sessao: { ...tela.sessao, modo: 'estudo', idx: i, titulo: tela.sessao.titulo.replace(/^Simulado · /, 'Revisão · ') } })}
-        aoVoltar={() => setTela({ nome: 'inicio' })}
+        aoVoltar={() => setTela({ nome: 'questoes', aba: ultimaAba })}
       />
     );
   } else if (tela.nome === 'ficha' && getConcurso(tela.id)) {
@@ -214,23 +225,6 @@ export default function App() {
         }}
       />
     );
-  } else if (tela.nome === 'importar-prova') {
-    conteudo = (
-      <ImportarProva
-        concursos={todosConcursos()}
-        concursoInicial={tela.cid}
-        faseInicial={tela.fase}
-        areaInicial={tela.area}
-        aoCancelar={() => setTela({ nome: 'concursos' })}
-        aoConcluir={async (r) => {
-          await recarregarBanco();
-          setAvisoBanco(null);
-          setTela({ nome: 'concursos', msg: `✓ Importação concluída: ${r.novas} questões novas no banco${r.repetidas ? ` (${r.repetidas} já existiam e não foram duplicadas)` : ''}.` });
-        }}
-      />
-    );
-  } else if (tela.nome === 'questoes') {
-    conteudo = <BancoQuestoes ctx={ctx} />;
   } else if (tela.nome === 'concursos' || !concurso) {
     conteudo = (
       <>
@@ -239,6 +233,8 @@ export default function App() {
         <MeusConcursos ctx={ctx} />
       </>
     );
+  } else if (tela.nome === 'questoes' && tela.aba === 'importar') {
+    conteudo = hub();
   } else if (precisaCargo) {
     conteudo = <EscolhaCargo concurso={concurso} aoEscolher={(v) => setPrefConc(concurso.id, { cargo: v })} />;
   } else if (precisaFase) {
@@ -271,16 +267,13 @@ export default function App() {
     conteudo = <ListaMapas ctx={ctx} />;
   } else if (tela.nome === 'mapa') {
     conteudo = <Mapa ctx={ctx} disciplina={tela.disciplina} />;
-  } else if (!formato) {
-    conteudo = <EscolhaFormato aoEscolher={(f) => setPrefConc(concurso.id, { formato: f })} />;
-  } else if (formato === 'diarias') {
-    conteudo = <ProvasDiarias ctx={ctx} />;
   } else {
-    conteudo = <QuestoesAvulsas key={tela.chave} ctx={{ ...ctx, filtroInicial: tela.filtro }} />;
+    conteudo = hub();
   }
 
   const ir = (nome) => setTela({ nome });
-  const naInicio = tela.nome === 'inicio';
+  const naInicio = tela.nome === 'inicio' || tela.nome === 'questoes';
+  const naQuestoes = naInicio;
   const seguindo = prefs.seguindo || [];
 
   return (
@@ -311,19 +304,18 @@ export default function App() {
           </div>
           {concurso && (
             <nav className="nav" aria-label="Principal">
-              <button aria-current={naInicio && formato === 'diarias'} onClick={() => { setPrefConc(concurso.id, { formato: 'diarias' }); ir('inicio'); }}>📅 Provas diárias</button>
-              <button aria-current={naInicio && formato === 'avulsas'} onClick={() => { setPrefConc(concurso.id, { formato: 'avulsas' }); ir('inicio'); }}>🎯 Avulsas</button>
-              <button aria-current={tela.nome === 'questoes'} onClick={() => ir('questoes')}>📝 Questões</button>
+              <button aria-current={naQuestoes} onClick={() => ir('questoes')}>📝 Questões</button>
               <button aria-current={tela.nome === 'cronograma'} onClick={() => ir('cronograma')}>📆 Cronograma</button>
-              <button aria-current={tela.nome === 'painel'} onClick={() => ir('painel')}>Painel</button>
+              <button aria-current={tela.nome === 'painel'} onClick={() => ir('painel')}>📊 Painel</button>
               <button aria-current={tela.nome.startsWith('mapa')} onClick={() => ir('mapas')}>🧠 Mapas</button>
-              <button aria-current={tela.nome === 'concursos' || tela.nome === 'ficha'} onClick={() => ir('concursos')}>Concursos</button>
+              <button aria-current={tela.nome === 'concursos' || tela.nome === 'ficha'} onClick={() => ir('concursos')}>🏆 Concursos</button>
             </nav>
           )}
         </header>
       )}
       {somenteLocal && !semTopo && naInicio && <p className="aviso">Respostas salvas apenas neste aparelho.</p>}
       {avisoBanco && !semTopo && <p className="aviso">{avisoBanco}</p>}
+      {tela.nome === 'questoes' && tela.msg && <p className="aviso" role="status" style={{ background: 'var(--ok-bg)', color: 'var(--ok)' }}>{tela.msg}</p>}
       <main>{conteudo}</main>
       {concurso && !precisaCargo && !precisaFase && <MenuDesempenho questoes={questoes} respostas={respostas} aoAbrirPainel={() => ir('painel')} />}
     </div>
