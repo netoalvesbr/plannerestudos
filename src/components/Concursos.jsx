@@ -2,6 +2,9 @@ import { useState } from 'react';
 import { todosConcursos } from '../data/concursos.js';
 import Calendario, { eventosDoConcurso, ProximaData } from './Calendario.jsx';
 import EditalVerticalizado from './EditalVerticalizado.jsx';
+import { aplicarRepescagem, ehOAB, eventosRepescagem } from '../data/modelos.js';
+import { enviarEdital } from '../lib/remoto.js';
+import { vespera } from '../lib/cronograma.js';
 import { disciplinasDo, questoesDo } from '../lib/dados.js';
 import { diasAte, fmtData, fmtPct, resumo } from '../lib/stats.js';
 import { PROVEDORES_LOGIN } from '../data/config.js';
@@ -226,6 +229,7 @@ export function MeusConcursos({ ctx }) {
                 {c.dataProva ? <>Prova em {fmtData(c.dataProva)} {faltam >= 0 && <span className="contagem">· faltam {faltam} dias</span>}</> : 'Data da prova a definir'}
                 <br />
                 {nQ} questões no banco{c.editalUrl ? ' · edital em PDF' : ''}
+                {c.repescagem && <><br /><b>🔁 Repescagem: 2ª fase do {c.repescagem.exame}{c.repescagem.data ? ` em ${fmtData(c.repescagem.data)}` : ''}</b></>}
               </p>
               {seg && (
                 <p>
@@ -423,7 +427,7 @@ export function Ficha({ ctx, concurso, voltar }) {
           {concurso.fases?.length > 0 && (
             <label className="campo">Fase que estou estudando
               <select value={fase} onChange={(e) => setPc({ fase: e.target.value, area: null })}>
-                {concurso.fases.map((f) => <option key={f.id} value={f.id}>{f.nome}</option>)}
+                {concurso.fases.map((f) => <option key={f.id} value={f.id}>{f.nome}{f.concluida ? ' (✓ aprovado)' : ''}</option>)}
               </select>
             </label>
           )}
@@ -445,6 +449,8 @@ export function Ficha({ ctx, concurso, voltar }) {
           )}
         </div>
       </section>
+
+      {podeEditar && (concurso.modelo === 'oab' || ehOAB(concurso)) && <Repescagem ctx={ctx} concurso={concurso} />}
 
       <section className="card">
         <h2>📅 Datas importantes</h2>
@@ -489,5 +495,95 @@ export function Ficha({ ctx, concurso, voltar }) {
         </section>
       )}
     </div>
+  );
+}
+
+// OAB: quem passou na 1ª fase e não na 2ª pode fazer só a 2ª fase do exame seguinte (repescagem).
+// O edital do novo exame atualiza as datas: inscrição, pagamento, locais, 2ª fase, resultado...
+function Repescagem({ ctx, concurso }) {
+  const { prefs, setPrefs, atualizarConcurso } = ctx;
+  const [lido, setLido] = useState(null);
+  const [arquivo, setArquivo] = useState(null);
+  const [status, setStatus] = useState(null);
+  const [erro, setErro] = useState(null);
+  const rep = concurso.repescagem;
+
+  async function ler(f) {
+    if (!f) return;
+    setErro(null);
+    setLido(null);
+    setArquivo(f);
+    setStatus('Lendo o edital…');
+    try {
+      const { textoDoPdf } = await import('../lib/pdf.js');
+      const { lerEdital } = await import('../lib/leitura.js');
+      const linhas = await textoDoPdf(f, (p, n) => setStatus(`Lendo página ${p} de ${n}…`));
+      const r = lerEdital(linhas);
+      if (!ehOAB(r)) throw new Error('Este PDF não parece ser um edital do Exame de Ordem. Confira o arquivo.');
+      if (!r.datasFases?.segunda) throw new Error('Não encontrei a data da 2ª fase neste edital. Confira o arquivo ou ajuste as datas em "Editar".');
+      setLido(r);
+      setStatus(null);
+    } catch (e) {
+      setErro(e.message);
+      setStatus(null);
+    }
+  }
+
+  async function aplicar() {
+    setStatus('Atualizando as datas…');
+    try {
+      const url = await enviarEdital(arquivo).catch(() => null);
+      const novo = aplicarRepescagem(concurso, lido, url);
+      await atualizarConcurso(concurso.id, novo);
+      // passa a estudar a 2ª fase e ajusta o fim dos cronogramas da 2ª fase para a véspera da nova prova
+      const crs = { ...(prefs.cronogramas || {}) };
+      for (const k of Object.keys(crs)) if (k.startsWith(`${concurso.id}|f2|`) && crs[k]?.cfg) crs[k] = { ...crs[k], cfg: { ...crs[k].cfg, fim: vespera(novo.repescagem.data) } };
+      const pc = prefs.concursos?.[concurso.id] || {};
+      setPrefs({ cronogramas: crs, concursos: { ...(prefs.concursos || {}), [concurso.id]: { ...pc, fase: 'f2' } } });
+      setLido(null);
+      setStatus(`✓ Repescagem registrada: 2ª fase do ${novo.repescagem.exame} em ${fmtData(novo.repescagem.data)}. Datas e cronograma atualizados.`);
+    } catch (e) {
+      setErro('Não foi possível salvar: ' + e.message);
+      setStatus(null);
+    }
+  }
+
+  const eventos = lido ? eventosRepescagem(lido) : [];
+  return (
+    <section className="card" style={{ borderColor: rep ? 'var(--pri)' : undefined }}>
+      <h2>🔁 Repescagem (reaproveitamento da 1ª fase)</h2>
+      {rep ? (
+        <p>
+          Você está na repescagem: <b>2ª fase do {rep.exame}</b>{rep.data ? <> em <b>{fmtData(rep.data)}</b> {diasAte(rep.data) >= 0 && <span className="contagem">· faltam {diasAte(rep.data)} dias</span>}</> : null}.
+          <br />
+          <span className="sub">1ª fase: aprovado no {rep.exameOriginal}.{rep.editalUrl && <> <a href={rep.editalUrl} target="_blank" rel="noreferrer">Abrir edital do {rep.exame}</a></>}</span>
+        </p>
+      ) : (
+        <p className="sub">
+          Passou na 1ª fase e não foi aprovado na 2ª? Você pode fazer só a 2ª fase do próximo Exame. Anexe aqui o <b>edital do próximo Exame</b> (ex.: 48º): a plataforma atualiza as datas de inscrição, pagamento, locais de prova, 2ª fase e resultados, e ajusta o seu cronograma.
+        </p>
+      )}
+      <label className="campo">
+        {rep ? 'Anexar uma retificação ou outro edital de repescagem' : 'Edital de repescagem (PDF)'}
+        <input type="file" accept="application/pdf" onChange={(e) => ler(e.target.files[0])} />
+      </label>
+      {status && <p className="aviso" role="status" style={{ background: 'var(--pri-claro)', color: 'var(--txt)', marginTop: 8 }}>{status}</p>}
+      {erro && <p className="aviso" role="alert" style={{ marginTop: 8 }}>✗ {erro}</p>}
+      {lido && (
+        <div style={{ marginTop: 10 }}>
+          <p>
+            Encontrei o <b>{lido.nome || lido.sigla}</b>. 2ª fase: <b>{fmtData(lido.datasFases.segunda)}</b>. Datas que entram no seu calendário:
+          </p>
+          <ul className="peq">
+            {eventos.map((e, i) => <li key={i}>{fmtData(e.data)}{e.fim ? ` a ${fmtData(e.fim)}` : ''} – {e.evento}</li>)}
+          </ul>
+          <p className="sub peq">As datas da 1ª fase do novo exame ficam de fora (você está dispensado dela). As datas já passadas do seu exame atual continuam no histórico.</p>
+          <div className="linha">
+            <button className="btn pri" onClick={aplicar}>✓ Aplicar repescagem</button>
+            <button className="btn" onClick={() => setLido(null)}>Cancelar</button>
+          </div>
+        </div>
+      )}
+    </section>
   );
 }

@@ -178,6 +178,11 @@ export default function App() {
     // concurso pronto da plataforma: não dá para apagar, só tirar da sua lista (e restaurar depois)
     ocultar: (id) => setPrefs({ ...semDadosDo(prefs, id, false), ocultos: [...new Set([...(prefs.ocultos || []), id])] }),
     restaurar: (id) => setPrefs({ ocultos: (prefs.ocultos || []).filter((x) => x !== id) }),
+    // grava alterações de um concurso pessoal e recarrega
+    atualizarConcurso: async (id, dados) => {
+      await remoto.salvarConcurso(dados, null, id);
+      await recarregarBanco();
+    },
     abrirPainel: () => setTela({ nome: 'painel' }),
     voltar: () => setTela({ nome: 'mapas' }),
     zerar,

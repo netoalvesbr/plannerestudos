@@ -49,6 +49,7 @@ const concursoDoBanco = (r) => ({
   cronograma: r.cronograma || [],
   prova: r.prova?.blocos ? r.prova : null,
   modelo: r.prova?.modelo || null,
+  repescagem: r.prova?.repescagem || null,
   criadoPor: r.criado_por,
   remoto: true,
 });
@@ -67,7 +68,7 @@ const concursoParaBanco = (c) => ({
   cargos: c.cargos || [],
   disciplinas: (c.disciplinas || []).map(({ nome, bloco, fase, area, topicos }) => ({ nome, bloco: bloco || null, fase: fase || null, area: area || null, topicos: topicos || [] })),
   cronograma: c.cronograma || [],
-  prova: c.prova?.blocos ? { ...c.prova, modelo: c.modelo || null } : c.modelo ? { modelo: c.modelo } : null,
+  prova: c.prova?.blocos || c.modelo || c.repescagem ? { ...(c.prova?.blocos ? c.prova : {}), modelo: c.modelo || null, repescagem: c.repescagem || null } : null,
 });
 
 export const questaoDoBanco = (r) => ({
@@ -116,7 +117,7 @@ export async function carregarBanco() {
 }
 
 // ---------- concursos ----------
-async function enviarEdital(arquivo) {
+export async function enviarEdital(arquivo) {
   if (!arquivo || !supabase) return null;
   const nome = `${crypto.randomUUID()}/${arquivo.name.normalize('NFKD').replace(/[^\w.-]+/g, '_')}`;
   const { error } = await supabase.storage.from('editais').upload(nome, arquivo, { contentType: 'application/pdf' });

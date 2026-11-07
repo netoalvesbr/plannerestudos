@@ -109,3 +109,33 @@ export function aplicarModeloOAB(c, datas = {}) {
 }
 
 export const ehOAB = (c) => /\bOAB\b|ordem dos advogados|exame de ordem/i.test(`${c.sigla} ${c.nome} ${c.orgao}`);
+
+// Repescagem da OAB (reaproveitamento da 1ª fase): quem passou na 1ª fase e não na 2ª
+// faz só a 2ª fase do exame seguinte. O edital do novo exame atualiza as datas.
+const SO_PRIMEIRA = /(objetiva|1[ªa] fase|primeira fase)/i;
+const DA_SEGUNDA = /(reaproveit|repescagem|2[ªa] fase|segunda fase|pr[áa]tico|discursiva)/i;
+
+export function eventosRepescagem(r) {
+  return (r.cronograma || [])
+    .filter((e) => !SO_PRIMEIRA.test(e.evento) || DA_SEGUNDA.test(e.evento))
+    .map((e) => ({ ...e, exame: r.sigla || 'novo exame' }));
+}
+
+export function aplicarRepescagem(c, r, editalUrl = null) {
+  const hoje = new Date().toLocaleDateString('sv-SE');
+  const segunda = r.datasFases?.segunda || null;
+  const anterior = c.repescagem?.exameOriginal || c.sigla;
+  // mantém as datas já passadas do exame original (histórico) e troca as futuras pelas do novo edital
+  const antigos = (c.cronograma || []).filter((e) => e.data < hoje && !e.exame);
+  const novos = eventosRepescagem(r);
+  const cronograma = [...antigos, ...novos].sort((a, b) => a.data.localeCompare(b.data));
+  return {
+    ...c,
+    dataProva: segunda || c.dataProva,
+    cronograma,
+    fases: (c.fases || []).map((f) =>
+      f.id === 'f1' ? { ...f, concluida: true, situacao: `Aprovado no ${anterior} (reaproveitada)` } : f.id === 'f2' ? { ...f, data: segunda || f.data } : f,
+    ),
+    repescagem: { exame: r.sigla || '', nome: r.nome || '', data: segunda, editalUrl: editalUrl || null, exameOriginal: anterior, em: hoje },
+  };
+}
