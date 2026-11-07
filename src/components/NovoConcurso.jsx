@@ -1,6 +1,9 @@
 import { useState } from 'react';
 import { lerEdital } from '../lib/leitura.js';
 import { salvarConcurso } from '../lib/remoto.js';
+import { aplicarModeloOAB, ehOAB } from '../data/modelos.js';
+
+const slug = (t) => t.toLowerCase().normalize('NFKD').replace(/[^\p{L}\p{N}]+/gu, '-').replace(/^-|-$/g, '');
 
 const FORMATOS = [
   ['A-E', 'Múltipla escolha A a E'],
@@ -45,7 +48,9 @@ export default function NovoConcurso({ inicial, aoSalvar, aoCancelar }) {
       const linhas = await textoDoPdf(arquivo, (p, n) => setLendo(`Lendo página ${p} de ${n}…`));
       if (linhas.filter(Boolean).length < 5) throw new Error('Não encontrei texto neste PDF. Ele pode ser uma imagem escaneada; nesse caso, preencha os campos à mão.');
       const r = lerEdital(linhas);
-      setC((x) => ({
+      const oab = ehOAB(r);
+      setC((x) => {
+        const novo = {
         ...x,
         sigla: x.sigla || r.sigla,
         nome: x.nome || r.nome,
@@ -55,8 +60,14 @@ export default function NovoConcurso({ inicial, aoSalvar, aoCancelar }) {
         dataProva: x.dataProva || r.dataProva,
         cronograma: x.cronograma.length ? x.cronograma : r.cronograma,
         disciplinas: x.disciplinas.length ? x.disciplinas : r.disciplinas.map((d) => ({ ...d, fase: '', topicosTxt: d.topicos.join('\n') })),
-      }));
-      setLendo(`Edital lido: ${r.disciplinas.length} disciplinas, ${r.cronograma.length} datas encontradas. Confira tudo abaixo antes de salvar.`);
+        };
+        return oab && !x.fases.length ? aplicarModeloOAB(novo, r.datasFases) : novo;
+      });
+      setLendo(
+        `Edital lido: ${r.disciplinas.length} disciplinas, ${r.cronograma.length} datas encontradas.` +
+          (oab ? ' Reconheci o Exame de Ordem: apliquei o modelo OAB/FGV (1ª fase objetiva e 2ª fase com as 7 áreas).' : '') +
+          ' Confira tudo abaixo antes de salvar.',
+      );
     } catch (e) {
       setErro(e.message);
       setLendo(null);
@@ -121,7 +132,8 @@ export default function NovoConcurso({ inicial, aoSalvar, aoCancelar }) {
 
       <section className="card">
         <h2>Fases</h2>
-        <p className="sub">Opcional. Ex.: OAB – "1ª fase" (A a D) e "2ª fase" (discursiva). Quem acompanha o concurso escolhe a fase que vai estudar.</p>
+        <p className="sub">Opcional. Ex.: OAB – "1ª fase" (A a D) e "2ª fase" (discursiva). Quem acompanha o concurso escolhe a fase que vai estudar. Se a fase tiver <b>áreas</b> (como a 2ª fase da OAB), escreva uma por linha: o candidato escolhe a dele e estuda só o conteúdo daquela área.</p>
+        <button type="button" className="btn peq" style={{ marginBottom: 10 }} onClick={() => setC((x) => aplicarModeloOAB(x))}>⚖️ Usar modelo OAB (FGV)</button>
         {c.fases.map((f, i) => (
           <div key={i} className="linha" style={{ marginBottom: 8, flexWrap: 'nowrap' }}>
             <input style={{ ...campo, flex: 2 }} value={f.nome} onChange={(e) => setItem('fases', i, 'nome', e.target.value)} placeholder="Nome da fase" aria-label="Nome da fase" />
@@ -132,11 +144,25 @@ export default function NovoConcurso({ inicial, aoSalvar, aoCancelar }) {
             <button type="button" className="btn peq perigo" onClick={() => remover('fases', i)} aria-label="Remover fase">✕</button>
           </div>
         ))}
+        {c.fases.map((f, i) => (
+          <label key={'a' + i} className="campo" style={{ marginBottom: 8 }}>
+            Áreas da {f.nome || 'fase'} (opcional, uma por linha)
+            <textarea
+              rows={Math.max(2, (f.areas || []).length)}
+              style={campo}
+              defaultValue={(f.areas || []).map((a) => a.nome).join('\n')}
+              key={(f.areas || []).map((a) => a.id).join()}
+              onBlur={(e) => setItem('fases', i, 'areas', e.target.value.split('\n').map((t) => t.trim()).filter(Boolean).map((nome) => ({ id: slug(nome), nome })))}
+              placeholder="Ex.: Direito Civil"
+            />
+          </label>
+        ))}
         <button type="button" className="btn peq" onClick={() => incluir('fases', { id: 'f' + Math.random().toString(36).slice(2, 8), nome: `${c.fases.length + 1}ª fase`, formato: c.formato, data: '' })}>+ Adicionar fase</button>
       </section>
 
       <section className="card">
-        <h2>Cronograma</h2>
+        <h2>Datas importantes do edital</h2>
+        <p className="sub">Inscrições, provas, resultados e recursos. (O <b>cronograma de estudos</b> é montado na aba 📆 Cronograma, a partir das disciplinas.)</p>
         {c.cronograma.map((x, i) => (
           <div key={i} className="linha" style={{ marginBottom: 8, flexWrap: 'nowrap' }}>
             <input type="date" style={{ ...campo, flex: 1.3 }} value={x.data || ''} onChange={(e) => setItem('cronograma', i, 'data', e.target.value)} aria-label="Data" />
@@ -149,7 +175,7 @@ export default function NovoConcurso({ inicial, aoSalvar, aoCancelar }) {
 
       <section className="card">
         <h2>Conteúdo programático (edital verticalizado)</h2>
-        <p className="sub">Uma disciplina por bloco; um tópico por linha.</p>
+        <p className="sub">Uma disciplina por bloco; um tópico por linha. Indique a fase (e a área, se houver) de cada disciplina.</p>
         {c.disciplinas.map((d, i) => (
           <div key={i} className="card" style={{ boxShadow: 'none', background: 'var(--bg)' }}>
             <div className="linha" style={{ flexWrap: 'nowrap', marginBottom: 6 }}>
@@ -162,6 +188,12 @@ export default function NovoConcurso({ inicial, aoSalvar, aoCancelar }) {
                 <select style={{ flex: 1 }} value={d.fase || ''} onChange={(e) => setItem('disciplinas', i, 'fase', e.target.value)} aria-label="Fase">
                   <option value="">Todas as fases</option>
                   {c.fases.map((f) => <option key={f.id} value={f.id}>{f.nome}</option>)}
+                </select>
+              )}
+              {c.fases.find((f) => f.id === d.fase)?.areas?.length > 0 && (
+                <select style={{ flex: 1 }} value={d.area || ''} onChange={(e) => setItem('disciplinas', i, 'area', e.target.value)} aria-label="Área">
+                  <option value="">Todas as áreas</option>
+                  {c.fases.find((f) => f.id === d.fase).areas.map((a) => <option key={a.id} value={a.id}>{a.nome}</option>)}
                 </select>
               )}
             </div>

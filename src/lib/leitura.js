@@ -7,7 +7,7 @@ const temLetra = (s) => /[A-ZÀ-Ý]/.test(s);
 export const BANCAS = [
   'Cebraspe', 'Cespe', 'FGV', 'IDECAN', 'IBFC', 'FCC', 'Vunesp', 'Cesgranrio', 'IDIB', 'Quadrix', 'Consulplan',
   'Instituto AOCP', 'AOCP', 'IADES', 'Fundatec', 'Instituto Consulplan', 'Selecon', 'IBADE', 'Instituto Access',
-  'Fafipa', 'Objetiva', 'Legalle', 'FUNDEP', 'Cetro', 'Esaf', 'Fumarc', 'IESES', 'Ibam', 'Instituto Mais', 'Avança SP',
+  'Fafipa', 'Legalle', 'FUNDEP', 'Cetro', 'Esaf', 'Fumarc', 'IESES', 'Ibam', 'Instituto Mais', 'Avança SP',
 ];
 
 const MESES = { janeiro: 1, fevereiro: 2, março: 3, marco: 3, abril: 4, maio: 5, junho: 6, julho: 7, agosto: 8, setembro: 9, outubro: 10, novembro: 11, dezembro: 12 };
@@ -62,22 +62,33 @@ export function lerEdital(linhas) {
     r.sigla = 'OAB';
   }
 
-  // cronograma: linhas que contêm data
-  for (let i = 0; i < linhas.length && r.cronograma.length < 40; i++) {
+  // datas importantes: só eventos do concurso (inscrição, prova, resultado...) e datas próximas de hoje
+  const EVENTO = /(inscri[çc]|isen[çc]|prova|gabarito|resultado|recurso|convoca|local|homologa|matr[íi]cula|curso de forma|teste|exame|avalia[çc][ãa]o|per[íi]cia|investiga[çc][ãa]o social|t[íi]tulos|aplica[çc][ãa]o|divulga[çc][ãa]o|entrega|pagamento|boleto)/i;
+  const LEGAL = /(provimento|lei\b|lei n|decreto|resolu[çc][ãa]o|portaria|instru[çc][ãa]o normativa|s[úu]mula|emenda|regido|publicad[oa] no d)/i;
+  const anoAtual = new Date().getFullYear();
+  const vistos = new Set();
+  for (let i = 0; i < linhas.length && r.cronograma.length < 25; i++) {
     const l = linhas[i];
-    const ds = datasNoTexto(l);
-    if (!ds.length || l.length > 220) continue;
+    if (l.length > 220 || LEGAL.test(l) || !EVENTO.test(l)) continue;
+    const ds = datasNoTexto(l).filter((d) => +d.iso.slice(0, 4) >= anoAtual - 1 && +d.iso.slice(0, 4) <= anoAtual + 2);
+    if (!ds.length) continue;
     let ev = l
       .replace(/\b\d{1,2}\/\d{1,2}\/\d{4}\b/g, '')
       .replace(/\b\d{1,2}º?\s+de\s+\p{L}+\s+de\s+\d{4}/giu, '')
+      .replace(/(?:^|\s)(?:das|às|as)\s+\d{1,2}\s*(?:horas?|h)(?:\d{2})?(?:\s+(?:do|de)\s+dia)?/gi, ' ')
+      .replace(/\b(do|no|ao)\s+dia\b/gi, '')
+      .replace(/\bno per[íi]odo\b/gi, 'de')
       .replace(/[\s.:–—-]+$/, '')
-      .replace(/\s+(a|e|até|em|no dia|dia|de)\s*$/i, '')
+      .replace(/\s+(a|e|até|em|no dia|dia|de|do|da)\s*$/i, '')
+      .replace(/^\s*\d+(\.\d+)*\.?\s*/, '')
       .replace(/[\s:–—-]+$/, '')
+      .replace(/\s{2,}/g, ' ')
       .trim();
-    if (ev.length < 4 && i > 0) ev = linhas[i - 1].slice(0, 120);
-    if (ev.length < 4) continue;
+    if (ev.length < 4 || vistos.has(ds[0].iso + ev)) continue;
+    vistos.add(ds[0].iso + ev);
     r.cronograma.push({ data: ds[0].iso, fim: ds[1]?.iso || '', evento: ev.slice(0, 140) });
   }
+  r.cronograma.sort((a, b) => a.data.localeCompare(b.data));
 
   // data da prova: data mais próxima de expressões típicas
   const reProva = /(aplica[çc][ãa]o d[ao]s? provas?|data d[ao]s? provas?|provas? objetivas?(?: e discursivas?)?(?: ser[ãa]o)? (?:aplicadas|realizadas)|realiza[çc][ãa]o d[ao]s? provas?|prova objetiva)/gi;
@@ -94,6 +105,28 @@ export function lerEdital(linhas) {
       }
     }
   }
+
+  // concursos em fases (ex.: OAB): data da prova da 1ª e da 2ª fase
+  const perto = (re) => {
+    let melhor = null;
+    let custoMin = Infinity;
+    let mm;
+    while ((mm = re.exec(texto))) {
+      for (const d of ds) {
+        const dist = d.pos - mm.index;
+        const custo = dist >= 0 ? dist : 1000 - dist;
+        if (dist >= -40 && dist < 300 && custo < custoMin) {
+          custoMin = custo;
+          melhor = d.iso;
+        }
+      }
+    }
+    return melhor;
+  };
+  r.datasFases = {
+    primeira: perto(/prova objetiva|1[ªa] fase|primeira fase/gi) || r.dataProva || null,
+    segunda: perto(/pr[áa]tico[- ]profissional|2[ªa] fase|segunda fase|prova discursiva/gi),
+  };
 
   r.disciplinas = lerConteudoProgramatico(linhas);
   return r;

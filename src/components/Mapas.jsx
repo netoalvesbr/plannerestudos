@@ -6,8 +6,8 @@ import { fmtPct, resumo } from '../lib/stats.js';
 const CORES = [0, 1, 2, 3, 4, 5].map((i) => `var(--m${i})`);
 
 export function ListaMapas({ ctx }) {
-  const { concurso, cargo, questoes, respostas, abrirMapa } = ctx;
-  const discs = disciplinasDo(concurso.id, cargo);
+  const { concurso, cargo, fase, area, questoes, respostas, abrirMapa } = ctx;
+  const discs = disciplinasDo(concurso.id, cargo, fase, area);
   const grupos = [...new Set(discs.map((d) => d.grupo))];
   return (
     <div>

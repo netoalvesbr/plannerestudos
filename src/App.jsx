@@ -3,9 +3,10 @@ import { getConcurso, registrarConcursos, todosConcursos } from './data/concurso
 import { POR_UID, questoesDo, registrarQuestoesRemotas } from './lib/dados.js';
 import * as remoto from './lib/remoto.js';
 import NovoConcurso from './components/NovoConcurso.jsx';
+import Cronograma from './components/Cronograma.jsx';
 import ImportarProva from './components/ImportarProva.jsx';
 import * as store from './lib/store.js';
-import { EscolhaCargo, EscolhaFase, Ficha, Login, MeusConcursos, NovaSenha } from './components/Concursos.jsx';
+import { EscolhaArea, EscolhaCargo, EscolhaFase, Ficha, Login, MeusConcursos, NovaSenha } from './components/Concursos.jsx';
 import { EscolhaFormato, ProvasDiarias, QuestoesAvulsas } from './components/Inicio.jsx';
 import Questao, { Conclusao } from './components/Questao.jsx';
 import Painel from './components/Painel.jsx';
@@ -79,11 +80,14 @@ export default function App() {
   const cargo = nCargos > 1 ? pc.cargo : concurso?.cargos?.[0]?.id || 'ambos';
   const precisaFase = !!concurso?.fases?.length && !concurso.fases.some((f) => f.id === pc.fase);
   const fase = precisaFase ? null : pc.fase || null;
+  const faseObj = concurso?.fases?.find((f) => f.id === fase);
+  const precisaArea = !!faseObj?.areas?.length && !faseObj.areas.some((a) => a.id === pc.area);
+  const area = faseObj?.areas?.length && !precisaArea ? pc.area : null;
   const unificado = !!prefs.unificado;
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  const questoes = useMemo(() => (concurso ? questoesDo(concurso.id, cargo, fase) : []), [concurso, cargo, fase, bancoVersao]);
+  const questoes = useMemo(() => (concurso ? questoesDo(concurso.id, cargo, fase, { area }) : []), [concurso, cargo, fase, area, bancoVersao]);
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  const questoesUnificado = useMemo(() => (concurso ? questoesDo(concurso.id, cargo, fase, { unificado: true }) : []), [concurso, cargo, fase, bancoVersao]);
+  const questoesUnificado = useMemo(() => (concurso ? questoesDo(concurso.id, cargo, fase, { unificado: true, area }) : []), [concurso, cargo, fase, area, bancoVersao]);
 
   function responder(uid, letra, segundos) {
     const q = POR_UID[uid];
@@ -117,6 +121,7 @@ export default function App() {
     concurso,
     cargo,
     fase,
+    area,
     questoes,
     questoesUnificado,
     unificado,
@@ -137,7 +142,7 @@ export default function App() {
     abrirFicha: (id) => setTela({ nome: 'ficha', id }),
     abrirNovoConcurso: () => setTela({ nome: 'novo-concurso' }),
     abrirEditarConcurso: (id) => setTela({ nome: 'editar-concurso', id }),
-    abrirImportarProva: (cid, f) => setTela({ nome: 'importar-prova', cid: cid || concurso?.id, fase: f || fase }),
+    abrirImportarProva: (cid, f, a) => setTela({ nome: 'importar-prova', cid: cid || concurso?.id, fase: f || fase, area: a || area }),
     excluir: async (id) => {
       try {
         await remoto.excluirConcurso(id);
@@ -202,6 +207,7 @@ export default function App() {
         concursos={todosConcursos()}
         concursoInicial={tela.cid}
         faseInicial={tela.fase}
+        areaInicial={tela.area}
         aoCancelar={() => setTela({ nome: 'concursos' })}
         aoConcluir={async (r) => {
           await recarregarBanco();
@@ -221,7 +227,11 @@ export default function App() {
   } else if (precisaCargo) {
     conteudo = <EscolhaCargo concurso={concurso} aoEscolher={(v) => setPrefConc(concurso.id, { cargo: v })} />;
   } else if (precisaFase) {
-    conteudo = <EscolhaFase concurso={concurso} aoEscolher={(v) => setPrefConc(concurso.id, { fase: v })} />;
+    conteudo = <EscolhaFase concurso={concurso} aoEscolher={(v) => setPrefConc(concurso.id, { fase: v, area: null })} />;
+  } else if (precisaArea) {
+    conteudo = <EscolhaArea concurso={concurso} fase={faseObj} aoEscolher={(v) => setPrefConc(concurso.id, { area: v })} />;
+  } else if (tela.nome === 'cronograma') {
+    conteudo = <Cronograma key={[concurso.id, fase, area].join('|')} ctx={ctx} />;
   } else if (tela.nome === 'painel') {
     conteudo = <Painel ctx={ctx} />;
   } else if (tela.nome === 'mapas') {
@@ -270,6 +280,7 @@ export default function App() {
             <nav className="nav" aria-label="Principal">
               <button aria-current={naInicio && formato === 'diarias'} onClick={() => { setPrefConc(concurso.id, { formato: 'diarias' }); ir('inicio'); }}>📅 Provas diárias</button>
               <button aria-current={naInicio && formato === 'avulsas'} onClick={() => { setPrefConc(concurso.id, { formato: 'avulsas' }); ir('inicio'); }}>🎯 Avulsas</button>
+              <button aria-current={tela.nome === 'cronograma'} onClick={() => ir('cronograma')}>📆 Cronograma</button>
               <button aria-current={tela.nome === 'painel'} onClick={() => ir('painel')}>Painel</button>
               <button aria-current={tela.nome.startsWith('mapa')} onClick={() => ir('mapas')}>🧠 Mapas</button>
               <button aria-current={tela.nome === 'concursos' || tela.nome === 'ficha'} onClick={() => ir('concursos')}>Concursos</button>

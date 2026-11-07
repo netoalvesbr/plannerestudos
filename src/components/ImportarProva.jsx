@@ -10,11 +10,12 @@ async function textoDeArquivo(arquivo, aoProgredir) {
   return textoDoPdf(arquivo, aoProgredir);
 }
 
-export default function ImportarProva({ concursos, concursoInicial, faseInicial, aoConcluir, aoCancelar }) {
+export default function ImportarProva({ concursos, concursoInicial, faseInicial, areaInicial, aoConcluir, aoCancelar }) {
   const [cid, setCid] = useState(concursoInicial || concursos[0]?.id || '');
   const concurso = concursos.find((c) => c.id === cid);
   const [fase, setFase] = useState(faseInicial || '');
   const faseObj = concurso?.fases?.find((f) => f.id === fase);
+  const [area, setArea] = useState(areaInicial || '');
   const [formato, setFormato] = useState(faseObj?.formato || concurso?.formato || 'A-E');
   const [meta, setMeta] = useState({ banca: concurso?.banca || '', ano: new Date().getFullYear() - 1, orgao: '' });
   const [questoes, setQuestoes] = useState([]);
@@ -25,7 +26,7 @@ export default function ImportarProva({ concursos, concursoInicial, faseInicial,
   const [colarGab, setColarGab] = useState('');
   const [salvando, setSalvando] = useState(false);
 
-  const disciplinas = useMemo(() => (concurso?.disciplinas || []).filter((d) => !fase || !d.fase || d.fase === fase).map((d) => d.nome), [concurso, fase]);
+  const disciplinas = useMemo(() => (concurso?.disciplinas || []).filter((d) => (!fase || !d.fase || d.fase === fase) && (!area || !d.area || d.area === area)).map((d) => d.nome), [concurso, fase, area]);
 
   function trocarConcurso(id) {
     setCid(id);
@@ -36,6 +37,7 @@ export default function ImportarProva({ concursos, concursoInicial, faseInicial,
   }
   function trocarFase(f) {
     setFase(f);
+    setArea('');
     const fo = concurso?.fases?.find((x) => x.id === f)?.formato;
     if (fo) setFormato(fo);
   }
@@ -109,6 +111,7 @@ export default function ImportarProva({ concursos, concursoInicial, faseInicial,
   async function salvar() {
     setErro(null);
     if (!cid) return setErro('Escolha o concurso.');
+    if (faseObj?.areas?.length && !area) return setErro('Escolha a área da prova (ex.: Direito Civil).');
     if (comProblema) return setErro(`Há ${comProblema} questão(ões) com pendências (marcadas em vermelho). Corrija ou desmarque "incluir".`);
     setSalvando(true);
     try {
@@ -120,6 +123,7 @@ export default function ImportarProva({ concursos, concursoInicial, faseInicial,
           uid: await uidDe(q.enunciado),
           concursoId: cid,
           fase: fase || null,
+          area: area || null,
           formato,
           banca: meta.banca,
           ano: meta.ano,
@@ -155,6 +159,14 @@ export default function ImportarProva({ concursos, concursoInicial, faseInicial,
               <select value={fase} onChange={(e) => trocarFase(e.target.value)}>
                 <option value="">Escolha…</option>
                 {concurso.fases.map((f) => <option key={f.id} value={f.id}>{f.nome}</option>)}
+              </select>
+            </label>
+          )}
+          {faseObj?.areas?.length > 0 && (
+            <label className="campo">Área
+              <select value={area} onChange={(e) => { setArea(e.target.value); const nome = faseObj.areas.find((a) => a.id === e.target.value)?.nome; if (nome && !materiaPadrao) setMateriaPadrao(nome); }}>
+                <option value="">Escolha…</option>
+                {faseObj.areas.map((a) => <option key={a.id} value={a.id}>{a.nome}</option>)}
               </select>
             </label>
           )}

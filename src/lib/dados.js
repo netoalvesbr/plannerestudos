@@ -52,22 +52,25 @@ export function registrarQuestoesRemotas(lista) {
 }
 
 // Disciplinas do concurso visíveis para o cargo ('oi', 'pap', 'ambos'...) e a fase escolhidos
-export function disciplinasDo(concursoId, cargo, fase) {
+export function disciplinasDo(concursoId, cargo, fase, area) {
   const c = getConcurso(concursoId);
   if (!c) return [];
   return c.disciplinas.filter(
-    (d) => (cargo === 'ambos' || !cargo || !d.cargos || d.cargos.includes(cargo)) && (!fase || !d.fase || d.fase === fase),
+    (d) =>
+      (cargo === 'ambos' || !cargo || !d.cargos || d.cargos.includes(cargo)) &&
+      (!fase || !d.fase || d.fase === fase) &&
+      (!area || !d.area || d.area === area),
   );
 }
 
 // unificado = inclui questões de outros concursos cujas disciplinas existam neste concurso
-export function questoesDo(concursoId, cargo, fase, { unificado = false } = {}) {
-  const nomes = new Set(disciplinasDo(concursoId, cargo, fase).map((d) => chave(d.nome)));
+export function questoesDo(concursoId, cargo, fase, { unificado = false, area = null } = {}) {
+  const nomes = new Set(disciplinasDo(concursoId, cargo, fase, area).map((d) => chave(d.nome)));
   return QUESTOES.filter((q) => {
     if (q.anulada) return false;
     const proprio = q.concursos.includes(concursoId);
     if (proprio) {
-      if (q.remoto) return !fase || !q.fase || q.fase === fase;
+      if (q.remoto) return (!fase || !q.fase || q.fase === fase) && (!area || !q.area || q.area === area);
       return nomes.has(chave(q.materia));
     }
     return unificado && nomes.has(chave(q.materia));

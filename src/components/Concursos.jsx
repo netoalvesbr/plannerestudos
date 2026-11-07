@@ -207,7 +207,7 @@ export function MeusConcursos({ ctx }) {
         {lista.map((c) => {
           const seg = seguindo.includes(c.id);
           const pc = prefs.concursos?.[c.id] || {};
-          const s = resumo(questoesDo(c.id, pc.cargo || 'ambos', pc.fase), respostas);
+          const s = resumo(questoesDo(c.id, pc.cargo || 'ambos', pc.fase, { area: pc.area }), respostas);
           const nQ = questoesDo(c.id, 'ambos', null).length;
           const faltam = c.dataProva ? diasAte(c.dataProva) : null;
           const fase = c.fases?.find((f) => f.id === pc.fase);
@@ -224,7 +224,7 @@ export function MeusConcursos({ ctx }) {
               </p>
               {seg && (
                 <p>
-                  {fase && <>Estudando: <b>{fase.nome}</b><br /></>}
+                  {fase && <>Estudando: <b>{fase.nome}</b>{fase.areas?.find((a) => a.id === pc.area) ? <> – <b>{fase.areas.find((a) => a.id === pc.area).nome}</b></> : null}<br /></>}
                   Acerto geral: <b>{fmtPct(s.pct)}</b> <span className="sub">({s.resolvidas} resolvidas)</span>
                 </p>
               )}
@@ -250,6 +250,22 @@ export function MeusConcursos({ ctx }) {
       </div>
       {!lista.length && <p className="card sub">Nenhum concurso encontrado. Use <b>+ Adicionar concurso</b> para cadastrar.</p>}
     </div>
+  );
+}
+
+export function EscolhaArea({ concurso, fase, aoEscolher }) {
+  return (
+    <section className="card login">
+      <h1>{concurso.sigla} · {fase.nome}: qual é a sua área?</h1>
+      <p className="sub">Você vai estudar só o conteúdo da área escolhida (direito material e processual correspondente). Dá para trocar depois na ficha do concurso.</p>
+      <div className="escolha">
+        {fase.areas.map((a) => (
+          <button key={a.id} className="card bloco-card" onClick={() => aoEscolher(a.id)}>
+            <h2>{a.nome}</h2>
+          </button>
+        ))}
+      </div>
+    </section>
   );
 }
 
@@ -296,6 +312,8 @@ export function Ficha({ ctx, concurso, voltar }) {
   const pc = prefs.concursos?.[concurso.id] || {};
   const cargo = pc.cargo || 'ambos';
   const fase = pc.fase || '';
+  const faseObj = concurso.fases?.find((f) => f.id === fase);
+  const area = faseObj?.areas?.length ? pc.area || '' : '';
   const marcados = prefs.edital?.[concurso.id] || {};
   const [confirmar, setConfirmar] = useState(false);
   const podeEditar = concurso.remoto && (concurso.criadoPor === usuario?.id || usuario?.admin);
@@ -305,7 +323,13 @@ export function Ficha({ ctx, concurso, voltar }) {
     atual.has(i) ? atual.delete(i) : atual.add(i);
     setPrefs({ edital: { ...(prefs.edital || {}), [concurso.id]: { ...marcados, [disc]: [...atual] } } });
   };
-  const discs = disciplinasDo(concurso.id, cargo, fase || null);
+  const discs = disciplinasDo(concurso.id, cargo, fase || null, area || null);
+  const feitosD = discs.filter((d) => (marcados.__disciplinas || []).includes(d.nome)).length;
+  const marcarDisc = (nome) => {
+    const atual = new Set(marcados.__disciplinas || []);
+    atual.has(nome) ? atual.delete(nome) : atual.add(nome);
+    setPrefs({ edital: { ...(prefs.edital || {}), [concurso.id]: { ...marcados, __disciplinas: [...atual] } } });
+  };
   const totalT = discs.reduce((s, d) => s + (d.topicos?.length || 0), 0);
   const feitosT = discs.reduce((s, d) => s + (marcados[d.nome]?.filter((i) => i < (d.topicos?.length || 0)).length || 0), 0);
   const p = concurso.prova;
@@ -317,7 +341,7 @@ export function Ficha({ ctx, concurso, voltar }) {
         <p className="sub">{[concurso.edital, concurso.banca && `Banca ${concurso.banca}`, concurso.orgao].filter(Boolean).join(' · ')}</p>
         <div className="linha">
           {concurso.editalUrl && <a className="btn" href={concurso.editalUrl} target="_blank" rel="noreferrer">📄 Abrir edital (PDF)</a>}
-          <button className="btn" onClick={() => abrirImportarProva(concurso.id, fase)}>📥 Importar prova deste concurso</button>
+          <button className="btn" onClick={() => abrirImportarProva(concurso.id, fase, area)}>📥 Importar prova deste concurso</button>
           {podeEditar && <button className="btn" onClick={() => abrirEditarConcurso(concurso.id)}>✏️ Editar</button>}
           {podeEditar && !confirmar && <button className="btn perigo" onClick={() => setConfirmar(true)}>Excluir</button>}
           {confirmar && (
@@ -331,8 +355,16 @@ export function Ficha({ ctx, concurso, voltar }) {
         <div className="filtros" style={{ marginTop: 12 }}>
           {concurso.fases?.length > 0 && (
             <label className="campo">Fase que estou estudando
-              <select value={fase} onChange={(e) => setPc({ fase: e.target.value })}>
+              <select value={fase} onChange={(e) => setPc({ fase: e.target.value, area: null })}>
                 {concurso.fases.map((f) => <option key={f.id} value={f.id}>{f.nome}</option>)}
+              </select>
+            </label>
+          )}
+          {faseObj?.areas?.length > 0 && (
+            <label className="campo">Minha área
+              <select value={area} onChange={(e) => setPc({ area: e.target.value })}>
+                <option value="" disabled>Escolha…</option>
+                {faseObj.areas.map((a) => <option key={a.id} value={a.id}>{a.nome}</option>)}
               </select>
             </label>
           )}
@@ -350,7 +382,28 @@ export function Ficha({ ctx, concurso, voltar }) {
       <section className="card">
         <h2>📋 Edital verticalizado</h2>
         {!totalT ? (
-          <p className="sub">Este concurso ainda não tem o conteúdo programático cadastrado.{podeEditar && ' Use "Editar" para importar o edital.'}</p>
+          <>
+            <p className="sub">
+              O edital deste concurso ainda não foi importado, por isso não há os tópicos do conteúdo programático.
+              {podeEditar ? ' Use "✏️ Editar" e importe o PDF do edital para gerar o edital verticalizado completo.' : ' Quem cadastrou o concurso pode importar o PDF do edital.'}
+            </p>
+            {discs.length > 0 && (
+              <>
+                <p><b>✨ Sugestão de edital verticalizado</b> <span className="sub">(por disciplina, a partir das matérias cadastradas)</span>: {feitosD} de {discs.length} concluídas</p>
+                <div className="barra" aria-hidden="true"><i style={{ width: `${(feitosD / discs.length) * 100}%` }} /></div>
+                <ul style={{ listStyle: 'none', paddingLeft: 4 }}>
+                  {discs.map((d) => (
+                    <li key={d.nome} style={{ margin: '6px 0' }}>
+                      <label className="linha" style={{ gap: 8, flexWrap: 'nowrap' }}>
+                        <input type="checkbox" checked={(marcados.__disciplinas || []).includes(d.nome)} onChange={() => marcarDisc(d.nome)} />
+                        <span>{d.nome}{d.bloco ? <span className="sub peq"> · {d.bloco}</span> : null}</span>
+                      </label>
+                    </li>
+                  ))}
+                </ul>
+              </>
+            )}
+          </>
         ) : (
           <>
             <p className="sub">Marque os tópicos que você já estudou. Progresso: <b>{feitosT} de {totalT}</b> ({Math.round((feitosT / totalT) * 100)}%)</p>
@@ -407,7 +460,7 @@ export function Ficha({ ctx, concurso, voltar }) {
       )}
       {concurso.cronograma?.length > 0 && (
         <section className="card">
-          <h2>Cronograma</h2>
+          <h2>Datas importantes</h2>
           <table>
             <tbody>
               {concurso.cronograma.map((e, i) => (
