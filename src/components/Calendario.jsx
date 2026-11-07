@@ -13,8 +13,15 @@ export function eventosDoConcurso(concurso) {
   const nome = concurso.nome || concurso.sigla;
   // provas das fases primeiro: o nome da fase é o título preferido para o dia da prova
   for (const f of concurso.fases || []) if (f.data) ev.push({ data: f.data, titulo: f.nome.includes('–') ? f.nome.replace(/–/, 'do ' + (concurso.nome || concurso.sigla).replace(/ – OAB$/, '') + ' –') : `${f.nome} – ${nome}`, prova: true });
+  // se o candidato apagou uma fase, as datas que são só daquela fase não aparecem
+  const fases = concurso.fases || [];
+  const temFase = (n) => fases.some((f) => new RegExp(`^${n}`).test(f.nome));
+  const ignorar = (t) =>
+    fases.length > 0 &&
+    ((!temFase('1') && /objetiva|1[ªa] fase|primeira fase/i.test(t) && !/pr[áa]tico|2[ªa] fase/i.test(t)) ||
+      (!temFase('2') && /pr[áa]tico|2[ªa] fase|segunda fase/i.test(t) && !/objetiva|1[ªa] fase/i.test(t)));
   for (const e of concurso.cronograma || []) {
-    if (!e.data) continue;
+    if (!e.data || ignorar(e.evento)) continue;
     const prova = /aplica|realiza[çc][ãa]o d[ao]s? prova|prova (objetiva|pr[áa]tico|discursiva)|[12][ªa] fase/i.test(e.evento) && !/divulga|local|gabarito|padr|resultado|recurso/i.test(e.evento);
     ev.push({ data: e.data, fim: e.fim || '', titulo: e.evento, prova });
   }
