@@ -76,4 +76,11 @@ export const CONCURSOS = [
   },
 ];
 
-export const getConcurso = (id) => CONCURSOS.find((c) => c.id === id);
+// Concursos cadastrados pelos usuários (banco compartilhado) – preenchidos em tempo de execução
+let REMOTOS = [];
+export function registrarConcursos(lista) {
+  REMOTOS = lista;
+}
+export const todosConcursos = () => [...CONCURSOS, ...REMOTOS];
+export const getConcurso = (id) => todosConcursos().find((c) => c.id === id);
+

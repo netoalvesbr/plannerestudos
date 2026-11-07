@@ -34,17 +34,47 @@ for (const arq of Object.values(arquivos)) {
 }
 for (const l of Object.values(DIAS)) l.sort((a, b) => a.data.localeCompare(b.data));
 
-// Disciplinas do concurso visíveis para o cargo escolhido ('oi', 'pap' ou 'ambos')
-export function disciplinasDo(concursoId, cargo) {
-  const c = getConcurso(concursoId);
-  if (!c) return [];
-  return c.disciplinas.filter((d) => cargo === 'ambos' || !cargo || d.cargos.includes(cargo));
+const chave = (t) => (t || '').toLowerCase().normalize('NFKD').replace(/[^\p{L}\p{N}]/gu, '');
+
+// Questões vindas do banco compartilhado (Supabase). Não substituem as questões fixas com o mesmo uid.
+export function registrarQuestoesRemotas(lista) {
+  for (let i = QUESTOES.length - 1; i >= 0; i--) {
+    if (QUESTOES[i].remoto) {
+      delete POR_UID[QUESTOES[i].uid];
+      QUESTOES.splice(i, 1);
+    }
+  }
+  for (const q of lista) {
+    if (POR_UID[q.uid]) continue;
+    POR_UID[q.uid] = q;
+    QUESTOES.push(q);
+  }
 }
 
-export function questoesDo(concursoId, cargo) {
-  const nomes = new Set(disciplinasDo(concursoId, cargo).map((d) => d.nome));
-  return QUESTOES.filter((q) => q.concursos.includes(concursoId) && nomes.has(q.materia) && !q.anulada);
+// Disciplinas do concurso visíveis para o cargo ('oi', 'pap', 'ambos'...) e a fase escolhidos
+export function disciplinasDo(concursoId, cargo, fase) {
+  const c = getConcurso(concursoId);
+  if (!c) return [];
+  return c.disciplinas.filter(
+    (d) => (cargo === 'ambos' || !cargo || !d.cargos || d.cargos.includes(cargo)) && (!fase || !d.fase || d.fase === fase),
+  );
 }
+
+// unificado = inclui questões de outros concursos cujas disciplinas existam neste concurso
+export function questoesDo(concursoId, cargo, fase, { unificado = false } = {}) {
+  const nomes = new Set(disciplinasDo(concursoId, cargo, fase).map((d) => chave(d.nome)));
+  return QUESTOES.filter((q) => {
+    if (q.anulada) return false;
+    const proprio = q.concursos.includes(concursoId);
+    if (proprio) {
+      if (q.remoto) return !fase || !q.fase || q.fase === fase;
+      return nomes.has(chave(q.materia));
+    }
+    return unificado && nomes.has(chave(q.materia));
+  });
+}
+
+export const totalNoBanco = () => QUESTOES.filter((q) => !q.anulada).length;
 
 export function diasDo(concursoId, cargo) {
   return (DIAS[concursoId] || [])

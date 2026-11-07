@@ -57,7 +57,9 @@ export default function Questao({ sessao, respostas, responder, aoSair, aoConclu
 
   const acertosSessao = uids.filter((u) => respostas[u]?.[1]).length;
   const respondidasSessao = uids.filter((u) => respostas[u] || marcadas[u]).length;
-  const letras = q.formato === 'CE' ? ['C', 'E'] : LETRAS_AE.filter((l) => q.alternativas[l] != null);
+  const discursiva = q.formato === 'discursiva';
+  const letras = q.formato === 'CE' ? ['C', 'E'] : discursiva ? [] : LETRAS_AE.filter((l) => q.alternativas?.[l] != null && (q.formato !== 'A-D' || l !== 'E'));
+  const nomeLetra = (L) => (q.formato === 'CE' ? ROTULO_CE[L] : L);
   const marcadaSim = marcadas[q.uid]?.[0];
   const mm = restante != null ? `${String(Math.max(0, Math.floor(restante / 60))).padStart(2, '0')}:${String(Math.max(0, restante % 60)).padStart(2, '0')}` : null;
 
@@ -110,21 +112,35 @@ export default function Questao({ sessao, respostas, responder, aoSair, aoConclu
           })}
         </div>
 
+        {discursiva && (
+          <Discursiva q={q} resp={resp} aoAvaliar={(ok) => { const seg = Math.round((Date.now() - inicio.current) / 1000); responder(q.uid, ok ? 'OK' : 'X', seg); }} />
+        )}
+
         {modo === 'simulado' && resp && (
           <p className="sub" style={{ marginTop: 10 }}>Você já respondeu esta questão antes; vale a primeira resposta.</p>
         )}
 
-        {revelar && (
+        {revelar && !discursiva && (
           <div ref={explicacao} className="explica">
             {resp[1] ? (
               <div className="veredito ok" role="status">✓ Resposta certa!</div>
             ) : (
-              <div className="veredito erro" role="status">✗ Resposta errada. Você marcou {resp[0]}; o gabarito é {q.gabarito}.</div>
+              <div className="veredito erro" role="status">✗ Resposta errada. Você marcou {nomeLetra(resp[0])}; o gabarito é {nomeLetra(q.gabarito)}.</div>
             )}
-            <h3>Comentário</h3>
-            <p>{q.comentario}</p>
-            <h3>Fundamentação</h3>
-            <p>{q.fonte}</p>
+            {q.comentario ? (
+              <>
+                <h3>Comentário</h3>
+                <p>{q.comentario}</p>
+              </>
+            ) : (
+              <p className="sub">Questão de prova anterior, ainda sem comentário.</p>
+            )}
+            {q.fonte && (
+              <>
+                <h3>{q.origem === 'prova_anterior' ? 'Origem' : 'Fundamentação'}</h3>
+                <p>{q.fonte}</p>
+              </>
+            )}
           </div>
         )}
 
@@ -208,6 +224,40 @@ export function Conclusao({ sessao, info, respostas, aoRevisar, aoVoltar }) {
         </div>
       </section>
       <button className="btn pri" onClick={aoVoltar}>Voltar ao início</button>
+    </div>
+  );
+}
+
+function Discursiva({ q, resp, aoAvaliar }) {
+  const [ver, setVer] = useState(!!resp);
+  return (
+    <div style={{ marginTop: 6 }}>
+      {!resp && (
+        <label className="campo">
+          Sua resposta (rascunho – não é salvo)
+          <textarea rows={6} style={{ width: '100%', borderRadius: 10, border: '1px solid var(--borda)', padding: 8, background: 'var(--card)', color: 'var(--txt)', font: 'inherit', marginTop: 4 }} />
+        </label>
+      )}
+      {!ver ? (
+        <button className="btn pri" style={{ marginTop: 10 }} onClick={() => setVer(true)}>Ver espelho de resposta</button>
+      ) : (
+        <div className="explica">
+          <h3>Espelho / padrão de resposta</h3>
+          <p style={{ whiteSpace: 'pre-line' }}>{q.espelho || 'Esta questão ainda não tem espelho cadastrado.'}</p>
+          {q.fonte && <p className="sub">{q.fonte}</p>}
+          {!resp ? (
+            <>
+              <p><b>Comparando com o espelho, como foi a sua resposta?</b></p>
+              <div className="linha">
+                <button className="btn" style={{ color: 'var(--ok)', borderColor: 'var(--ok)' }} onClick={() => aoAvaliar(true)}>✓ Acertei</button>
+                <button className="btn" style={{ color: 'var(--erro)', borderColor: 'var(--erro)' }} onClick={() => aoAvaliar(false)}>✗ Errei</button>
+              </div>
+            </>
+          ) : (
+            <div className={`veredito ${resp[1] ? 'ok' : 'erro'}`} role="status">{resp[1] ? '✓ Você marcou como certa.' : '✗ Você marcou como errada.'}</div>
+          )}
+        </div>
+      )}
     </div>
   );
 }

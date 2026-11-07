@@ -1,6 +1,6 @@
 import { useState } from 'react';
-import { CONCURSOS } from '../data/concursos.js';
-import { questoesDo } from '../lib/dados.js';
+import { todosConcursos } from '../data/concursos.js';
+import { disciplinasDo, questoesDo } from '../lib/dados.js';
 import { diasAte, fmtData, fmtPct, resumo } from '../lib/stats.js';
 import { PROVEDORES_LOGIN } from '../data/config.js';
 import { getModo, criarConta, entrarComProvedor, definirNovaSenha, entrarComSenha, entrarLocal, recuperarSenha } from '../lib/store.js';
@@ -181,27 +181,53 @@ export function NovaSenha({ aoConcluir }) {
 }
 
 export function MeusConcursos({ ctx }) {
-  const { prefs, setPrefs, respostas, abrirFicha } = ctx;
+  const { prefs, setPrefs, respostas, abrirFicha, abrirNovoConcurso, abrirImportarProva, usuario } = ctx;
   const seguindo = prefs.seguindo || [];
+  const [busca, setBusca] = useState('');
+  const todos = todosConcursos();
+  const termo = busca.trim().toLowerCase();
+  const lista = todos
+    .filter((c) => !termo || `${c.sigla} ${c.nome} ${c.banca} ${c.orgao || ''}`.toLowerCase().includes(termo))
+    .sort((a, b) => Number(seguindo.includes(b.id)) - Number(seguindo.includes(a.id)));
   return (
     <div>
-      <h1>Meus concursos</h1>
-      <p className="sub">Escolha os concursos que você acompanha. O concurso ativo define o que aparece nas outras telas.</p>
+      <div className="linha entre" style={{ marginBottom: 6 }}>
+        <h1 style={{ margin: 0 }}>Concursos</h1>
+        <div className="linha">
+          <button className="btn pri" onClick={abrirNovoConcurso}>+ Adicionar concurso</button>
+          <button className="btn" onClick={() => abrirImportarProva()}>📥 Importar prova anterior</button>
+        </div>
+      </div>
+      <p className="sub">
+        Todos os concursos cadastrados na plataforma aparecem aqui. Clique em <b>+ Acompanhar</b> nos que você vai estudar (e escolha a fase, se houver).
+        O banco de questões e os editais são compartilhados por todos; o seu desempenho é só seu.
+      </p>
+      <input type="text" value={busca} onChange={(e) => setBusca(e.target.value)} placeholder="🔎 Procurar concurso (sigla, nome, banca)…" style={{ marginBottom: 12 }} aria-label="Procurar concurso" />
       <div className="grade">
-        {CONCURSOS.map((c) => {
+        {lista.map((c) => {
           const seg = seguindo.includes(c.id);
-          const cargo = prefs.concursos?.[c.id]?.cargo || 'ambos';
-          const s = resumo(questoesDo(c.id, cargo), respostas);
-          const faltam = diasAte(c.dataProva);
+          const pc = prefs.concursos?.[c.id] || {};
+          const s = resumo(questoesDo(c.id, pc.cargo || 'ambos', pc.fase), respostas);
+          const nQ = questoesDo(c.id, 'ambos', null).length;
+          const faltam = c.dataProva ? diasAte(c.dataProva) : null;
+          const fase = c.fases?.find((f) => f.id === pc.fase);
           return (
-            <div key={c.id} className="card">
+            <div key={c.id} className="card" style={{ borderColor: seg ? 'var(--pri)' : undefined }}>
               <h2>{c.sigla} – {c.nome}</h2>
               <p className="sub">
-                {c.banca} · {c.cargos.map((x) => x.nome).join(' / ')}
+                {[c.banca, c.cargos?.length ? c.cargos.map((x) => x.nome).join(' / ') : null].filter(Boolean).join(' · ')}
+                {c.fases?.length > 0 && <><br />Fases: {c.fases.map((f) => f.nome).join(' · ')}</>}
                 <br />
-                Prova em {fmtData(c.dataProva)} {faltam >= 0 && <span className="contagem">· faltam {faltam} dias</span>}
+                {c.dataProva ? <>Prova em {fmtData(c.dataProva)} {faltam >= 0 && <span className="contagem">· faltam {faltam} dias</span>}</> : 'Data da prova a definir'}
+                <br />
+                {nQ} questões no banco{c.editalUrl ? ' · edital em PDF' : ''}
               </p>
-              {seg && <p>Acerto geral: <b>{fmtPct(s.pct)}</b> <span className="sub">({s.resolvidas} resolvidas)</span></p>}
+              {seg && (
+                <p>
+                  {fase && <>Estudando: <b>{fase.nome}</b><br /></>}
+                  Acerto geral: <b>{fmtPct(s.pct)}</b> <span className="sub">({s.resolvidas} resolvidas)</span>
+                </p>
+              )}
               <div className="linha">
                 {seg ? (
                   <>
@@ -215,14 +241,32 @@ export function MeusConcursos({ ctx }) {
                 ) : (
                   <button className="btn pri" onClick={() => setPrefs({ seguindo: [...seguindo, c.id], ativo: c.id })}>+ Acompanhar</button>
                 )}
-                <button className="btn peq" onClick={() => abrirFicha(c.id)}>Ficha do concurso</button>
+                <button className="btn peq" onClick={() => abrirFicha(c.id)}>Ficha e edital</button>
               </div>
+              {c.remoto && c.criadoPor === usuario?.id && <p className="peq sub" style={{ marginTop: 6 }}>Cadastrado por você</p>}
             </div>
           );
         })}
       </div>
-      <p className="sub" style={{ marginTop: 14 }}>Novos concursos serão acrescentados aqui, sem mudar o link.</p>
+      {!lista.length && <p className="card sub">Nenhum concurso encontrado. Use <b>+ Adicionar concurso</b> para cadastrar.</p>}
     </div>
+  );
+}
+
+export function EscolhaFase({ concurso, aoEscolher }) {
+  return (
+    <section className="card login">
+      <h1>{concurso.sigla}: qual fase você vai estudar?</h1>
+      <p className="sub">As disciplinas e as questões seguem esta escolha. Você pode trocar depois na ficha do concurso.</p>
+      <div className="escolha">
+        {concurso.fases.map((f) => (
+          <button key={f.id} className="card bloco-card" onClick={() => aoEscolher(f.id)}>
+            <h2>{f.nome}</h2>
+            <p className="sub">{{ 'A-E': 'Múltipla escolha (A a E)', 'A-D': 'Múltipla escolha (A a D)', CE: 'Certo ou Errado', discursiva: 'Discursiva / peça' }[f.formato] || ''}{f.data ? ` · ${fmtData(f.data)}` : ''}</p>
+          </button>
+        ))}
+      </div>
+    </section>
   );
 }
 
@@ -247,81 +291,135 @@ export function EscolhaCargo({ concurso, aoEscolher }) {
   );
 }
 
-export function Ficha({ concurso, cargo, aoTrocarCargo, voltar }) {
+export function Ficha({ ctx, concurso, voltar }) {
+  const { prefs, setPrefs, usuario, abrirEditarConcurso, abrirImportarProva, excluir } = ctx;
+  const pc = prefs.concursos?.[concurso.id] || {};
+  const cargo = pc.cargo || 'ambos';
+  const fase = pc.fase || '';
+  const marcados = prefs.edital?.[concurso.id] || {};
+  const [confirmar, setConfirmar] = useState(false);
+  const podeEditar = concurso.remoto && (concurso.criadoPor === usuario?.id || usuario?.admin);
+  const setPc = (parcial) => setPrefs({ concursos: { ...(prefs.concursos || {}), [concurso.id]: { ...pc, ...parcial } } });
+  const marcar = (disc, i) => {
+    const atual = new Set(marcados[disc] || []);
+    atual.has(i) ? atual.delete(i) : atual.add(i);
+    setPrefs({ edital: { ...(prefs.edital || {}), [concurso.id]: { ...marcados, [disc]: [...atual] } } });
+  };
+  const discs = disciplinasDo(concurso.id, cargo, fase || null);
+  const totalT = discs.reduce((s, d) => s + (d.topicos?.length || 0), 0);
+  const feitosT = discs.reduce((s, d) => s + (marcados[d.nome]?.filter((i) => i < (d.topicos?.length || 0)).length || 0), 0);
   const p = concurso.prova;
   return (
     <div>
       <button className="btn peq" onClick={voltar} style={{ marginBottom: 10 }}>← Voltar</button>
       <section className="card">
         <h1>{concurso.nome} ({concurso.sigla})</h1>
-        <p className="sub">{concurso.edital} · Banca {concurso.banca}</p>
-        <label className="campo" style={{ maxWidth: 360 }}>
-          Meu cargo
-          <select value={cargo} onChange={(e) => aoTrocarCargo(e.target.value)}>
-            {concurso.cargos.map((c) => <option key={c.id} value={c.id}>{c.nome}</option>)}
-            <option value="ambos">Os dois cargos</option>
-          </select>
-        </label>
+        <p className="sub">{[concurso.edital, concurso.banca && `Banca ${concurso.banca}`, concurso.orgao].filter(Boolean).join(' · ')}</p>
+        <div className="linha">
+          {concurso.editalUrl && <a className="btn" href={concurso.editalUrl} target="_blank" rel="noreferrer">📄 Abrir edital (PDF)</a>}
+          <button className="btn" onClick={() => abrirImportarProva(concurso.id, fase)}>📥 Importar prova deste concurso</button>
+          {podeEditar && <button className="btn" onClick={() => abrirEditarConcurso(concurso.id)}>✏️ Editar</button>}
+          {podeEditar && !confirmar && <button className="btn perigo" onClick={() => setConfirmar(true)}>Excluir</button>}
+          {confirmar && (
+            <span className="linha" role="alert">
+              <span>Excluir este concurso para todos? As questões continuam no banco.</span>
+              <button className="btn perigo" onClick={() => excluir(concurso.id)}>Sim, excluir</button>
+              <button className="btn" onClick={() => setConfirmar(false)}>Cancelar</button>
+            </span>
+          )}
+        </div>
+        <div className="filtros" style={{ marginTop: 12 }}>
+          {concurso.fases?.length > 0 && (
+            <label className="campo">Fase que estou estudando
+              <select value={fase} onChange={(e) => setPc({ fase: e.target.value })}>
+                {concurso.fases.map((f) => <option key={f.id} value={f.id}>{f.nome}</option>)}
+              </select>
+            </label>
+          )}
+          {concurso.cargos?.length > 1 && (
+            <label className="campo">Meu cargo
+              <select value={cargo} onChange={(e) => setPc({ cargo: e.target.value })}>
+                {concurso.cargos.map((c) => <option key={c.id} value={c.id}>{c.nome}</option>)}
+                <option value="ambos">Todos os cargos</option>
+              </select>
+            </label>
+          )}
+        </div>
       </section>
-      {concurso.cargos.map((c) => (
+
+      <section className="card">
+        <h2>📋 Edital verticalizado</h2>
+        {!totalT ? (
+          <p className="sub">Este concurso ainda não tem o conteúdo programático cadastrado.{podeEditar && ' Use "Editar" para importar o edital.'}</p>
+        ) : (
+          <>
+            <p className="sub">Marque os tópicos que você já estudou. Progresso: <b>{feitosT} de {totalT}</b> ({Math.round((feitosT / totalT) * 100)}%)</p>
+            <div className="barra" aria-hidden="true"><i style={{ width: `${(feitosT / totalT) * 100}%` }} /></div>
+            {discs.filter((d) => d.topicos?.length).map((d) => {
+              const feitos = (marcados[d.nome] || []).filter((i) => i < d.topicos.length).length;
+              return (
+                <details key={d.nome} style={{ borderTop: '1px solid var(--borda)', padding: '8px 0' }}>
+                  <summary>
+                    <b>{d.nome}</b> <span className="sub peq">{d.bloco ? `· ${d.bloco} ` : ''}· {feitos}/{d.topicos.length} {feitos === d.topicos.length ? '✓' : ''}</span>
+                  </summary>
+                  <ul style={{ listStyle: 'none', paddingLeft: 4, margin: '8px 0 0' }}>
+                    {d.topicos.map((t, i) => (
+                      <li key={i} style={{ margin: '4px 0' }}>
+                        <label className="linha" style={{ gap: 8, alignItems: 'flex-start', flexWrap: 'nowrap' }}>
+                          <input type="checkbox" checked={(marcados[d.nome] || []).includes(i)} onChange={() => marcar(d.nome, i)} style={{ marginTop: 4 }} />
+                          <span>{t}</span>
+                        </label>
+                      </li>
+                    ))}
+                  </ul>
+                </details>
+              );
+            })}
+          </>
+        )}
+      </section>
+
+      {concurso.cargos?.map((c) => (
         <section key={c.id} className="card">
           <h2>{c.nome}</h2>
           <p>
-            <b>Vagas:</b> {c.vagas}<br />
-            <b>Remuneração:</b> {c.remuneracao}<br />
-            <b>Requisitos:</b> {c.requisitos}<br />
-            <b>Horário:</b> {c.horario}
+            {c.vagas && <><b>Vagas:</b> {c.vagas}<br /></>}
+            {c.remuneracao && <><b>Remuneração:</b> {c.remuneracao}<br /></>}
+            {c.requisitos && <><b>Requisitos:</b> {c.requisitos}<br /></>}
+            {c.horario && <><b>Horário:</b> {c.horario}</>}
           </p>
         </section>
       ))}
-      <section className="card">
-        <h2>Prova objetiva</h2>
-        <p>{p.totalQuestoes} questões · {p.totalPontos} pontos</p>
-        <table>
-          <thead><tr><th>Bloco</th><th>Questões</th><th>Peso</th><th>Mínimo</th></tr></thead>
-          <tbody>
-            {p.blocos.map((b) => (
-              <tr key={b.nome}><td>{b.nome}</td><td>{b.questoes}</td><td>{b.peso}</td><td style={{ whiteSpace: 'normal' }}>{b.minimo}</td></tr>
-            ))}
-          </tbody>
-        </table>
-        <p style={{ marginTop: 8 }}><b>Aprovação:</b> {p.aprovacao}<br /><b>Discursiva:</b> {p.discursiva}</p>
-      </section>
-      <section className="card">
-        <h2>Cronograma</h2>
-        <table>
-          <tbody>
-            {concurso.cronograma.map((e) => (
-              <tr key={e.evento}>
-                <td>{e.evento}</td>
-                <td>{fmtData(e.data)}{e.fim ? ` a ${fmtData(e.fim)}` : ''}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </section>
+      {p?.blocos && (
+        <section className="card">
+          <h2>Prova objetiva</h2>
+          <p>{p.totalQuestoes} questões · {p.totalPontos} pontos</p>
+          <table>
+            <thead><tr><th>Bloco</th><th>Questões</th><th>Peso</th><th>Mínimo</th></tr></thead>
+            <tbody>
+              {p.blocos.map((b) => (
+                <tr key={b.nome}><td>{b.nome}</td><td>{b.questoes}</td><td>{b.peso}</td><td style={{ whiteSpace: 'normal' }}>{b.minimo}</td></tr>
+              ))}
+            </tbody>
+          </table>
+          <p style={{ marginTop: 8 }}><b>Aprovação:</b> {p.aprovacao}<br /><b>Discursiva:</b> {p.discursiva}</p>
+        </section>
+      )}
+      {concurso.cronograma?.length > 0 && (
+        <section className="card">
+          <h2>Cronograma</h2>
+          <table>
+            <tbody>
+              {concurso.cronograma.map((e, i) => (
+                <tr key={i}>
+                  <td>{e.evento}</td>
+                  <td>{fmtData(e.data)}{e.fim ? ` a ${fmtData(e.fim)}` : ''}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </section>
+      )}
     </div>
-  );
-}
-
-function IconeGoogle() {
-  return (
-    <svg width="18" height="18" viewBox="0 0 48 48" aria-hidden="true">
-      <path fill="#FFC107" d="M43.6 20.5H42V20H24v8h11.3C33.7 32.7 29.2 36 24 36c-6.6 0-12-5.4-12-12s5.4-12 12-12c3.1 0 5.9 1.2 8 3.1l5.7-5.7C34 6.1 29.3 4 24 4 12.9 4 4 12.9 4 24s8.9 20 20 20 20-8.9 20-20c0-1.3-.1-2.4-.4-3.5z" />
-      <path fill="#FF3D00" d="M6.3 14.7l6.6 4.8C14.7 15.1 19 12 24 12c3.1 0 5.9 1.2 8 3.1l5.7-5.7C34 6.1 29.3 4 24 4 16.3 4 9.7 8.3 6.3 14.7z" />
-      <path fill="#4CAF50" d="M24 44c5.2 0 9.9-2 13.4-5.2l-6.2-5.2C29.2 35.1 26.7 36 24 36c-5.2 0-9.6-3.3-11.3-8l-6.5 5C9.5 39.6 16.2 44 24 44z" />
-      <path fill="#1976D2" d="M43.6 20.5H42V20H24v8h11.3c-.8 2.2-2.2 4.2-4.1 5.6l6.2 5.2C37 39.2 44 34 44 24c0-1.3-.1-2.4-.4-3.5z" />
-    </svg>
-  );
-}
-
-function IconeMicrosoft() {
-  return (
-    <svg width="18" height="18" viewBox="0 0 23 23" aria-hidden="true">
-      <path fill="#f35325" d="M1 1h10v10H1z" />
-      <path fill="#81bc06" d="M12 1h10v10H12z" />
-      <path fill="#05a6f0" d="M1 12h10v10H1z" />
-      <path fill="#ffba08" d="M12 12h10v10H12z" />
-    </svg>
   );
 }

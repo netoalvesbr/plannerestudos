@@ -1,8 +1,11 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { getConcurso } from './data/concursos.js';
-import { POR_UID, questoesDo } from './lib/dados.js';
+import { getConcurso, registrarConcursos, todosConcursos } from './data/concursos.js';
+import { POR_UID, questoesDo, registrarQuestoesRemotas } from './lib/dados.js';
+import * as remoto from './lib/remoto.js';
+import NovoConcurso from './components/NovoConcurso.jsx';
+import ImportarProva from './components/ImportarProva.jsx';
 import * as store from './lib/store.js';
-import { EscolhaCargo, Ficha, Login, MeusConcursos, NovaSenha } from './components/Concursos.jsx';
+import { EscolhaCargo, EscolhaFase, Ficha, Login, MeusConcursos, NovaSenha } from './components/Concursos.jsx';
 import { EscolhaFormato, ProvasDiarias, QuestoesAvulsas } from './components/Inicio.jsx';
 import Questao, { Conclusao } from './components/Questao.jsx';
 import Painel from './components/Painel.jsx';
@@ -18,6 +21,21 @@ export default function App() {
   const [tela, setTela] = useState({ nome: 'inicio' });
   const [recuperando, setRecuperando] = useState(false);
   const [copiouLink, setCopiouLink] = useState(false);
+  const [bancoVersao, setBancoVersao] = useState(0);
+  const [avisoBanco, setAvisoBanco] = useState(null);
+
+  const recarregarBanco = useCallback(async () => {
+    try {
+      const b = await remoto.carregarBanco();
+      registrarConcursos(b.concursos);
+      registrarQuestoesRemotas(b.questoes);
+      setAvisoBanco(null);
+    } catch (e) {
+      console.warn('Banco compartilhado indisponível', e);
+      setAvisoBanco('Não foi possível carregar o banco compartilhado agora. Tente recarregar a página.');
+    }
+    setBancoVersao((v) => v + 1);
+  }, []);
 
   const iniciar = useCallback(async () => {
     setCarregando(true);
@@ -28,9 +46,10 @@ export default function App() {
       setRespostas(d.respostas);
       setPrefsState(d.prefs);
       setSomenteLocal(d.somenteLocal);
+      await recarregarBanco();
     }
     setCarregando(false);
-  }, []);
+  }, [recarregarBanco]);
 
   useEffect(() => {
     iniciar();
@@ -55,8 +74,16 @@ export default function App() {
 
   const concurso = getConcurso(prefs.ativo);
   const pc = (concurso && prefs.concursos?.[concurso.id]) || {};
-  const cargo = concurso?.cargos.length > 1 ? pc.cargo : concurso?.cargos[0]?.id;
-  const questoes = useMemo(() => (concurso ? questoesDo(concurso.id, cargo) : []), [concurso, cargo]);
+  const nCargos = concurso?.cargos?.length || 0;
+  const precisaCargo = nCargos > 1 && !pc.cargo;
+  const cargo = nCargos > 1 ? pc.cargo : concurso?.cargos?.[0]?.id || 'ambos';
+  const precisaFase = !!concurso?.fases?.length && !concurso.fases.some((f) => f.id === pc.fase);
+  const fase = precisaFase ? null : pc.fase || null;
+  const unificado = !!prefs.unificado;
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const questoes = useMemo(() => (concurso ? questoesDo(concurso.id, cargo, fase) : []), [concurso, cargo, fase, bancoVersao]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const questoesUnificado = useMemo(() => (concurso ? questoesDo(concurso.id, cargo, fase, { unificado: true }) : []), [concurso, cargo, fase, bancoVersao]);
 
   function responder(uid, letra, segundos) {
     const q = POR_UID[uid];
@@ -89,7 +116,11 @@ export default function App() {
   const ctx = {
     concurso,
     cargo,
+    fase,
     questoes,
+    questoesUnificado,
+    unificado,
+    usuario,
     respostas,
     prefs,
     setPrefs,
@@ -99,7 +130,24 @@ export default function App() {
       setTela({ nome: 'inicio', filtro, chave: Date.now() });
     },
     abrirMapa: (d) => setTela({ nome: 'mapa', disciplina: d }),
+    irAvulsas: () => {
+      setPrefConc(concurso.id, { formato: 'avulsas' });
+      setTela({ nome: 'inicio', chave: Date.now() });
+    },
     abrirFicha: (id) => setTela({ nome: 'ficha', id }),
+    abrirNovoConcurso: () => setTela({ nome: 'novo-concurso' }),
+    abrirEditarConcurso: (id) => setTela({ nome: 'editar-concurso', id }),
+    abrirImportarProva: (cid, f) => setTela({ nome: 'importar-prova', cid: cid || concurso?.id, fase: f || fase }),
+    excluir: async (id) => {
+      try {
+        await remoto.excluirConcurso(id);
+        setPrefs({ seguindo: (prefs.seguindo || []).filter((x) => x !== id), ativo: prefs.ativo === id ? null : prefs.ativo });
+        await recarregarBanco();
+        setTela({ nome: 'concursos' });
+      } catch (e) {
+        setAvisoBanco('Não foi possível excluir: ' + e.message);
+      }
+    },
     abrirPainel: () => setTela({ nome: 'painel' }),
     voltar: () => setTela({ nome: 'mapas' }),
     zerar,
@@ -133,25 +181,47 @@ export default function App() {
         aoVoltar={() => setTela({ nome: 'inicio' })}
       />
     );
-  } else if (tela.nome === 'ficha') {
-    const c = getConcurso(tela.id);
+  } else if (tela.nome === 'ficha' && getConcurso(tela.id)) {
+    conteudo = <Ficha ctx={ctx} concurso={getConcurso(tela.id)} voltar={() => setTela({ nome: 'concursos' })} />;
+  } else if (tela.nome === 'novo-concurso' || tela.nome === 'editar-concurso') {
     conteudo = (
-      <Ficha
-        concurso={c}
-        cargo={prefs.concursos?.[c.id]?.cargo || 'ambos'}
-        aoTrocarCargo={(v) => setPrefConc(c.id, { cargo: v })}
-        voltar={() => setTela({ nome: 'concursos' })}
+      <NovoConcurso
+        key={tela.id || 'novo'}
+        inicial={tela.id ? getConcurso(tela.id) : null}
+        aoCancelar={() => setTela({ nome: tela.id ? 'ficha' : 'concursos', id: tela.id })}
+        aoSalvar={async (id) => {
+          await recarregarBanco();
+          if (!tela.id) setPrefs({ seguindo: [...new Set([...(prefs.seguindo || []), id])], ativo: id });
+          setTela({ nome: 'ficha', id });
+        }}
+      />
+    );
+  } else if (tela.nome === 'importar-prova') {
+    conteudo = (
+      <ImportarProva
+        concursos={todosConcursos()}
+        concursoInicial={tela.cid}
+        faseInicial={tela.fase}
+        aoCancelar={() => setTela({ nome: 'concursos' })}
+        aoConcluir={async (r) => {
+          await recarregarBanco();
+          setAvisoBanco(null);
+          setTela({ nome: 'concursos', msg: `✓ Importação concluída: ${r.novas} questões novas no banco${r.repetidas ? ` (${r.repetidas} já existiam e não foram duplicadas)` : ''}.` });
+        }}
       />
     );
   } else if (tela.nome === 'concursos' || !concurso) {
     conteudo = (
       <>
+        {tela.msg && <p className="aviso" role="status" style={{ background: 'var(--ok-bg)', color: 'var(--ok)' }}>{tela.msg}</p>}
         {!concurso && <p className="aviso">Olá, {usuario.nome.split(' ')[0]}! Para começar, acompanhe um concurso.</p>}
         <MeusConcursos ctx={ctx} />
       </>
     );
-  } else if (!cargo) {
+  } else if (precisaCargo) {
     conteudo = <EscolhaCargo concurso={concurso} aoEscolher={(v) => setPrefConc(concurso.id, { cargo: v })} />;
+  } else if (precisaFase) {
+    conteudo = <EscolhaFase concurso={concurso} aoEscolher={(v) => setPrefConc(concurso.id, { fase: v })} />;
   } else if (tela.nome === 'painel') {
     conteudo = <Painel ctx={ctx} />;
   } else if (tela.nome === 'mapas') {
@@ -196,7 +266,7 @@ export default function App() {
             </button>
             {store.getModo() !== 'claude' && <button className="btn peq" onClick={() => store.sair().then(iniciar)}>Sair</button>}
           </div>
-          {concurso && cargo && (
+          {concurso && (
             <nav className="nav" aria-label="Principal">
               <button aria-current={naInicio && formato === 'diarias'} onClick={() => { setPrefConc(concurso.id, { formato: 'diarias' }); ir('inicio'); }}>📅 Provas diárias</button>
               <button aria-current={naInicio && formato === 'avulsas'} onClick={() => { setPrefConc(concurso.id, { formato: 'avulsas' }); ir('inicio'); }}>🎯 Avulsas</button>
@@ -208,8 +278,9 @@ export default function App() {
         </header>
       )}
       {somenteLocal && !semTopo && naInicio && <p className="aviso">Respostas salvas apenas neste aparelho.</p>}
+      {avisoBanco && !semTopo && <p className="aviso">{avisoBanco}</p>}
       <main>{conteudo}</main>
-      {concurso && cargo && <MenuDesempenho questoes={questoes} respostas={respostas} aoAbrirPainel={() => ir('painel')} />}
+      {concurso && !precisaCargo && !precisaFase && <MenuDesempenho questoes={questoes} respostas={respostas} aoAbrirPainel={() => ir('painel')} />}
     </div>
   );
 }

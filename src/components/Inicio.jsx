@@ -22,15 +22,17 @@ export function EscolhaFormato({ aoEscolher }) {
   );
 }
 
-function Cabecalho({ concurso }) {
-  const faltam = diasAte(concurso.dataProva);
+function Cabecalho({ concurso, fase }) {
+  const faseObj = concurso.fases?.find((f) => f.id === fase);
+  const data = faseObj?.data || concurso.dataProva;
+  const faltam = data ? diasAte(data) : null;
   return (
     <div className="linha entre" style={{ marginBottom: 10 }}>
       <div>
-        <h1 style={{ marginBottom: 0 }}>{concurso.sigla} · {concurso.banca}</h1>
-        <div className="sub">Prova em {fmtData(concurso.dataProva)}</div>
+        <h1 style={{ marginBottom: 0 }}>{concurso.sigla}{concurso.banca ? ` · ${concurso.banca}` : ''}{faseObj ? ` · ${faseObj.nome}` : ''}</h1>
+        <div className="sub">{data ? `Prova em ${fmtData(data)}` : 'Data da prova a definir'}</div>
       </div>
-      {faltam >= 0 && <div className="contagem">{faltam === 0 ? 'A prova é hoje!' : `Faltam ${faltam} dias`}</div>}
+      {faltam != null && faltam >= 0 && <div className="contagem">{faltam === 0 ? 'A prova é hoje!' : `Faltam ${faltam} dias`}</div>}
     </div>
   );
 }
@@ -45,9 +47,12 @@ export function ProvasDiarias({ ctx }) {
 
   return (
     <div>
-      <Cabecalho concurso={concurso} />
+      <Cabecalho concurso={concurso} fase={ctx.fase} />
       {!dias.length ? (
-        <p className="card sub">As provas diárias para este cargo serão publicadas em breve.</p>
+        <div className="card">
+          <p className="sub">Este concurso ainda não tem provas diárias montadas. Use as <b>questões avulsas</b>: elas trazem todo o banco de questões deste concurso, incluindo as provas anteriores importadas.</p>
+          <button className="btn pri" onClick={() => ctx.irAvulsas()}>🎯 Ir para questões avulsas</button>
+        </div>
       ) : (
         <>
           <div className="dias" role="group" aria-label="Escolha o dia">
@@ -94,13 +99,14 @@ export function ProvasDiarias({ ctx }) {
           </div>
         </>
       )}
-      <TabelaRendimento questoes={questoes} respostas={respostas} ordem={concurso.disciplinas.map((d) => d.nome)} />
+      <TabelaRendimento questoes={ctx.questoes} respostas={respostas} ordem={concurso.disciplinas.map((d) => d.nome)} />
     </div>
   );
 }
 
 export function QuestoesAvulsas({ ctx }) {
-  const { concurso, questoes, respostas, abrirSessao, filtroInicial } = ctx;
+  const { concurso, respostas, abrirSessao, filtroInicial, unificado, setPrefs } = ctx;
+  const questoes = unificado ? ctx.questoesUnificado : ctx.questoes;
   const [f, setF] = useState({ materia: '', assunto: '', dificuldade: '', mostrar: 'nao', origem: '', ...(filtroInicial || {}) });
   const set = (k, v) => setF((x) => ({ ...x, [k]: v, ...(k === 'materia' ? { assunto: '' } : {}) }));
 
@@ -113,6 +119,7 @@ export function QuestoesAvulsas({ ctx }) {
     if (f.assunto && q.assunto !== f.assunto) return false;
     if (f.dificuldade && q.dificuldade !== f.dificuldade) return false;
     if (f.origem && q.origem !== f.origem) return false;
+    if (f.banca && q.banca !== f.banca) return false;
     if (f.mostrar === 'nao' && r) return false;
     if (f.mostrar === 'errei' && !(r && !r[1])) return false;
     if (f.mostrar === 'acertei' && !(r && r[1])) return false;
@@ -133,7 +140,7 @@ export function QuestoesAvulsas({ ctx }) {
 
   return (
     <div>
-      <Cabecalho concurso={concurso} />
+      <Cabecalho concurso={concurso} fase={ctx.fase} />
       <section className="card">
         <h2>Filtrar questões</h2>
         <div className="filtros">
@@ -164,6 +171,18 @@ export function QuestoesAvulsas({ ctx }) {
               <option value="prova_anterior">Provas anteriores</option>
             </select>
           </label>
+          <label className="campo">Fonte das questões
+            <select value={unificado ? 'u' : 'c'} onChange={(e) => setPrefs({ unificado: e.target.value === 'u' })}>
+              <option value="c">Só deste concurso</option>
+              <option value="u">Banco unificado (todos os concursos, mesmas disciplinas)</option>
+            </select>
+          </label>
+          <label className="campo">Banca
+            <select value={f.banca || ''} onChange={(e) => set('banca', e.target.value)}>
+              <option value="">Todas</option>
+              {[...new Set(questoes.map((q) => q.banca).filter(Boolean))].map((b) => <option key={b}>{b}</option>)}
+            </select>
+          </label>
           <label className="campo">Mostrar
             <select value={f.mostrar} onChange={(e) => set('mostrar', e.target.value)}>
               <option value="nao">Não resolvidas</option>
@@ -179,7 +198,7 @@ export function QuestoesAvulsas({ ctx }) {
           <button className="btn" disabled={!lista.length} onClick={() => resolver(true)}>Resolver em ordem aleatória</button>
         </div>
       </section>
-      <TabelaRendimento questoes={questoes} respostas={respostas} ordem={concurso.disciplinas.map((d) => d.nome)} />
+      <TabelaRendimento questoes={ctx.questoes} respostas={respostas} ordem={concurso.disciplinas.map((d) => d.nome)} />
     </div>
   );
 }

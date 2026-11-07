@@ -1,0 +1,284 @@
+// Leitura automática (sem IA) de provas, gabaritos e editais a partir do texto extraído do PDF.
+// O resultado é sempre uma sugestão: o usuário confere e corrige na tela de revisão antes de salvar.
+
+const MAIUSC = /^[A-ZÀ-ÖØ-Ý0-9ºª\s,;.\-–—/()&]+$/;
+const temLetra = (s) => /[A-ZÀ-Ý]/.test(s);
+
+export const BANCAS = [
+  'Cebraspe', 'Cespe', 'FGV', 'IDECAN', 'IBFC', 'FCC', 'Vunesp', 'Cesgranrio', 'IDIB', 'Quadrix', 'Consulplan',
+  'Instituto AOCP', 'AOCP', 'IADES', 'Fundatec', 'Instituto Consulplan', 'Selecon', 'IBADE', 'Instituto Access',
+  'Fafipa', 'Objetiva', 'Legalle', 'FUNDEP', 'Cetro', 'Esaf', 'Fumarc', 'IESES', 'Ibam', 'Instituto Mais', 'Avança SP',
+];
+
+const MESES = { janeiro: 1, fevereiro: 2, março: 3, marco: 3, abril: 4, maio: 5, junho: 6, julho: 7, agosto: 8, setembro: 9, outubro: 10, novembro: 11, dezembro: 12 };
+
+// ---------------- datas ----------------
+export function datasNoTexto(t) {
+  const out = [];
+  const re1 = /\b(\d{1,2})\/(\d{1,2})\/(\d{4})\b/g;
+  let m;
+  while ((m = re1.exec(t))) out.push({ iso: iso(+m[3], +m[2], +m[1]), pos: m.index });
+  const re2 = /\b(\d{1,2})º?\s+de\s+(janeiro|fevereiro|março|marco|abril|maio|junho|julho|agosto|setembro|outubro|novembro|dezembro)\s+de\s+(\d{4})/gi;
+  while ((m = re2.exec(t))) out.push({ iso: iso(+m[3], MESES[m[2].toLowerCase()], +m[1]), pos: m.index });
+  return out.filter((d) => d.iso).sort((a, b) => a.pos - b.pos);
+}
+function iso(a, m, d) {
+  if (!(a > 1990 && a < 2100 && m >= 1 && m <= 12 && d >= 1 && d <= 31)) return null;
+  return `${a}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+}
+
+// ---------------- edital ----------------
+export function lerEdital(linhas) {
+  const texto = linhas.join('\n');
+  const plano = linhas.join(' ');
+  const r = { sigla: '', nome: '', orgao: '', banca: '', edital: '', dataProva: '', cronograma: [], disciplinas: [] };
+
+  // banca: a mais citada
+  let melhor = 0;
+  for (const b of BANCAS) {
+    const n = (plano.match(new RegExp(`\\b${b.replace(/\s/g, '\\s')}\\b`, 'gi')) || []).length;
+    if (n > melhor) {
+      melhor = n;
+      r.banca = b === 'Cespe' ? 'Cebraspe' : b;
+    }
+  }
+
+  // número do edital
+  const ed = linhas.find((l) => /EDITAL\s+(N[º°o.]|DE ABERTURA)/i.test(l));
+  if (ed) r.edital = ed.replace(/\s+/g, ' ').trim().slice(0, 120);
+
+  // órgão: linha em maiúsculas com palavras típicas; prefere o órgão específico ao "Governo do Estado"
+  const topo = linhas.slice(0, 80).filter((l) => MAIUSC.test(l) && temLetra(l));
+  const orgao =
+    topo.find((l) => /(POL[IÍ]CIA|TRIBUNAL|ORDEM DOS ADVOGADOS|MINIST[EÉ]RIO P|DEFENSORIA|PROCURADORIA|C[AÂ]MARA|ASSEMBLEIA|SENADO|CORPO DE BOMBEIROS|DETRAN|RECEITA|BANCO|AG[EÊ]NCIA|CONSELHO|EX[EÉ]RCITO|MARINHA|AERON[AÁ]UTICA|UNIVERSIDADE|INSTITUTO FEDERAL)/.test(l)) ||
+    topo.find((l) => /(PREFEITURA|SECRETARIA|MINIST[EÉ]RIO|DEPARTAMENTO|GOVERNO)/.test(l));
+  if (orgao) {
+    r.orgao = titulo(orgao);
+    r.nome = r.orgao;
+    r.sigla = siglaDe(r.orgao);
+  }
+  if (/ORDEM DOS ADVOGADOS|EXAME DE ORDEM/i.test(plano)) {
+    r.nome = 'Exame de Ordem Unificado – OAB';
+    r.sigla = 'OAB';
+  }
+
+  // cronograma: linhas que contêm data
+  for (let i = 0; i < linhas.length && r.cronograma.length < 40; i++) {
+    const l = linhas[i];
+    const ds = datasNoTexto(l);
+    if (!ds.length || l.length > 220) continue;
+    let ev = l
+      .replace(/\b\d{1,2}\/\d{1,2}\/\d{4}\b/g, '')
+      .replace(/\b\d{1,2}º?\s+de\s+\p{L}+\s+de\s+\d{4}/giu, '')
+      .replace(/[\s.:–—-]+$/, '')
+      .replace(/\s+(a|e|até|em|no dia|dia|de)\s*$/i, '')
+      .replace(/[\s:–—-]+$/, '')
+      .trim();
+    if (ev.length < 4 && i > 0) ev = linhas[i - 1].slice(0, 120);
+    if (ev.length < 4) continue;
+    r.cronograma.push({ data: ds[0].iso, fim: ds[1]?.iso || '', evento: ev.slice(0, 140) });
+  }
+
+  // data da prova: data mais próxima de expressões típicas
+  const reProva = /(aplica[çc][ãa]o d[ao]s? provas?|data d[ao]s? provas?|provas? objetivas?(?: e discursivas?)?(?: ser[ãa]o)? (?:aplicadas|realizadas)|realiza[çc][ãa]o d[ao]s? provas?|prova objetiva)/gi;
+  let m;
+  const ds = datasNoTexto(texto);
+  let melhorDist = Infinity;
+  while ((m = reProva.exec(texto))) {
+    for (const d of ds) {
+      const dist = d.pos - m.index;
+      const custo = dist >= 0 ? dist : 1000 - dist; // prefere a data que vem depois da expressão
+      if (dist >= -40 && dist < 400 && custo < melhorDist) {
+        melhorDist = custo;
+        r.dataProva = d.iso;
+      }
+    }
+  }
+
+  r.disciplinas = lerConteudoProgramatico(linhas);
+  return r;
+}
+
+const PALAVRAS_MINUSC = new Set(['de', 'da', 'do', 'das', 'dos', 'e', 'a', 'o', 'em', 'para', 'por', 'com']);
+export function titulo(s) {
+  return s
+    .toLowerCase()
+    .replace(/\s+/g, ' ')
+    .trim()
+    .split(' ')
+    .map((p, i) => (i > 0 && PALAVRAS_MINUSC.has(p) ? p : p.charAt(0).toUpperCase() + p.slice(1)))
+    .join(' ');
+}
+function siglaDe(nome) {
+  return nome
+    .split(' ')
+    .filter((p) => p.length > 2 && !PALAVRAS_MINUSC.has(p.toLowerCase()))
+    .map((p) => p[0])
+    .join('')
+    .toUpperCase()
+    .slice(0, 8);
+}
+
+// Conteúdo programático: "DISCIPLINA: 1 Tópico. 2 Tópico. ..." ou a disciplina numa linha e os tópicos abaixo.
+export function lerConteudoProgramatico(linhas) {
+  let ini = linhas.findIndex((l) => /CONTE[ÚU]DOS? PROGRAM[ÁA]TICOS?|OBJETOS? DE AVALIA[ÇC][ÃA]O|CONHECIMENTOS? EXIGIDOS|PROGRAMA DAS? PROVAS?/i.test(l));
+  if (ini < 0) return [];
+  const resto = linhas.slice(ini + 1);
+  const disciplinas = [];
+  let bloco = '';
+  let atual = null;
+  const fechar = () => {
+    if (atual) {
+      atual.topicos = dividirTopicos(atual._txt);
+      delete atual._txt;
+      if (atual.topicos.length) disciplinas.push(atual);
+    }
+    atual = null;
+  };
+  for (const l0 of resto) {
+    const l = l0.trim();
+    if (!l) continue;
+    if (/^ANEXO\s+[IVX]+\b/i.test(l) && disciplinas.length > 2 && !/CONTE[ÚU]DO/i.test(l)) break;
+    const doisPontos = l.match(/^([A-ZÀ-ÖØ-Ý][A-ZÀ-ÖØ-Ý\s,\-–()/ºª]{3,90}?):\s*(.*)$/);
+    if (doisPontos && temLetra(doisPontos[1])) {
+      const nome = doisPontos[1].trim();
+      if (/^CONHECIMENTOS?\b/i.test(nome) && !doisPontos[2]) {
+        fechar();
+        bloco = titulo(nome);
+        continue;
+      }
+      fechar();
+      atual = { nome: titulo(nome), bloco, _txt: doisPontos[2] || '' };
+      continue;
+    }
+    if (MAIUSC.test(l) && temLetra(l) && l.length >= 4 && l.length <= 90 && !/^\d/.test(l)) {
+      if (/^CONHECIMENTOS?\b|^BLOCO\b|^PARTE\b|^M[ÓO]DULO\b/i.test(l)) {
+        fechar();
+        bloco = titulo(l);
+        continue;
+      }
+      fechar();
+      atual = { nome: titulo(l.replace(/[:.]$/, '')), bloco, _txt: '' };
+      continue;
+    }
+    if (atual) atual._txt += ' ' + l;
+  }
+  fechar();
+  return disciplinas.slice(0, 60);
+}
+
+export function dividirTopicos(txt) {
+  const t = txt.replace(/\s+/g, ' ').trim();
+  if (!t) return [];
+  // divide em "1 ", "2 ", "2.1 " ... seguidos de letra maiúscula
+  const partes = t.split(/(?:^|\s)(?=\d{1,2}(?:\.\d{1,2})*\.?\s+[A-ZÀ-Ý])/);
+  const out = partes
+    .map((p) => p.replace(/^\d{1,2}(?:\.\d{1,2})*\.?\s+/, '').replace(/[.;]\s*$/, '').trim())
+    .filter((p) => p.length > 2);
+  if (out.length > 1) return out;
+  return t
+    .split(/;\s+|\.\s+(?=[A-ZÀ-Ý])/)
+    .map((p) => p.replace(/[.;]\s*$/, '').trim())
+    .filter((p) => p.length > 2);
+}
+
+// ---------------- prova ----------------
+const RE_INICIO = /^(?:QUEST[ÃA]O|Quest[ãa]o)?\s*0*(\d{1,3})\s*(?:[.)\-–:]|\s+-|$)\s*(.*)$/;
+const RUIDO = /^(P[ÁA]GINA|CADERNO|RASCUNHO|BOA PROVA|LEIA|INSTRU[ÇC]|ATEN[ÇC][ÃA]O|PROVA OBJETIVA|TIPO\s+\d|CARGO|\d+\s*\/\s*\d+$)/i;
+
+// formato: 'A-E' | 'A-D' | 'CE' | 'discursiva'
+export function lerProva(linhas, formato = 'A-E') {
+  const questoes = [];
+  let materia = '';
+  let bloco = '';
+  let esperado = null;
+  let atual = null;
+
+  // número inicial: o primeiro marcador "1" que aparece; se não houver, o primeiro número encontrado
+  const candidatos = linhas.map((l) => l.match(RE_INICIO)).filter(Boolean);
+  if (!candidatos.length) return [];
+  esperado = candidatos.some((m) => +m[1] === 1) ? 1 : +candidatos[0][1];
+
+  for (const l0 of linhas) {
+    const l = l0.trim();
+    if (!l || RUIDO.test(l)) continue;
+    const m = l.match(RE_INICIO);
+    if (m && +m[1] === esperado) {
+      if (atual) questoes.push(atual);
+      atual = { numero: esperado, materia, bloco, linhas: m[2] ? [m[2]] : [] };
+      esperado++;
+      continue;
+    }
+    // cabeçalho de disciplina (linha toda em maiúsculas)
+    if (MAIUSC.test(l) && temLetra(l) && l.length >= 4 && l.length <= 80 && !/^\(?[A-E]\)/.test(l) && !/^[A-E][.)\-–]\s/.test(l)) {
+      if (/^CONHECIMENTOS?\b/i.test(l)) bloco = titulo(l);
+      else materia = titulo(l.replace(/[:.]$/, ''));
+      continue;
+    }
+    if (atual) atual.linhas.push(l);
+  }
+  if (atual) questoes.push(atual);
+
+  const letras = formato === 'A-D' ? ['A', 'B', 'C', 'D'] : ['A', 'B', 'C', 'D', 'E'];
+  return questoes.map((q) => {
+    const corpo = q.linhas.join('\n');
+    const base = { numero: q.numero, materia: q.materia, bloco: q.bloco, formato, gabarito: '', anulada: false, espelho: '' };
+    if (formato === 'CE' || formato === 'discursiva') return { ...base, enunciado: limpar(corpo), alternativas: null };
+    const alt = separarAlternativas(corpo, letras);
+    return { ...base, enunciado: limpar(alt ? alt.enunciado : corpo), alternativas: alt ? alt.alternativas : Object.fromEntries(letras.map((L) => [L, ''])) };
+  });
+}
+
+function separarAlternativas(corpo, letras) {
+  const pos = [];
+  let desde = 0;
+  for (const L of letras) {
+    const l = L.toLowerCase();
+    const re = new RegExp(`(?:^|\\n|\\s)(?:\\([${L}${l}]\\)|[${L}${l}]\\)|${L}\\s*[.\\-–]\\s)\\s*`, 'g');
+    re.lastIndex = desde;
+    const m = re.exec(corpo);
+    if (!m) break;
+    pos.push({ L, ini: m.index, fim: m.index + m[0].length });
+    desde = m.index + m[0].length;
+  }
+  if (pos.length < Math.min(4, letras.length)) return null;
+  const alternativas = {};
+  pos.forEach((p, i) => {
+    alternativas[p.L] = limpar(corpo.slice(p.fim, i + 1 < pos.length ? pos[i + 1].ini : undefined));
+  });
+  for (const L of letras) if (!(L in alternativas)) alternativas[L] = '';
+  return { enunciado: corpo.slice(0, pos[0].ini), alternativas };
+}
+
+const limpar = (s) =>
+  (s || '')
+    .replace(/-\n(?=[a-zà-ý])/g, '') // palavra hifenizada na quebra de linha
+    .replace(/[ \t]+/g, ' ')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+
+// ---------------- gabarito ----------------
+// Aceita "1-A 2-C ...", "01 A 02 C", tabelas com uma linha de números e outra de letras, e "X"/"*"/"ANULADA".
+export function lerGabarito(texto, formato = 'A-E') {
+  const valido = formato === 'CE' ? 'CE' : formato === 'A-D' ? 'ABCD' : 'ABCDE';
+  const res = {};
+  const norm = texto.replace(/\r/g, '').toUpperCase();
+  const re = new RegExp(`(?:^|[^\\d])0*(\\d{1,3})\\s*[-–.:)]?\\s*([${valido}]|\\*|X|ANULADA|NULA|ANULAD[AO])(?![A-Z])`, 'g');
+  let m;
+  while ((m = re.exec(norm))) {
+    const n = +m[1];
+    if (!(n in res)) res[n] = /^[A-E]$/.test(m[2]) ? m[2] : 'ANULADA';
+  }
+  // formato de tabela: linha de números seguida de linha de letras
+  const linhas = norm.split('\n').map((l) => l.trim()).filter(Boolean);
+  for (let i = 0; i + 1 < linhas.length; i++) {
+    const nums = linhas[i].split(/\s+/);
+    const lets = linhas[i + 1].split(/\s+/);
+    if (nums.length >= 3 && nums.every((x) => /^\d{1,3}$/.test(x)) && lets.length === nums.length && lets.every((x) => new RegExp(`^([${valido}]|\\*|X)$`).test(x))) {
+      nums.forEach((n, k) => {
+        res[+n] = /^[A-E]$/.test(lets[k]) ? lets[k] : 'ANULADA';
+      });
+    }
+  }
+  return res;
+}
