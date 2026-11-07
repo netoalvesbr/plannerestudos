@@ -19,7 +19,11 @@ O primeiro concurso cadastrado é a **PC/AC (IDECAN, 2026)**. A especificação 
 
 **Próximas versões:** mais dias e blocos de questões, os demais mapas, cronômetro de estudos, calendário, importação de provas em PDF e cadastro de concursos pelo administrador.
 
-## Versão online já publicada
+## Link da plataforma
+
+**https://plannerestudos-sage.vercel.app**: login com e-mail e senha, e cada pessoa com a própria conta. Toda alteração enviada ao GitHub é publicada automaticamente neste mesmo link.
+
+## Versão de teste publicada no Claude
 
 A plataforma está publicada como página no Claude: https://claude.ai/artifact/5ChZ3DxEqsXAt3PBR6bXWe
 
