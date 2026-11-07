@@ -183,10 +183,13 @@ export function NovaSenha({ aoConcluir }) {
 }
 
 export function MeusConcursos({ ctx }) {
-  const { prefs, setPrefs, respostas, abrirFicha, abrirNovoConcurso, abrirImportarProva, usuario } = ctx;
+  const { prefs, setPrefs, respostas, abrirFicha, abrirNovoConcurso, abrirImportarProva, abrirEditarConcurso, excluir, ocultar, restaurar, usuario } = ctx;
   const seguindo = prefs.seguindo || [];
   const [busca, setBusca] = useState('');
-  const todos = todosConcursos();
+  const [confirmar, setConfirmar] = useState(null);
+  const [verOcultos, setVerOcultos] = useState(false);
+  const ocultos = (prefs.ocultos || []).filter((id) => todosConcursos().some((c) => c.id === id));
+  const todos = todosConcursos().filter((c) => !ocultos.includes(c.id));
   const termo = busca.trim().toLowerCase();
   const lista = todos
     .filter((c) => !termo || `${c.sigla} ${c.nome} ${c.banca} ${c.orgao || ''}`.toLowerCase().includes(termo))
@@ -245,15 +248,53 @@ export function MeusConcursos({ ctx }) {
                 )}
                 <button className="btn peq" onClick={() => abrirFicha(c.id)}>Ficha e edital</button>
               </div>
-              {!c.remoto && <p className="peq sub" style={{ marginTop: 6 }}>Concurso pronto da plataforma</p>}
+              <div className="linha" style={{ marginTop: 8 }}>
+                {podeEditarConcurso(c, usuario) ? (
+                  <>
+                    <button className="btn peq" onClick={() => abrirEditarConcurso(c.id)}>✏️ Editar / reimportar edital</button>
+                    <button className="btn peq perigo" onClick={() => setConfirmar(c.id)}>🗑️ Excluir</button>
+                  </>
+                ) : (
+                  <button className="btn peq perigo" onClick={() => setConfirmar(c.id)}>🗑️ Remover da minha lista</button>
+                )}
+              </div>
+              {confirmar === c.id && (
+                <div className="aviso" role="alert" style={{ marginTop: 8 }}>
+                  {podeEditarConcurso(c, usuario) ? (
+                    <p style={{ margin: '0 0 8px' }}>Excluir <b>{c.sigla}</b>? O concurso, o cronograma e as marcações do edital serão apagados. As questões importadas continuam no banco e o seu histórico de respostas não é apagado.</p>
+                  ) : (
+                    <p style={{ margin: '0 0 8px' }}>Tirar <b>{c.sigla}</b> da sua lista? Ele é um concurso pronto da plataforma, então não é apagado: você pode restaurá-lo depois em "Concursos removidos". Seu histórico de respostas é mantido.</p>
+                  )}
+                  <div className="linha">
+                    <button className="btn perigo" onClick={() => { setConfirmar(null); podeEditarConcurso(c, usuario) ? excluir(c.id) : ocultar(c.id); }}>{podeEditarConcurso(c, usuario) ? 'Sim, excluir' : 'Sim, remover'}</button>
+                    <button className="btn" onClick={() => setConfirmar(null)}>Cancelar</button>
+                  </div>
+                </div>
+              )}
+              {!c.remoto && <p className="peq sub" style={{ marginTop: 6 }}>Concurso pronto da plataforma (datas e matérias atualizadas pela plataforma)</p>}
             </div>
           );
         })}
       </div>
       {!lista.length && <p className="card sub">Nenhum concurso encontrado. Use <b>+ Adicionar concurso</b> para cadastrar.</p>}
+      {ocultos.length > 0 && (
+        <section className="card">
+          <button className="btn peq" onClick={() => setVerOcultos(!verOcultos)} aria-expanded={verOcultos}>{verOcultos ? '▾' : '▸'} Concursos removidos ({ocultos.length})</button>
+          {verOcultos && (
+            <ul>
+              {ocultos.map((id) => {
+                const c = todosConcursos().find((x) => x.id === id);
+                return <li key={id} style={{ margin: '6px 0' }}>{c.sigla} – {c.nome} <button className="btn peq" onClick={() => restaurar(id)}>↩ Restaurar</button></li>;
+              })}
+            </ul>
+          )}
+        </section>
+      )}
     </div>
   );
 }
+
+const podeEditarConcurso = (c, usuario) => c.remoto && (c.criadoPor === usuario?.id || usuario?.admin);
 
 function EscolhaConfirmada({ titulo, texto, opcoes, aoConfirmar, rotuloBotao }) {
   const [sel, setSel] = useState(null);
@@ -343,7 +384,7 @@ export function Ficha({ ctx, concurso, voltar }) {
   const area = faseObj?.areas?.length ? pc.area || '' : '';
   const marcados = prefs.edital?.[concurso.id] || {};
   const [confirmar, setConfirmar] = useState(false);
-  const podeEditar = concurso.remoto && (concurso.criadoPor === usuario?.id || usuario?.admin);
+  const podeEditar = podeEditarConcurso(concurso, usuario);
   const setPc = (parcial) => setPrefs({ concursos: { ...(prefs.concursos || {}), [concurso.id]: { ...pc, ...parcial } } });
   const marcar = (disc, i) => {
     const atual = new Set(marcados[disc] || []);
@@ -368,11 +409,11 @@ export function Ficha({ ctx, concurso, voltar }) {
         <p className="sub">{[concurso.banca && `Banca ${concurso.banca}`, concurso.orgao].filter(Boolean).join(' · ')}</p>
         <div className="linha">
           <button className="btn" onClick={() => abrirImportarProva(concurso.id, fase, area)}>📥 Importar prova</button>
-          {podeEditar && <button className="btn" onClick={() => abrirEditarConcurso(concurso.id)}>✏️ Editar</button>}
-          {podeEditar && !confirmar && <button className="btn perigo" onClick={() => setConfirmar(true)}>Excluir</button>}
+          {podeEditar && <button className="btn" onClick={() => abrirEditarConcurso(concurso.id)}>✏️ Editar / reimportar edital</button>}
+          {podeEditar && !confirmar && <button className="btn perigo" onClick={() => setConfirmar(true)}>🗑️ Excluir</button>}
           {confirmar && (
             <span className="linha" role="alert">
-              <span>Excluir este concurso? Seu cronograma e progresso dele serão perdidos; as questões continuam no banco.</span>
+              <span>Excluir este concurso? O cronograma e as marcações do edital serão apagados; as questões continuam no banco e o histórico de respostas é mantido.</span>
               <button className="btn perigo" onClick={() => excluir(concurso.id)}>Sim, excluir</button>
               <button className="btn" onClick={() => setConfirmar(false)}>Cancelar</button>
             </span>

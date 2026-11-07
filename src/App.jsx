@@ -16,6 +16,15 @@ import MenuDesempenho from './components/MenuDesempenho.jsx';
 import Cronometro, { alternarCronometro } from './components/Cronometro.jsx';
 import { disciplinasDo } from './lib/dados.js';
 
+// tira o concurso da lista do aluno e apaga os dados pessoais dele (cronograma, edital marcado, verticalizado)
+function semDadosDo(prefs, id, apagarTudo = true) {
+  const seguindo = (prefs.seguindo || []).filter((x) => x !== id);
+  const n = { seguindo, ativo: prefs.ativo === id ? seguindo[0] || null : prefs.ativo };
+  if (!apagarTudo) return n;
+  const semChave = (obj) => Object.fromEntries(Object.entries(obj || {}).filter(([k]) => k !== id && !k.startsWith(id + '|')));
+  return { ...n, concursos: semChave(prefs.concursos), cronogramas: semChave(prefs.cronogramas), verticalizados: semChave(prefs.verticalizados), edital: semChave(prefs.edital) };
+}
+
 export default function App() {
   const [carregando, setCarregando] = useState(true);
   const [usuario, setUsuario] = useState(null);
@@ -159,13 +168,16 @@ export default function App() {
     excluir: async (id) => {
       try {
         await remoto.excluirConcurso(id);
-        setPrefs({ seguindo: (prefs.seguindo || []).filter((x) => x !== id), ativo: prefs.ativo === id ? null : prefs.ativo });
+        setPrefs(semDadosDo(prefs, id));
         await recarregarBanco();
         setTela({ nome: 'concursos' });
       } catch (e) {
         setAvisoBanco('Não foi possível excluir: ' + e.message);
       }
     },
+    // concurso pronto da plataforma: não dá para apagar, só tirar da sua lista (e restaurar depois)
+    ocultar: (id) => setPrefs({ ...semDadosDo(prefs, id, false), ocultos: [...new Set([...(prefs.ocultos || []), id])] }),
+    restaurar: (id) => setPrefs({ ocultos: (prefs.ocultos || []).filter((x) => x !== id) }),
     abrirPainel: () => setTela({ nome: 'painel' }),
     voltar: () => setTela({ nome: 'mapas' }),
     zerar,

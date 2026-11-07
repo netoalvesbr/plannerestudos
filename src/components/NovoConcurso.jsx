@@ -38,6 +38,7 @@ export default function NovoConcurso({ inicial, escolhaInicial, aoSalvar, aoCanc
   const [estudar, setEstudar] = useState(escolhaInicial?.fase || null);
   const [area, setArea] = useState(escolhaInicial?.area || null);
   const [descartadas, setDescartadas] = useState([]);
+  const [substituir, setSubstituir] = useState(true);
   const set = (k, v) => setC((x) => ({ ...x, [k]: v }));
   const setItem = (lista, i, k, v) => setC((x) => ({ ...x, [lista]: x[lista].map((it, j) => (j === i ? { ...it, [k]: v } : it)) }));
   const remover = (lista, i) => setC((x) => ({ ...x, [lista]: x[lista].filter((_, j) => j !== i) }));
@@ -54,19 +55,34 @@ export default function NovoConcurso({ inicial, escolhaInicial, aoSalvar, aoCanc
       if (linhas.filter(Boolean).length < 5) throw new Error('Não encontrei texto neste PDF. Ele pode ser uma imagem escaneada; nesse caso, preencha os campos à mão.');
       const r = lerEdital(linhas);
       const oab = ehOAB(r);
+      // ao editar, o novo edital substitui os dados lidos (datas, cronograma, matérias); ao cadastrar, só preenche o que está vazio
+      const trocar = !!inicial && substituir;
+      const pega = (atual, lido) => (trocar ? lido || atual : atual || lido);
       setC((x) => {
         const novo = {
-        ...x,
-        sigla: x.sigla || r.sigla,
-        nome: x.nome || r.nome,
-        orgao: x.orgao || r.orgao,
-        banca: x.banca || r.banca,
-        edital: x.edital || r.edital,
-        dataProva: x.dataProva || r.dataProva,
-        cronograma: x.cronograma.length ? x.cronograma : r.cronograma,
-        disciplinas: x.disciplinas.length ? x.disciplinas : r.disciplinas.map((d) => ({ ...d, fase: '', topicosTxt: d.topicos.join('\n') })),
+          ...x,
+          sigla: x.sigla || r.sigla,
+          nome: pega(x.nome, r.nome),
+          orgao: pega(x.orgao, r.orgao),
+          banca: pega(x.banca, r.banca),
+          edital: pega(x.edital, r.edital),
+          dataProva: pega(x.dataProva, r.dataProva),
+          cronograma: trocar ? (r.cronograma.length ? r.cronograma : x.cronograma) : x.cronograma.length ? x.cronograma : r.cronograma,
+          disciplinas:
+            (trocar ? r.disciplinas.length > 0 : !x.disciplinas.length) && !oab
+              ? r.disciplinas.map((d) => ({ ...d, fase: '', topicosTxt: d.topicos.join('\n') }))
+              : x.disciplinas,
         };
-        return oab && !x.fases.length ? aplicarModeloOAB(novo, r.datasFases) : novo;
+        if (!oab) return novo;
+        // modelo OAB: refaz as fases com as datas do novo edital, mantendo as matérias fixas
+        if (x.fases.length && !trocar) return novo;
+        const m = aplicarModeloOAB(trocar ? { ...novo, fases: x.fases } : novo, r.datasFases);
+        // ao editar, mantém só as fases que você já tinha escolhido estudar
+        if (trocar && x.fases.length) {
+          const ids = new Set(x.fases.map((f) => f.id));
+          return { ...m, fases: m.fases.filter((f) => ids.has(f.id)), disciplinas: m.disciplinas.filter((d) => !d.fase || ids.has(d.fase)) };
+        }
+        return m;
       });
       setLendo(
         `Edital lido: ${r.disciplinas.length} disciplinas, ${r.cronograma.length} datas encontradas.` +
@@ -115,6 +131,12 @@ export default function NovoConcurso({ inicial, escolhaInicial, aoSalvar, aoCanc
       <section className="card">
         <h2>📄 Importar edital (PDF)</h2>
         <p className="sub">A plataforma lê o edital e preenche sozinha o que encontrar: órgão, banca, data da prova, cronograma e o conteúdo programático (edital verticalizado). O PDF fica guardado no seu concurso.</p>
+        {inicial && (
+          <label style={{ display: 'flex', gap: 8, alignItems: 'flex-start', margin: '6px 0 10px' }}>
+            <input type="checkbox" checked={substituir} onChange={() => setSubstituir(!substituir)} style={{ width: 20, height: 20, marginTop: 2 }} />
+            <span>Atualizar com o novo edital (retificação ou edital definitivo): datas, cronograma, banca e matérias passam a ser as do PDF novo. <span className="sub">Desmarque para só completar o que estiver vazio.</span></span>
+          </label>
+        )}
         <input type="file" accept="application/pdf" onChange={(e) => importarEdital(e.target.files[0])} />
         {lendo && <p className="aviso" style={{ marginTop: 10, background: 'var(--pri-claro)', color: 'var(--txt)' }} role="status">{lendo}</p>}
         {inicial?.editalUrl && !pdf && <p className="sub" style={{ marginTop: 8 }}>Edital atual: <a href={inicial.editalUrl} target="_blank" rel="noreferrer">abrir PDF</a></p>}
