@@ -5,7 +5,7 @@ import { BarrasAcerto, ColunasPorDia, TabelaRendimento } from './Graficos.jsx';
 const nf = (v) => (v == null ? '—' : v.toLocaleString('pt-BR', { maximumFractionDigits: 1 }));
 
 export default function Painel({ ctx }) {
-  const { concurso, questoes, respostas, abrirAvulsas, zerar, historicoTexto } = ctx;
+  const { concurso, questoes, respostas, abrirAvulsas, zerar, historicoTexto, prefs } = ctx;
   const [confirmar, setConfirmar] = useState(false);
   const [copiado, setCopiado] = useState(null);
   const meta = concurso.meta ?? 0.75;
@@ -16,11 +16,24 @@ export default function Painel({ ctx }) {
   const nota = estimarNota(concurso, questoes, respostas);
   const revisar = assuntosParaRevisar(questoes, respostas, meta);
   const ordemDif = ['fácil', 'média', 'difícil'];
+  // tempo estudado com o cronômetro nos últimos 7 dias
+  const tempo7 = {};
+  for (let i = 0; i < 7; i++) {
+    const d = new Date(Date.now() - i * 86400000).toLocaleDateString('sv-SE');
+    for (const [m, s] of Object.entries(prefs?.tempos?.[d] || {})) tempo7[m] = (tempo7[m] || 0) + s;
+  }
+  const total7 = Object.values(tempo7).reduce((a, b) => a + b, 0);
+  const fmtT = (s) => { const m = Math.round(s / 60); return m >= 60 ? `${Math.floor(m / 60)}h${String(m % 60).padStart(2, '0')}` : `${m} min`; };
 
   return (
     <div>
       <h1>Painel de desempenho</h1>
       <div className="resumos">
+        <div className="card">
+          <div className="sub">⏱ Estudo (7 dias)</div>
+          <div className="numero">{fmtT(total7)}</div>
+          <div className="peq sub">{total7 ? Object.entries(tempo7).sort((a, b) => b[1] - a[1]).slice(0, 3).map(([m, s]) => `${m}: ${fmtT(s)}`).join(' · ') : 'use o cronômetro para registrar'}</div>
+        </div>
         <div className="card">
           <div className="sub">Resolvidas</div>
           <div className="numero">{geral.resolvidas}</div>

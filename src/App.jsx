@@ -13,6 +13,8 @@ import Questao, { Conclusao } from './components/Questao.jsx';
 import Painel from './components/Painel.jsx';
 import { ListaMapas, Mapa } from './components/Mapas.jsx';
 import MenuDesempenho from './components/MenuDesempenho.jsx';
+import Cronometro, { alternarCronometro } from './components/Cronometro.jsx';
+import { disciplinasDo } from './lib/dados.js';
 
 export default function App() {
   const [carregando, setCarregando] = useState(true);
@@ -69,6 +71,17 @@ export default function App() {
     setPrefsState((p) => {
       const n = { ...p, ...parcial };
       store.salvarPrefs(n).then((ok) => store.getModo() !== 'local' && !ok && setSomenteLocal(true));
+      return n;
+    });
+  }, []);
+  // tempo estudado com o cronômetro: { 'AAAA-MM-DD': { matéria: segundos } }
+  const registrarTempo = useCallback((disc, seg) => {
+    setPrefsState((p) => {
+      const d = new Date().toLocaleDateString('sv-SE');
+      const t = { ...(p.tempos || {}) };
+      t[d] = { ...(t[d] || {}), [disc]: (t[d]?.[disc] || 0) + seg };
+      const n = { ...p, tempos: t };
+      store.salvarPrefs(n);
       return n;
     });
   }, []);
@@ -275,6 +288,14 @@ export default function App() {
   }
 
   const ir = (nome) => setTela({ nome });
+  const hojeIso = new Date().toLocaleDateString('sv-SE');
+  const hojeSeg = Object.values(prefs.tempos?.[hojeIso] || {}).reduce((a, b) => a + b, 0);
+  let materiasCrono = [];
+  try {
+    if (concurso) materiasCrono = disciplinasDo(concurso.id, prefs.concursos?.[concurso.id]?.cargo, fase, area).map((d) => d.nome);
+  } catch {
+    materiasCrono = [];
+  }
   const naInicio = tela.nome === 'inicio' || tela.nome === 'questoes';
   const naQuestoes = naInicio;
   const seguindo = prefs.seguindo || [];
@@ -300,6 +321,7 @@ export default function App() {
                 {seguindo.map((id) => <option key={id} value={id}>{getConcurso(id)?.sigla}</option>)}
               </select>
             )}
+            <button className="btn peq" onClick={alternarCronometro} title="Abrir ou fechar o cronômetro flutuante">⏱ Cronômetro</button>
             <button className="btn peq" aria-label={tema === 'escuro' ? 'Usar modo claro' : 'Usar modo escuro'} onClick={() => setPrefs({ tema: tema === 'escuro' ? 'claro' : 'escuro' })}>
               {tema === 'escuro' ? '☀️' : '🌙'}
             </button>
@@ -321,6 +343,7 @@ export default function App() {
       {avisoBanco && !semTopo && <p className="aviso">{avisoBanco}</p>}
       {tela.nome === 'questoes' && tela.msg && <p className="aviso" role="status" style={{ background: 'var(--ok-bg)', color: 'var(--ok)' }}>{tela.msg}</p>}
       <main>{conteudo}</main>
+      {!semTopo && <Cronometro materias={materiasCrono} hojeSeg={hojeSeg} aoRegistrar={registrarTempo} />}
       {concurso && !precisaCargo && !precisaFase && <MenuDesempenho questoes={questoes} respostas={respostas} aoAbrirPainel={() => ir('painel')} />}
     </div>
   );
