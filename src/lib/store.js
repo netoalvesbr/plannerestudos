@@ -150,6 +150,14 @@ export async function criarConta(nome, email, senha) {
   return !!data.session;
 }
 
+export async function entrarComProvedor(provedor) {
+  const { error } = await supabase.auth.signInWithOAuth({
+    provider: provedor,
+    options: { redirectTo: window.location.origin, ...(provedor === 'azure' ? { scopes: 'email' } : {}) },
+  });
+  if (error) throw new Error(traduzir(error));
+}
+
 export async function recuperarSenha(email) {
   const { error } = await supabase.auth.resetPasswordForEmail(email, { redirectTo: window.location.origin });
   if (error) throw new Error(traduzir(error));
