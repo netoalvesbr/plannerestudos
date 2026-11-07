@@ -1,7 +1,10 @@
+import { lerEdital } from '../lib/leitura.js';
+import { textoDoPdf } from '../lib/leitorPdf.js';
 import { useState } from 'react';
 import { todosConcursos } from '../data/concursos.js';
 import Calendario, { eventosDoConcurso, ProximaData } from './Calendario.jsx';
 import EditalVerticalizado from './EditalVerticalizado.jsx';
+import MenuDivulgar from './Divulgar.jsx';
 import { aplicarRepescagem, ehOAB, eventosRepescagem } from '../data/modelos.js';
 import { enviarEdital } from '../lib/remoto.js';
 import { vespera } from '../lib/cronograma.js';
@@ -11,6 +14,15 @@ import { PROVEDORES_LOGIN } from '../data/config.js';
 import { getModo, criarConta, entrarComProvedor, definirNovaSenha, entrarComSenha, entrarLocal, recuperarSenha } from '../lib/store.js';
 
 export function Login({ aoEntrar }) {
+  return (
+    <div>
+      <MenuDivulgar />
+      <LoginForm aoEntrar={aoEntrar} />
+    </div>
+  );
+}
+
+function LoginForm({ aoEntrar }) {
   const [nome, setNome] = useState('');
   const [email, setEmail] = useState('');
   const [msg, setMsg] = useState(null);
@@ -515,8 +527,6 @@ function Repescagem({ ctx, concurso }) {
     setArquivo(f);
     setStatus('Lendo o edital…');
     try {
-      const { textoDoPdf } = await import('../lib/pdf.js');
-      const { lerEdital } = await import('../lib/leitura.js');
       const linhas = await textoDoPdf(f, (p, n) => setStatus(`Lendo página ${p} de ${n}…`));
       const r = lerEdital(linhas);
       if (!ehOAB(r)) throw new Error('Este PDF não parece ser um edital do Exame de Ordem. Confira o arquivo.');

@@ -251,3 +251,32 @@ export async function excluirVerticalizado(id) {
   const { error } = await supabase.from('verticalizados').delete().eq('id', id);
   if (error) throw new Error(error.message);
 }
+
+// ---------- acessos e painel do administrador ----------
+// registra 1 acesso por abertura do site (por aba), sem atrapalhar se a tabela ainda não existir
+export async function registrarAcesso() {
+  if (!supabase) return;
+  try {
+    if (sessionStorage.getItem('estudaai.acesso')) return;
+    sessionStorage.setItem('estudaai.acesso', '1');
+    const movel = /Android|iPhone|iPad|Mobile/i.test(navigator.userAgent);
+    await supabase.from('acessos').insert({ aparelho: movel ? 'celular' : 'computador' });
+  } catch {
+    /* ignora */
+  }
+}
+
+export async function dadosAdmin(dias = 90) {
+  if (!supabase) throw new Error('O painel de acessos só funciona com contas (modo online).');
+  const { data: usuarios, error: e1 } = await supabase.rpc('admin_usuarios');
+  if (e1) throw new Error(/admin_usuarios|function/i.test(e1.message) ? 'O registro de acessos ainda não foi ativado no banco de dados.' : e1.message);
+  const desde = new Date(Date.now() - dias * 86400000).toISOString();
+  const acessos = [];
+  for (let de = 0; ; de += 1000) {
+    const { data, error } = await supabase.from('acessos').select('user_id, em, aparelho').gte('em', desde).order('em').range(de, de + 999);
+    if (error) throw new Error(error.message);
+    acessos.push(...data);
+    if (data.length < 1000) break;
+  }
+  return { usuarios: usuarios || [], acessos };
+}

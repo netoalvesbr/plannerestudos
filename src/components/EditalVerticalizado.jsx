@@ -1,3 +1,4 @@
+import { textoDoPdf } from '../lib/leitorPdf.js';
 import { useEffect, useState } from 'react';
 import { compartilharVerticalizado, excluirVerticalizado, listarVerticalizados } from '../lib/remoto.js';
 import { SUGESTOES_OAB } from '../data/modelos.js';
@@ -52,7 +53,6 @@ export default function EditalVerticalizado({ ctx, concurso, cargo, fase, area }
     if (!arquivo) return;
     setStatus('Lendo o PDF…');
     try {
-      const { textoDoPdf } = await import('../lib/pdf.js');
       const linhas = await textoDoPdf(arquivo);
       const r = lerVerticalizado(linhas);
       setPrevia(r);

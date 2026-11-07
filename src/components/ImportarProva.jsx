@@ -1,3 +1,4 @@
+import { textoDoPdf } from '../lib/leitorPdf.js';
 import { useMemo, useState } from 'react';
 import { lerGabarito, lerProva } from '../lib/leitura.js';
 import { salvarQuestoes, uidDe } from '../lib/remoto.js';
@@ -6,7 +7,6 @@ const campo = { width: '100%', minHeight: 38, padding: '6px 9px', borderRadius: 
 const LETRAS = { 'A-E': ['A', 'B', 'C', 'D', 'E'], 'A-D': ['A', 'B', 'C', 'D'], CE: ['C', 'E'] };
 
 async function textoDeArquivo(arquivo, aoProgredir) {
-  const { textoDoPdf } = await import('../lib/pdf.js');
   return textoDoPdf(arquivo, aoProgredir);
 }
 

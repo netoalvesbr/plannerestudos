@@ -248,3 +248,28 @@ td.erro { color: var(--erro); }
 .crono-modos button { min-height: 34px; }
 .crono-tema { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 @media print { .crono { display: none; } }
+
+/* painel de leitura do edital */
+.painel-leitura {
+  position: relative; z-index: 5; margin-bottom: 12px;
+  background: var(--card); border: 2px solid var(--pri); border-radius: 14px; padding: 12px; box-shadow: 0 10px 34px rgba(0, 0, 0, 0.25);
+}
+.painel-leitura.ok { border-color: var(--ok); }
+.painel-leitura.falha { border-color: var(--erro); }
+.lista-leitura { list-style: none; padding: 0; margin: 6px 0; font-size: 0.9rem; }
+.lista-leitura li { padding: 2px 0; }
+@media (min-width: 1400px) { .painel-leitura { position: fixed; top: 120px; right: 16px; width: 300px; margin: 0; } }
+@media print { .painel-leitura { display: none; } }
+.extras-entrada { justify-content: center; margin: 16px auto 0; max-width: 460px; }
+
+/* painel do administrador */
+.barras-dias { display: flex; align-items: flex-end; gap: 3px; height: 160px; padding-top: 18px; }
+.barra-dia { flex: 1; height: 100%; display: flex; flex-direction: column; justify-content: flex-end; align-items: center; position: relative; min-width: 0; }
+.barra-dia i { display: block; width: 100%; background: var(--pri); border-radius: 4px 4px 0 0; min-height: 1px; }
+.barra-dia .valor { font-size: 0.7rem; color: var(--sub); }
+.barra-dia .rot { font-size: 0.65rem; color: var(--sub); margin-top: 2px; }
+.tabela-rolagem { overflow-x: auto; margin-top: 10px; }
+.tabela-admin { width: 100%; border-collapse: collapse; font-size: 0.9rem; min-width: 720px; }
+.tabela-admin th, .tabela-admin td { text-align: left; padding: 8px 6px; border-top: 1px solid var(--borda); vertical-align: top; }
+.tabela-admin th { font-size: 0.8rem; color: var(--sub); }
+.tabela-admin .num { text-align: center; }

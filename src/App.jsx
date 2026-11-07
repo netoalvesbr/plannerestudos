@@ -13,6 +13,8 @@ import Questao, { Conclusao } from './components/Questao.jsx';
 import Painel from './components/Painel.jsx';
 import { ListaMapas, Mapa } from './components/Mapas.jsx';
 import MenuDesempenho from './components/MenuDesempenho.jsx';
+import MenuDivulgar from './components/Divulgar.jsx';
+import Admin from './components/Admin.jsx';
 import Cronometro, { alternarCronometro } from './components/Cronometro.jsx';
 import { disciplinasDo } from './lib/dados.js';
 
@@ -33,7 +35,6 @@ export default function App() {
   const [somenteLocal, setSomenteLocal] = useState(false);
   const [tela, setTela] = useState({ nome: 'inicio' });
   const [recuperando, setRecuperando] = useState(false);
-  const [copiouLink, setCopiouLink] = useState(false);
   const [bancoVersao, setBancoVersao] = useState(0);
   const [ultimaAba, setUltimaAba] = useState(null);
   const [avisoBanco, setAvisoBanco] = useState(null);
@@ -56,6 +57,7 @@ export default function App() {
     const u = await store.obterUsuario();
     setUsuario(u);
     if (u) {
+      remoto.registrarAcesso();
       const d = await store.carregarDados();
       setRespostas(d.respostas);
       setPrefsState(d.prefs);
@@ -256,6 +258,8 @@ export default function App() {
         }}
       />
     );
+  } else if (tela.nome === 'admin' && usuario?.admin) {
+    conteudo = <Admin />;
   } else if (tela.nome === 'concursos' || !concurso) {
     conteudo = (
       <>
@@ -323,16 +327,9 @@ export default function App() {
         <header className="topo">
           <div className="topo-linha" style={{ paddingRight: concurso ? 56 : 0 }}>
             <button className="logo" onClick={() => ir('inicio')}>EstudaAí</button>
-            <span className="sub">Olá, {usuario.nome.split(' ')[0]}{usuario.admin && <b title="Administrador"> · 👑 Admin</b>}</span>
-            {store.getModo() === 'conta' && (
-              <button
-                className="btn peq"
-                onClick={() => navigator.clipboard?.writeText(window.location.origin).then(() => { setCopiouLink(true); setTimeout(() => setCopiouLink(false), 2500); }).catch(() => {})}
-                title="Copia o link da plataforma para enviar a outras pessoas"
-              >
-                {copiouLink ? '✓ Link copiado' : '🔗 Compartilhar'}
-              </button>
-            )}
+            <span className="sub">Olá, {usuario.nome.split(' ')[0]}</span>
+            {usuario.admin && <button className="btn peq" aria-current={tela.nome === 'admin'} onClick={() => setTela({ nome: 'admin' })} title="Painel do administrador: pessoas e acessos">👑 Admin</button>}
+            <MenuDivulgar compacto nome={usuario.nome} />
             {seguindo.length > 1 && (
               <select aria-label="Concurso ativo" value={prefs.ativo || ''} onChange={(e) => { setPrefs({ ativo: e.target.value }); ir('inicio'); }} style={{ width: 'auto' }}>
                 {seguindo.map((id) => <option key={id} value={id}>{getConcurso(id)?.sigla}</option>)}

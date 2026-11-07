@@ -1,3 +1,4 @@
+import { textoDoPdf } from '../lib/leitorPdf.js';
 import { useState } from 'react';
 import { lerEdital } from '../lib/leitura.js';
 import { salvarConcurso } from '../lib/remoto.js';
@@ -32,6 +33,7 @@ export default function NovoConcurso({ inicial, escolhaInicial, aoSalvar, aoCanc
   const [c, setC] = useState(() => ({ ...vazio, ...(inicial || {}), disciplinas: (inicial?.disciplinas || []).map((d) => ({ ...d, topicosTxt: (d.topicos || []).join('\n') })) }));
   const [pdf, setPdf] = useState(null);
   const [lendo, setLendo] = useState(null);
+  const [leitura, setLeitura] = useState(null);
   const [erro, setErro] = useState(null);
   const [salvando, setSalvando] = useState(false);
   // escolha pessoal de quem está cadastrando: fase que vai estudar, fases descartadas e área
@@ -49,9 +51,12 @@ export default function NovoConcurso({ inicial, escolhaInicial, aoSalvar, aoCanc
     setErro(null);
     setPdf(arquivo);
     setLendo('Abrindo o PDF…');
+    setLeitura({ estado: 'lendo', arquivo: arquivo.name, pagina: 0, total: 0 });
     try {
-      const { textoDoPdf } = await import('../lib/pdf.js');
-      const linhas = await textoDoPdf(arquivo, (p, n) => setLendo(`Lendo página ${p} de ${n}…`));
+      const linhas = await textoDoPdf(arquivo, (p, n) => {
+        setLendo(`Lendo página ${p} de ${n}…`);
+        setLeitura({ estado: 'lendo', arquivo: arquivo.name, pagina: p, total: n });
+      });
       if (linhas.filter(Boolean).length < 5) throw new Error('Não encontrei texto neste PDF. Ele pode ser uma imagem escaneada; nesse caso, preencha os campos à mão.');
       const r = lerEdital(linhas);
       const oab = ehOAB(r);
@@ -84,6 +89,20 @@ export default function NovoConcurso({ inicial, escolhaInicial, aoSalvar, aoCanc
         }
         return m;
       });
+      const nPag = linhas.filter((l) => l === '').length;
+      setLeitura({
+        estado: 'ok',
+        arquivo: arquivo.name,
+        pagina: nPag,
+        total: nPag,
+        itens: [
+          ['Nome do concurso', r.nome || r.sigla],
+          ['Banca', r.banca],
+          ['Data da prova', r.dataProva ? r.dataProva.split('-').reverse().join('/') : ''],
+          ['Datas do cronograma', r.cronograma.length ? `${r.cronograma.length} datas` : ''],
+          ['Matérias do conteúdo programático', oab ? 'modelo OAB (20 matérias + 7 áreas)' : r.disciplinas.length ? `${r.disciplinas.length} matérias, ${r.disciplinas.reduce((s, d) => s + d.topicos.length, 0)} tópicos` : ''],
+        ],
+      });
       setLendo(
         `Edital lido: ${r.disciplinas.length} disciplinas, ${r.cronograma.length} datas encontradas.` +
           (oab ? ' Reconheci o Exame de Ordem: apliquei o modelo OAB/FGV (1ª fase objetiva e 2ª fase com as 7 áreas).' : '') +
@@ -92,6 +111,7 @@ export default function NovoConcurso({ inicial, escolhaInicial, aoSalvar, aoCanc
     } catch (e) {
       setErro(e.message);
       setLendo(null);
+      setLeitura({ estado: 'falha', arquivo: arquivo.name, msg: e.message });
     }
   }
 
@@ -124,6 +144,7 @@ export default function NovoConcurso({ inicial, escolhaInicial, aoSalvar, aoCanc
 
   return (
     <form onSubmit={salvar}>
+      {leitura && <PainelLeitura leitura={leitura} fechar={() => setLeitura(null)} />}
       <button type="button" className="btn peq" onClick={aoCancelar} style={{ marginBottom: 10 }}>← Voltar</button>
       <h1>{inicial ? 'Editar concurso' : 'Adicionar concurso'}</h1>
       <p className="sub">O concurso é <b>só seu</b>: suas fases, matérias, datas e cronograma não aparecem para outros usuários. O que é compartilhado é o banco de questões (provas importadas) e os editais verticalizados que você decidir compartilhar.</p>
@@ -321,5 +342,47 @@ export default function NovoConcurso({ inicial, escolhaInicial, aoSalvar, aoCanc
         <button type="button" className="btn" onClick={aoCancelar}>Cancelar</button>
       </div>
     </form>
+  );
+}
+
+// Painel ao lado mostrando a leitura do edital: progresso, sucesso (com o que foi encontrado) ou falha
+export function PainelLeitura({ leitura: l, fechar }) {
+  const pct = l.total ? Math.round((l.pagina / l.total) * 100) : 0;
+  const atualizada = l.msg?.startsWith('A plataforma foi atualizada');
+  return (
+    <aside className={`painel-leitura ${l.estado}`} role="status" aria-live="polite">
+      <div className="linha entre" style={{ alignItems: 'center' }}>
+        <b>{l.estado === 'lendo' ? '⏳ Lendo o edital…' : l.estado === 'ok' ? '✓ Edital 100% carregado' : '✗ Falha ao ler o edital'}</b>
+        {l.estado !== 'lendo' && <button type="button" className="crono-ic" onClick={fechar} aria-label="Fechar painel">✕</button>}
+      </div>
+      <div className="peq sub" style={{ wordBreak: 'break-all' }}>📄 {l.arquivo}</div>
+      {l.estado === 'lendo' && (
+        <>
+          <div className="barra" style={{ margin: '8px 0 4px' }}><i style={{ width: `${pct}%` }} /></div>
+          <div className="peq">{l.total ? `Página ${l.pagina} de ${l.total} (${pct}%)` : 'Abrindo o arquivo…'}</div>
+        </>
+      )}
+      {l.estado === 'ok' && (
+        <>
+          <div className="peq">{l.total} {l.total === 1 ? 'página lida' : 'páginas lidas'}.</div>
+          <ul className="lista-leitura">
+            {l.itens.map(([rot, v]) => (
+              <li key={rot}>{v ? '✓' : '✗'} <b>{rot}:</b> {v || <span className="desce">não encontrado – preencha à mão</span>}</li>
+            ))}
+          </ul>
+          <div className="peq sub">Confira os campos ao lado antes de salvar.</div>
+        </>
+      )}
+      {l.estado === 'falha' && (
+        <>
+          <p className="peq" style={{ margin: '6px 0' }}>{l.msg}</p>
+          {atualizada ? (
+            <button type="button" className="btn peq pri" onClick={() => window.location.reload()}>↻ Recarregar a página</button>
+          ) : (
+            <p className="peq sub" style={{ margin: 0 }}>Você pode tentar outro arquivo ou preencher os campos à mão.</p>
+          )}
+        </>
+      )}
+    </aside>
   );
 }

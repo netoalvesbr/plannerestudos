@@ -1,10 +1,30 @@
 // Extrai o texto de um PDF no próprio navegador (pdf.js), linha a linha, preservando a ordem de leitura.
 // Carregado sob demanda para não pesar o restante da plataforma.
 
+import * as pdfjs from 'pdfjs-dist';
+import urlWorker from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
+
+// baixa o "worker" do pdf.js e guarda uma cópia na memória (não depende mais do arquivo no servidor)
+let preparado = null;
+export function prepararPdf() {
+  if (!preparado) {
+    preparado = fetch(urlWorker)
+      .then((r) => {
+        if (!r.ok) throw new Error('worker');
+        return r.blob();
+      })
+      .then((b) => {
+        pdfjs.GlobalWorkerOptions.workerSrc = URL.createObjectURL(new Blob([b], { type: 'text/javascript' }));
+      })
+      .catch(() => {
+        pdfjs.GlobalWorkerOptions.workerSrc = urlWorker;
+      });
+  }
+  return preparado;
+}
+
 export async function textoDoPdf(arquivo, aoProgredir) {
-  const pdfjs = await import('pdfjs-dist');
-  const worker = (await import('pdfjs-dist/build/pdf.worker.min.mjs?url')).default;
-  pdfjs.GlobalWorkerOptions.workerSrc = worker;
+  await prepararPdf();
   const dados = new Uint8Array(await arquivo.arrayBuffer());
   const doc = await pdfjs.getDocument({ data: dados }).promise;
   const linhas = [];
