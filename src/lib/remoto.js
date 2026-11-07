@@ -80,6 +80,7 @@ export const questaoDoBanco = (r) => ({
   ano: r.ano || null,
   orgao_prova_original: r.orgao_prova || null,
   origem: r.origem || 'prova_anterior',
+  concursoRef: r.concurso_ref || '',
   formato: r.formato || 'A-E',
   bloco: r.bloco || '',
   materia: r.materia,
@@ -160,6 +161,7 @@ export async function salvarQuestoes(lista) {
   const linhas = lista.map((q) => ({
     uid: q.uid,
     concurso_id: q.concursoId || null,
+    concurso_ref: q.concursoRef || null,
     fase: q.fase || null,
     area: q.area || null,
     banca: q.banca || null,
@@ -209,5 +211,42 @@ export async function excluirQuestao(uid) {
     return;
   }
   const { error } = await supabase.from('questoes').delete().eq('uid', uid);
+  if (error) throw new Error(error.message);
+}
+
+// ---------- biblioteca compartilhada de editais verticalizados ----------
+const LSV = 'estudaai:verticalizados-local';
+export async function listarVerticalizados() {
+  if (!supabase) {
+    try {
+      return JSON.parse(localStorage.getItem(LSV)) || [];
+    } catch {
+      return [];
+    }
+  }
+  const { data, error } = await supabase.from('verticalizados').select('*').order('criado_em', { ascending: false }).limit(300);
+  if (error) throw new Error(error.message);
+  return data;
+}
+
+export async function compartilharVerticalizado({ titulo, descricao, disciplinas, autorNome }) {
+  const linha = { titulo, descricao: descricao || null, disciplinas, autor_nome: autorNome || null };
+  if (!supabase) {
+    const l = await listarVerticalizados();
+    l.unshift({ ...linha, id: crypto.randomUUID(), criado_por: 'local', criado_em: new Date().toISOString() });
+    localStorage.setItem(LSV, JSON.stringify(l));
+    return;
+  }
+  const { error } = await supabase.from('verticalizados').insert(linha);
+  if (error) throw new Error(error.message);
+}
+
+export async function excluirVerticalizado(id) {
+  if (!supabase) {
+    const l = (await listarVerticalizados()).filter((v) => v.id !== id);
+    localStorage.setItem(LSV, JSON.stringify(l));
+    return;
+  }
+  const { error } = await supabase.from('verticalizados').delete().eq('id', id);
   if (error) throw new Error(error.message);
 }

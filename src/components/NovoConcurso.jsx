@@ -91,10 +91,10 @@ export default function NovoConcurso({ inicial, escolhaInicial, aoSalvar, aoCanc
         ...c,
         sigla: c.sigla.trim(),
         nome: c.nome.trim(),
-        fases: c.fases.filter((f) => f.nome.trim()).map((f, i) => ({ ...f, id: f.id || `f${i + 1}`, nome: f.nome.trim() })),
+        fases: c.fases.filter((f) => f.nome.trim() && !descartadas.includes(f.id)).map((f, i) => ({ ...f, id: f.id || `f${i + 1}`, nome: f.nome.trim() })),
         cronograma: c.cronograma.filter((x) => x.data && x.evento),
         disciplinas: c.disciplinas
-          .filter((d) => d.nome.trim())
+          .filter((d) => d.nome.trim() && !descartadas.includes(d.fase))
           .map(({ topicosTxt, ...d }) => ({ ...d, nome: d.nome.trim(), topicos: (topicosTxt || '').split('\n').map((t) => t.trim()).filter(Boolean) })),
       };
       const id = await salvarConcurso(dados, pdf, inicial?.id || null);
@@ -110,11 +110,11 @@ export default function NovoConcurso({ inicial, escolhaInicial, aoSalvar, aoCanc
     <form onSubmit={salvar}>
       <button type="button" className="btn peq" onClick={aoCancelar} style={{ marginBottom: 10 }}>← Voltar</button>
       <h1>{inicial ? 'Editar concurso' : 'Adicionar concurso'}</h1>
-      <p className="sub">O concurso fica disponível para todos os usuários da plataforma. Cada pessoa escolhe se quer acompanhá-lo.</p>
+      <p className="sub">O concurso é <b>só seu</b>: suas fases, matérias, datas e cronograma não aparecem para outros usuários. O que é compartilhado é o banco de questões (provas importadas) e os editais verticalizados que você decidir compartilhar.</p>
 
       <section className="card">
         <h2>📄 Importar edital (PDF)</h2>
-        <p className="sub">A plataforma lê o edital e preenche sozinha o que encontrar: órgão, banca, data da prova, cronograma e o conteúdo programático (edital verticalizado). O PDF fica disponível para todos baixarem.</p>
+        <p className="sub">A plataforma lê o edital e preenche sozinha o que encontrar: órgão, banca, data da prova, cronograma e o conteúdo programático (edital verticalizado). O PDF fica guardado no seu concurso.</p>
         <input type="file" accept="application/pdf" onChange={(e) => importarEdital(e.target.files[0])} />
         {lendo && <p className="aviso" style={{ marginTop: 10, background: 'var(--pri-claro)', color: 'var(--txt)' }} role="status">{lendo}</p>}
         {inicial?.editalUrl && !pdf && <p className="sub" style={{ marginTop: 8 }}>Edital atual: <a href={inicial.editalUrl} target="_blank" rel="noreferrer">abrir PDF</a></p>}
@@ -140,12 +140,12 @@ export default function NovoConcurso({ inicial, escolhaInicial, aoSalvar, aoCanc
       {c.modelo === 'oab' ? (
         <section className="card">
           <h2>⚖️ Fases do Exame de Ordem (modelo OAB/FGV)</h2>
-          <p className="sub">Confira as datas das provas (lidas do edital) e escolha para qual fase <b>você</b> vai estudar. Use ✕ na fase que você não vai fazer. Na 2ª fase, escolha a sua matéria.</p>
+          <p className="sub">Confira as datas das provas (lidas do edital) e escolha para qual fase você vai estudar. Use ✕ para apagar a fase que você não vai fazer. Na 2ª fase, escolha a sua matéria.</p>
           {c.fases.map((f, i) => {
             if (descartadas.includes(f.id)) {
               return (
                 <div key={f.id} className="linha entre peq sub" style={{ padding: '8px 4px' }}>
-                  <span>✕ {f.nome}: você não vai estudar esta fase.</span>
+                  <span>✕ {f.nome}: será removida ao salvar (você não vai fazer esta fase).</span>
                   <button type="button" className="praticar" onClick={() => setDescartadas((d) => d.filter((x) => x !== f.id))}>Desfazer</button>
                 </div>
               );

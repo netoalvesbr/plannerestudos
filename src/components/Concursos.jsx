@@ -201,8 +201,8 @@ export function MeusConcursos({ ctx }) {
         </div>
       </div>
       <p className="sub">
-        Todos os concursos cadastrados na plataforma aparecem aqui. Clique em <b>+ Acompanhar</b> nos que você vai estudar (e escolha a fase, se houver).
-        O banco de questões e os editais são compartilhados por todos; o seu desempenho é só seu.
+        Seus concursos são <b>só seus</b> (fases, matérias, datas, cronograma e desempenho). Use <b>+ Adicionar concurso</b> para cadastrar os que você vai fazer.
+        Compartilhado entre todos é apenas o banco de questões e os editais verticalizados que cada um decidir compartilhar.
       </p>
       <input type="text" value={busca} onChange={(e) => setBusca(e.target.value)} placeholder="🔎 Procurar concurso (sigla, nome, banca)…" style={{ marginBottom: 12 }} aria-label="Procurar concurso" />
       <div className="grade">
@@ -245,7 +245,7 @@ export function MeusConcursos({ ctx }) {
                 )}
                 <button className="btn peq" onClick={() => abrirFicha(c.id)}>Ficha e edital</button>
               </div>
-              {c.remoto && c.criadoPor === usuario?.id && <p className="peq sub" style={{ marginTop: 6 }}>Cadastrado por você</p>}
+              {!c.remoto && <p className="peq sub" style={{ marginTop: 6 }}>Concurso pronto da plataforma</p>}
             </div>
           );
         })}
@@ -313,22 +313,23 @@ export function EscolhaFase({ concurso, aoEscolher }) {
 }
 
 export function EscolhaCargo({ concurso, aoEscolher }) {
+  const [sel, setSel] = useState([]);
+  const alternar = (id) => setSel((x) => (x.includes(id) ? x.filter((y) => y !== id) : [...x, id]));
   return (
-    <section className="card login">
-      <h1>{concurso.sigla}: qual cargo?</h1>
-      <p className="sub">Os conhecimentos específicos exibidos seguem esta escolha. Você pode mudar depois na ficha do concurso.</p>
+    <section className="card login" style={{ maxWidth: 560 }}>
+      <h1>{concurso.sigla}: para qual cargo você vai concorrer?</h1>
+      <p className="sub">Pode marcar mais de um. As provas diárias e as matérias específicas seguem esta escolha (dá para mudar depois em Provas diárias).</p>
       <div className="escolha">
         {concurso.cargos.map((c) => (
-          <button key={c.id} className="card bloco-card" onClick={() => aoEscolher(c.id)}>
-            <h2>{c.nome}</h2>
-            <p className="sub">{c.horario}</p>
+          <button key={c.id} role="checkbox" aria-checked={sel.includes(c.id)} className="card bloco-card" style={{ margin: 0, borderWidth: 2, borderColor: sel.includes(c.id) ? 'var(--pri)' : undefined, background: sel.includes(c.id) ? 'var(--pri-claro)' : undefined }} onClick={() => alternar(c.id)}>
+            <h2 style={{ marginBottom: 2 }}>{sel.includes(c.id) ? '☑' : '☐'} {c.nome}</h2>
+            <p className="sub" style={{ margin: 0 }}>{c.horario}</p>
           </button>
         ))}
-        <button className="card bloco-card" onClick={() => aoEscolher('ambos')}>
-          <h2>Os dois cargos</h2>
-          <p className="sub">Mostra os específicos de todos os cargos.</p>
-        </button>
       </div>
+      <button className="btn pri" style={{ marginTop: 14, width: '100%' }} disabled={!sel.length} onClick={() => aoEscolher(sel.length === concurso.cargos.length ? 'ambos' : sel[0])}>
+        {sel.length ? 'Confirmar' : 'Marque pelo menos um cargo'}
+      </button>
     </section>
   );
 }
@@ -371,7 +372,7 @@ export function Ficha({ ctx, concurso, voltar }) {
           {podeEditar && !confirmar && <button className="btn perigo" onClick={() => setConfirmar(true)}>Excluir</button>}
           {confirmar && (
             <span className="linha" role="alert">
-              <span>Excluir este concurso para todos? As questões continuam no banco.</span>
+              <span>Excluir este concurso? Seu cronograma e progresso dele serão perdidos; as questões continuam no banco.</span>
               <button className="btn perigo" onClick={() => excluir(concurso.id)}>Sim, excluir</button>
               <button className="btn" onClick={() => setConfirmar(false)}>Cancelar</button>
             </span>

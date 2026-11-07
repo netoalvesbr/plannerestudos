@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+import { compartilharVerticalizado, excluirVerticalizado, listarVerticalizados } from '../lib/remoto.js';
 import { SUGESTOES_OAB } from '../data/modelos.js';
 import { disciplinasDo } from '../lib/dados.js';
 import { lerVerticalizado } from '../lib/leitura.js';
@@ -20,10 +21,20 @@ function sugerir(concurso, cargo, fase, area) {
 const campo = { width: '100%', minHeight: 40, padding: '6px 9px', borderRadius: 9, border: '1px solid var(--borda)', background: 'var(--card)', color: 'var(--txt)', font: 'inherit' };
 
 export default function EditalVerticalizado({ ctx, concurso, cargo, fase, area }) {
-  const { prefs, setPrefs } = ctx;
+  const faseObj = concurso.fases?.find((f) => f.id === fase);
+  const ctxTitulo = [faseObj?.nome?.split(' –')[0], faseObj?.areas?.find((a) => a.id === area)?.nome].filter(Boolean).join(' – ');
+  const { prefs, setPrefs, usuario } = ctx;
   const chave = chaveVert(concurso.id, fase, area);
   const vert = prefs.verticalizados?.[chave] || null;
-  const [modo, setModo] = useState(null); // null | 'importar'
+  const [modo, setModo] = useState(null); // null | 'importar' | 'biblioteca' | 'compartilhar'
+  const [biblioteca, setBiblioteca] = useState(null);
+  const [busca, setBusca] = useState('');
+  const [tituloComp, setTituloComp] = useState('');
+  useEffect(() => {
+    if (modo !== 'biblioteca') return;
+    setBiblioteca(null);
+    listarVerticalizados().then(setBiblioteca).catch((e) => { setBiblioteca([]); setStatus('Não foi possível carregar a biblioteca: ' + e.message); });
+  }, [modo]);
   const [previa, setPrevia] = useState(null);
   const [texto, setTexto] = useState('');
   const [status, setStatus] = useState(null);
@@ -52,6 +63,58 @@ export default function EditalVerticalizado({ ctx, concurso, cargo, fase, area }
   }
 
   // ---------- ainda não tem ----------
+  if (modo === 'biblioteca') {
+    const t = busca.trim().toLowerCase();
+    const lista = (biblioteca || []).filter((v) => !t || `${v.titulo} ${v.descricao || ''}`.toLowerCase().includes(t));
+    return (
+      <div>
+        <input type="text" value={busca} onChange={(e) => setBusca(e.target.value)} placeholder="🔎 Procurar (ex.: OAB 2ª fase Constitucional, PC/AC Papiloscopista)…" aria-label="Procurar edital verticalizado" style={{ marginBottom: 10 }} />
+        {status && <p className="aviso">{status}</p>}
+        {!biblioteca && <p className="sub">Carregando…</p>}
+        {biblioteca && !lista.length && <p className="sub">Nenhum edital verticalizado compartilhado {t ? 'com esse termo' : 'ainda'}.</p>}
+        {lista.map((v) => (
+          <div key={v.id} className="card" style={{ boxShadow: 'none' }}>
+            <b>{v.titulo}</b>
+            <div className="sub peq">{v.disciplinas.length} matérias · {v.disciplinas.reduce((a, d) => a + (d.topicos?.length || 0), 0)} tópicos{v.autor_nome ? ` · por ${v.autor_nome}` : ''}</div>
+            {v.descricao && <p className="peq">{v.descricao}</p>}
+            <div className="linha" style={{ marginTop: 6 }}>
+              <button className="btn peq pri" onClick={() => { salvar({ origem: 'baixado', titulo: v.titulo, disciplinas: v.disciplinas, feitos: {} }); setModo(null); }}>Usar este</button>
+              {(v.criado_por === usuario?.id || usuario?.admin) && (
+                <button className="btn peq perigo" onClick={() => excluirVerticalizado(v.id).then(() => setBiblioteca((b) => b.filter((x) => x.id !== v.id)))}>Remover da biblioteca</button>
+              )}
+            </div>
+          </div>
+        ))}
+        <button className="btn" onClick={() => setModo(null)}>Voltar</button>
+      </div>
+    );
+  }
+
+  if (modo === 'compartilhar' && vert) {
+    return (
+      <div>
+        <p className="sub">Seu edital verticalizado ficará disponível para outros usuários baixarem (só a lista de matérias e tópicos; o seu progresso continua privado).</p>
+        <label className="campo">Título
+          <input type="text" value={tituloComp} onChange={(e) => setTituloComp(e.target.value)} />
+        </label>
+        {status && <p className="aviso">{status}</p>}
+        <div className="linha" style={{ marginTop: 10 }}>
+          <button className="btn pri" disabled={!tituloComp.trim()} onClick={async () => {
+            try {
+              await compartilharVerticalizado({ titulo: tituloComp.trim(), disciplinas: vert.disciplinas, autorNome: usuario?.nome?.split(' ')[0] });
+              salvar({ ...vert, compartilhado: true });
+              setStatus(null);
+              setModo(null);
+            } catch (e) {
+              setStatus('Não foi possível compartilhar: ' + e.message);
+            }
+          }}>Compartilhar</button>
+          <button className="btn" onClick={() => setModo(null)}>Cancelar</button>
+        </div>
+      </div>
+    );
+  }
+
   if (!vert && modo !== 'importar') {
     return (
       <div>
@@ -66,6 +129,10 @@ export default function EditalVerticalizado({ ctx, concurso, cargo, fase, area }
           <button className="card bloco-card" style={{ margin: 0 }} onClick={() => setModo('importar')}>
             <h3>📥 Importar um edital verticalizado pronto</h3>
             <p className="sub" style={{ margin: 0 }}>De outra plataforma ou feito por você: PDF ou texto com as matérias e os tópicos.</p>
+          </button>
+          <button className="card bloco-card" style={{ margin: 0 }} onClick={() => setModo('biblioteca')}>
+            <h3>🌐 Baixar de outro usuário</h3>
+            <p className="sub" style={{ margin: 0 }}>Editais verticalizados que outros usuários compartilharam na plataforma.</p>
           </button>
         </div>
       </div>
@@ -109,7 +176,7 @@ export default function EditalVerticalizado({ ctx, concurso, cargo, fase, area }
   return (
     <div>
       <p className="sub">
-        {vert.origem === 'importado' ? 'Importado por você.' : 'Sugerido pela plataforma.'} Progresso: <b>{ok} de {total}</b> tópicos ({Math.round((ok / Math.max(1, total)) * 100)}%)
+        {vert.origem === 'importado' ? 'Importado por você.' : vert.origem === 'baixado' ? `Baixado da biblioteca: ${vert.titulo}.` : 'Sugerido pela plataforma.'}{vert.compartilhado ? ' · ✓ compartilhado' : ''} Progresso: <b>{ok} de {total}</b> tópicos ({Math.round((ok / Math.max(1, total)) * 100)}%)
       </p>
       <div className="barra" aria-hidden="true"><i style={{ width: `${(ok / Math.max(1, total)) * 100}%` }} /></div>
       {vert.disciplinas.map((d) => {
@@ -134,6 +201,10 @@ export default function EditalVerticalizado({ ctx, concurso, cargo, fase, area }
       })}
       <div className="linha" style={{ marginTop: 10 }}>
         <button className="btn peq" onClick={() => setModo('importar')}>📥 Importar outro</button>
+        <button className="btn peq" onClick={() => setModo('biblioteca')}>🌐 Baixar de outro usuário</button>
+        {!vert.compartilhado && vert.origem !== 'baixado' && (
+          <button className="btn peq" onClick={() => { setTituloComp([concurso.sigla, ctxTitulo].filter(Boolean).join(' – ')); setModo('compartilhar'); }}>🔗 Compartilhar com outros usuários</button>
+        )}
         <button className="btn peq" onClick={() => salvar({ origem: 'sugerido', disciplinas: sugerir(concurso, cargo, fase, area), feitos: vert.feitos || {} })}>✨ Refazer sugestão</button>
         {!confirmarApagar ? (
           <button className="btn peq perigo" onClick={() => setConfirmarApagar(true)}>Apagar</button>

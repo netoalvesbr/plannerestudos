@@ -1,18 +1,20 @@
 import { useMemo, useState } from 'react';
 import { getConcurso, todosConcursos } from '../data/concursos.js';
-import { QUESTOES } from '../lib/dados.js';
+import { QUESTOES, questoesDo } from '../lib/dados.js';
 
 const norm = (t) => (t || '').toLowerCase().normalize('NFKD').replace(/[̀-ͯ]/g, '');
 
 // Aba "Questões": busca no banco unificado (todas as questões de todos os concursos) e importação de provas.
 export default function BancoQuestoes({ ctx }) {
-  const { respostas, abrirSessao, abrirImportarProva, bancoVersao } = ctx;
+  const { respostas, abrirSessao, abrirImportarProva, bancoVersao, prefs } = ctx;
   const [f, setF] = useState({ busca: '', concurso: '', materia: '', banca: '', ano: '', formato: '', mostrar: 'todas' });
   const set = (k, v) => setF((x) => ({ ...x, [k]: v, ...(k === 'concurso' ? { materia: '' } : {}) }));
 
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const base = useMemo(() => QUESTOES.filter((q) => !q.anulada), [bancoVersao]);
-  const doConcurso = f.concurso ? base.filter((q) => q.concursos.includes(f.concurso)) : base;
+  const pc = prefs.concursos?.[f.concurso] || {};
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const doConcurso = useMemo(() => (f.concurso ? questoesDo(f.concurso, pc.cargo || 'ambos', pc.fase || null, { area: pc.area || null }) : base), [f.concurso, base, pc.cargo, pc.fase, pc.area]);
   const opcoes = (campo) => [...new Set(doConcurso.map((q) => q[campo]).filter(Boolean))].sort();
 
   const termo = norm(f.busca.trim());
@@ -45,8 +47,8 @@ export default function BancoQuestoes({ ctx }) {
         <div className="filtros">
           <label className="campo">Concurso
             <select value={f.concurso} onChange={(e) => set('concurso', e.target.value)}>
-              <option value="">Todos</option>
-              {todosConcursos().map((c) => <option key={c.id} value={c.id}>{c.sigla}</option>)}
+              <option value="">Todos (banco completo)</option>
+              {todosConcursos().map((c) => <option key={c.id} value={c.id}>Meu: {c.sigla}</option>)}
             </select>
           </label>
           <label className="campo">Disciplina
@@ -95,7 +97,7 @@ export default function BancoQuestoes({ ctx }) {
         return (
           <button key={q.uid} className="card bloco-card" onClick={() => resolver(i)} style={{ display: 'block' }}>
             <div className="etiqueta" style={{ marginBottom: 6 }}>
-              {[c?.sigla, q.banca, q.ano, q.materia].filter(Boolean).join(' · ')}
+              {[c?.sigla || q.concursoRef || q.orgao_prova_original, q.banca, q.ano, q.materia].filter(Boolean).join(' · ')}
             </div>
             <div className="peq" style={{ display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{q.enunciado}</div>
             <div className="peq" style={{ marginTop: 6, color: r ? (r[1] ? 'var(--ok)' : 'var(--erro)') : 'var(--sub)' }}>

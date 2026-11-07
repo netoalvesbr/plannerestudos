@@ -64,8 +64,15 @@ export function disciplinasDo(concursoId, cargo, fase, area) {
 }
 
 // unificado = inclui questões de outros concursos cujas disciplinas existam neste concurso
-export function questoesDo(concursoId, cargo, fase, { unificado = false, area = null } = {}) {
+// Os concursos de cada usuário são pessoais, mas o banco de questões é de todos:
+// num concurso do usuário entram as questões importadas para ele e, do banco unificado,
+// as das mesmas disciplinas e do mesmo tipo de prova (objetiva x discursiva).
+export function questoesDo(concursoId, cargo, fase, { unificado, area = null } = {}) {
+  const c = getConcurso(concursoId);
   const nomes = new Set(disciplinasDo(concursoId, cargo, fase, area).map((d) => chave(d.nome)));
+  const formato = c?.fases?.find((f) => f.id === fase)?.formato || c?.formato || null;
+  const discursiva = formato === 'discursiva';
+  const usarBanco = unificado ?? !!c?.remoto;
   return QUESTOES.filter((q) => {
     if (q.anulada) return false;
     const proprio = q.concursos.includes(concursoId);
@@ -73,7 +80,8 @@ export function questoesDo(concursoId, cargo, fase, { unificado = false, area = 
       if (q.remoto) return (!fase || !q.fase || q.fase === fase) && (!area || !q.area || q.area === area);
       return nomes.has(chave(q.materia));
     }
-    return unificado && nomes.has(chave(q.materia));
+    if (!usarBanco || !nomes.has(chave(q.materia))) return false;
+    return (q.formato === 'discursiva') === discursiva;
   });
 }
 
