@@ -86,7 +86,12 @@ export function linhasDaPagina(itens, largura, estado = {}) {
   const duasColunas = itens.length > 40 && cruzaMeio < itens.length * 0.08 && itens.some((i) => i.x > meio + 5) && itens.some((i) => i.x < meio - 40);
   const datasDir = linhasDaColuna(itens.filter((i) => i.x >= meio)).filter(ehData);
   const todasDir = linhasDaColuna(itens.filter((i) => i.x >= meio));
-  const ehTabela = (duasColunas && datasDir.length >= 3 && datasDir.length >= todasDir.length * 0.2) || (estado.tabela && datasDir.length >= 1 && itens.some((i) => i.x < meio - 40));
+  // quadro de datas: a coluna da direita é feita de datas e, na altura delas, quase nada atravessa o meio da página
+  const yDatas = datasDir.map((l) => l.y);
+  const noQuadro = itens.filter((i) => cruza(i) && i.y <= Math.max(...yDatas) + 2 && i.y >= Math.min(...yDatas) - 2).length;
+  const temEsq = itens.some((i) => i.x < meio - 40);
+  const ehTabela =
+    temEsq && noQuadro <= 1 && ((datasDir.length >= 3 && datasDir.length >= todasDir.length * 0.2) || (estado.tabela && datasDir.length >= 1));
   estado.tabela = ehTabela;
   if (ehTabela) {
     // o quadro termina pouco abaixo da última data; linhas de largura total depois dela (notas de rodapé) ficam fora
