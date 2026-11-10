@@ -391,3 +391,76 @@ export async function salvarTextoLei(id, dados, fonte) {
   const { error } = await supabase.from('leis_texto').upsert({ id, dados, fonte, atualizado: new Date().toISOString() });
   if (error) throw new Error(error.message);
 }
+
+// ---------- biblioteca compartilhada ----------
+const LS_BIB = 'estudaai.biblioteca';
+const bibLocal = () => {
+  try {
+    return JSON.parse(localStorage.getItem(LS_BIB)) || [];
+  } catch {
+    return [];
+  }
+};
+export async function listarBiblioteca(categoria) {
+  if (!supabase) return bibLocal().filter((x) => !categoria || x.categoria === categoria);
+  let q = supabase.from('biblioteca').select('*').order('criado_em', { ascending: false });
+  if (categoria) q = q.eq('categoria', categoria);
+  const { data, error } = await q;
+  if (error) throw new Error(/biblioteca/.test(error.message) ? 'A biblioteca ainda não foi ativada no banco de dados.' : error.message);
+  return data;
+}
+export async function contarBiblioteca() {
+  const lista = await listarBiblioteca();
+  const n = {};
+  for (const x of lista) n[x.categoria] = (n[x.categoria] || 0) + 1;
+  return n;
+}
+const limparNome = (n) => n.normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^\w.-]+/g, '-').slice(-80);
+export async function enviarArquivo(dados, arquivo, aoProgredir) {
+  if (!supabase) {
+    if (arquivo.size > 2 * 1024 * 1024) throw new Error('No modo sem conta, só arquivos de até 2 MB.');
+    const url = await new Promise((ok, erro) => {
+      const fr = new FileReader();
+      fr.onload = () => ok(fr.result);
+      fr.onerror = () => erro(fr.error);
+      fr.readAsDataURL(arquivo);
+    });
+    const item = { ...dados, id: crypto.randomUUID(), arquivo: url, nome_arquivo: arquivo.name, tipo: arquivo.type, tamanho: arquivo.size, criado_por: 'local', criado_em: new Date().toISOString(), downloads: 0 };
+    try {
+      localStorage.setItem(LS_BIB, JSON.stringify([item, ...bibLocal()]));
+    } catch {
+      throw new Error('Sem espaço no navegador para este arquivo no modo sem conta.');
+    }
+    return item;
+  }
+  const { data: u } = await supabase.auth.getUser();
+  const caminho = `${u.user.id}/${Date.now()}-${limparNome(arquivo.name)}`;
+  aoProgredir?.('Enviando o arquivo…');
+  const { error: e1 } = await supabase.storage.from('biblioteca').upload(caminho, arquivo, { contentType: arquivo.type, upsert: false });
+  if (e1) throw new Error(/mime|type/i.test(e1.message) ? 'Tipo de arquivo não aceito. Envie PDF, imagem (JPG/PNG) ou Word.' : /size|large/i.test(e1.message) ? 'Arquivo grande demais (máximo 25 MB).' : e1.message);
+  const { data, error } = await supabase
+    .from('biblioteca')
+    .insert({ ...dados, arquivo: caminho, nome_arquivo: arquivo.name, tipo: arquivo.type, tamanho: arquivo.size, autor_nome: u.user.user_metadata?.nome || u.user.user_metadata?.full_name || u.user.user_metadata?.name || '' })
+    .select('*')
+    .single();
+  if (error) {
+    await supabase.storage.from('biblioteca').remove([caminho]);
+    throw new Error(error.message);
+  }
+  return data;
+}
+export async function linkArquivo(item, baixar = false) {
+  if (!supabase) return item.arquivo;
+  const { data, error } = await supabase.storage.from('biblioteca').createSignedUrl(item.arquivo, 3600, baixar ? { download: item.nome_arquivo || true } : undefined);
+  if (error) throw new Error(error.message);
+  return data.signedUrl;
+}
+export async function excluirArquivo(item) {
+  if (!supabase) {
+    localStorage.setItem(LS_BIB, JSON.stringify(bibLocal().filter((x) => x.id !== item.id)));
+    return;
+  }
+  const { error } = await supabase.from('biblioteca').delete().eq('id', item.id);
+  if (error) throw new Error(error.message);
+  await supabase.storage.from('biblioteca').remove([item.arquivo]);
+}

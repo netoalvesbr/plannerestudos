@@ -339,3 +339,11 @@ mark { background: #ffe082; color: #000; border-radius: 2px; }
 .acoes-sec { margin: 6px 0 12px; }
 @media print { .barra-lei, .acoes-art, .acoes-sec { display: none; } }
 @media (max-width: 640px) { .so-largo { display: none; } }
+
+/* biblioteca */
+.grade-bib { display: grid; gap: 12px; grid-template-columns: repeat(auto-fill, minmax(155px, 1fr)); }
+.bloco-bib { display: flex; flex-direction: column; gap: 4px; align-items: flex-start; text-align: left; cursor: pointer; font: inherit; color: var(--txt); min-height: 140px; }
+.bloco-bib:hover { border-color: var(--pri); }
+.ico-bib { font-size: 2rem; }
+.lista-bib { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 8px; }
+.ico-arq { font-size: 1.8rem; }

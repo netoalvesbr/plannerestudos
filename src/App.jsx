@@ -13,6 +13,7 @@ import Questao, { Conclusao } from './components/Questao.jsx';
 import Painel from './components/Painel.jsx';
 import { Mapa } from './components/Mapas.jsx';
 import Estudar from './components/Estudar.jsx';
+import Biblioteca from './components/Biblioteca.jsx';
 import MenuDesempenho from './components/MenuDesempenho.jsx';
 import MenuDivulgar from './components/Divulgar.jsx';
 import Admin from './components/Admin.jsx';
@@ -259,6 +260,8 @@ export default function App() {
         }}
       />
     );
+  } else if (tela.nome === 'biblioteca') {
+    conteudo = <Biblioteca ctx={ctx} />;
   } else if (tela.nome === 'admin' && usuario?.admin) {
     conteudo = <Admin />;
   } else if (tela.nome === 'concursos' || !concurso) {
@@ -349,6 +352,7 @@ export default function App() {
               <button aria-current={tela.nome === 'calendario'} onClick={() => ir('calendario')}>📅 Calendário</button>
               <button aria-current={tela.nome === 'painel'} onClick={() => ir('painel')}>📊 Painel</button>
               <button aria-current={tela.nome.startsWith('mapa')} onClick={() => ir('mapas')}>📖 Estudar</button>
+              <button aria-current={tela.nome === 'biblioteca'} onClick={() => ir('biblioteca')}>📚 Biblioteca</button>
               <button aria-current={tela.nome === 'concursos' || tela.nome === 'ficha'} onClick={() => ir('concursos')}>🏆 Concursos</button>
             </nav>
           )}
