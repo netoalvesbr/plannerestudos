@@ -1,24 +1,15 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { getLei, leisPorMateria } from '../data/leis.js';
-import { lerLeiHtml, separarNotas } from '../lib/leiParser.js';
-import { anotacoesDaLei, excluirAnotacao, salvarAnotacoes } from '../lib/remoto.js';
+import { separarNotas } from '../lib/leiParser.js';
+import { anotacoesDaLei, excluirAnotacao, salvarAnotacoes, textoLei } from '../lib/remoto.js';
 
 // ⚖️ Leis: texto oficial do Planalto, artigo por artigo, com jurisprudência/doutrina ligada a cada artigo.
 const cacheLeis = new Map();
 async function carregarLei(lei) {
   if (cacheLeis.has(lei.id)) return cacheLeis.get(lei.id);
-  const r = await fetch(`/api/lei?url=${encodeURIComponent(lei.url)}`);
-  if (!r.ok) {
-    let msg = `Erro ${r.status}`;
-    try {
-      msg = (await r.json()).erro || msg;
-    } catch {
-      /* resposta sem JSON */
-    }
-    throw new Error(msg);
-  }
-  const doc = lerLeiHtml(await r.text());
-  if (!doc.itens.some((i) => i.tipo === 'artigo')) throw new Error('Não consegui separar os artigos desta lei. Abra no site do Planalto pelo link abaixo.');
+  const r = await textoLei(lei.id);
+  if (!r?.dados?.itens?.length) throw new Error('O texto desta lei ainda não foi carregado na plataforma. Enquanto isso, leia no site do Planalto pelo botão abaixo.');
+  const doc = { ...r.dados, atualizado: r.atualizado };
   cacheLeis.set(lei.id, doc);
   return doc;
 }
@@ -172,7 +163,7 @@ function LeitorLei({ ctx, lei, artInicial, voltar }) {
       <h2 style={{ marginBottom: 2 }}>Lei seca – {lei.nome}</h2>
       {doc?.ementa && <p className="sub peq" style={{ marginTop: 0 }}>{doc.ementa}</p>}
       <p className="peq sub" style={{ marginTop: 0 }}>
-        Fonte oficial: <a href={lei.url} target="_blank" rel="noreferrer">Planalto ↗</a> · texto compilado, sem os trechos revogados.
+        Fonte oficial: <a href={lei.url} target="_blank" rel="noreferrer">Planalto ↗</a> · texto compilado, sem os trechos revogados{doc?.atualizado ? ` · atualizado em ${new Date(doc.atualizado).toLocaleDateString('pt-BR')}` : ''}.
       </p>
 
       <div className="barra-lei">
@@ -207,7 +198,7 @@ function LeitorLei({ ctx, lei, artInicial, voltar }) {
         </div>
       )}
       {erro && doc && <p className="aviso" role="alert" onClick={() => setErro(null)}>{erro}</p>}
-      {!doc && !erro && <p className="sub">Buscando o texto oficial no site do Planalto…</p>}
+      {!doc && !erro && <p className="sub">Carregando o texto da lei…</p>}
       {termo && <p className="sub peq">{visiveis.length} artigos com “{filtro}”.</p>}
 
       <div className="texto-lei" style={{ fontSize: `${fonte}rem` }}>
@@ -237,7 +228,7 @@ function LeitorLei({ ctx, lei, artInicial, voltar }) {
       </div>
       {doc && (
         <p className="peq sub" style={{ marginTop: 16 }}>
-          Texto carregado do Planalto. Em caso de dúvida, confira sempre a <a href={lei.url} target="_blank" rel="noreferrer">publicação oficial</a>.
+          Texto copiado do site do Planalto. Em caso de dúvida, confira sempre a <a href={lei.url} target="_blank" rel="noreferrer">publicação oficial</a>.
         </p>
       )}
     </div>

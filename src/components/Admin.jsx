@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { dadosAdmin } from '../lib/remoto.js';
+import ImportarLeis from './ImportarLeis.jsx';
 
 // Painel do administrador: quantas pessoas têm conta, quantas já entraram e quantas vezes cada uma acessou.
 const DIA = 86400000;
@@ -62,6 +63,7 @@ export default function Admin() {
         <h1>👑 Painel do administrador</h1>
         <p className="aviso" role="alert">✗ {erro}</p>
         <button className="btn" onClick={carregar}>↻ Tentar de novo</button>
+        <ImportarLeis />
       </div>
     );
   }
@@ -144,6 +146,7 @@ export default function Admin() {
         {!lista.length && <p className="sub">Ninguém encontrado.</p>}
         <p className="peq sub" style={{ marginTop: 8 }}>Os acessos passaram a ser contados a partir da ativação deste painel; antes disso só existe a data do último login.</p>
       </section>
+      <ImportarLeis />
     </div>
   );
 }

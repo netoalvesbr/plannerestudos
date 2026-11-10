@@ -357,3 +357,37 @@ export async function excluirEstudo(id) {
   const { error } = await supabase.from('estudos_interativos').delete().eq('id', id);
   if (error) throw new Error(error.message);
 }
+
+// ---------- texto das leis ----------
+const LS_LEIS = 'estudaai.leisTexto';
+const lerLeisLocal = () => {
+  try {
+    return JSON.parse(localStorage.getItem(LS_LEIS)) || {};
+  } catch {
+    return {};
+  }
+};
+export async function textoLei(id) {
+  if (!supabase) return lerLeisLocal()[id] || null;
+  const { data, error } = await supabase.from('leis_texto').select('dados, atualizado').eq('id', id).maybeSingle();
+  if (error) throw new Error(/leis_texto/.test(error.message) ? 'O banco de leis ainda não foi ativado.' : error.message);
+  return data;
+}
+export async function statusLeis() {
+  if (!supabase) return Object.entries(lerLeisLocal()).map(([id, v]) => ({ id, atualizado: v.atualizado }));
+  const { data, error } = await supabase.from('leis_texto').select('id, atualizado');
+  if (error) throw new Error(/leis_texto/.test(error.message) ? 'O banco de leis ainda não foi ativado no banco de dados.' : error.message);
+  return data;
+}
+export async function salvarTextoLei(id, dados, fonte) {
+  if (!supabase) {
+    try {
+      localStorage.setItem(LS_LEIS, JSON.stringify({ ...lerLeisLocal(), [id]: { dados, fonte, atualizado: new Date().toISOString() } }));
+    } catch {
+      throw new Error('Sem espaço no navegador para guardar esta lei no modo local.');
+    }
+    return;
+  }
+  const { error } = await supabase.from('leis_texto').upsert({ id, dados, fonte, atualizado: new Date().toISOString() });
+  if (error) throw new Error(error.message);
+}
