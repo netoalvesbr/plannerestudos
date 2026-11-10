@@ -11,7 +11,8 @@ import * as store from './lib/store.js';
 import { EscolhaArea, EscolhaCargo, EscolhaFase, Ficha, Login, MeusConcursos, NovaSenha } from './components/Concursos.jsx';
 import Questao, { Conclusao } from './components/Questao.jsx';
 import Painel from './components/Painel.jsx';
-import { ListaMapas, Mapa } from './components/Mapas.jsx';
+import { Mapa } from './components/Mapas.jsx';
+import Estudar from './components/Estudar.jsx';
 import MenuDesempenho from './components/MenuDesempenho.jsx';
 import MenuDivulgar from './components/Divulgar.jsx';
 import Admin from './components/Admin.jsx';
@@ -301,7 +302,7 @@ export default function App() {
   } else if (tela.nome === 'painel') {
     conteudo = <Painel ctx={ctx} />;
   } else if (tela.nome === 'mapas') {
-    conteudo = <ListaMapas ctx={ctx} />;
+    conteudo = <Estudar ctx={ctx} />;
   } else if (tela.nome === 'mapa') {
     conteudo = <Mapa ctx={ctx} disciplina={tela.disciplina} />;
   } else {
@@ -328,14 +329,14 @@ export default function App() {
           <div className="topo-linha" style={{ paddingRight: concurso ? 56 : 0 }}>
             <button className="logo" onClick={() => ir('inicio')}>EstudaAí</button>
             <span className="sub">Olá, {usuario.nome.split(' ')[0]}</span>
-            {usuario.admin && <button className="btn peq" aria-current={tela.nome === 'admin'} onClick={() => setTela({ nome: 'admin' })} title="Painel do administrador: pessoas e acessos">👑 Admin</button>}
+            {usuario.admin && <button className="btn peq" aria-current={tela.nome === 'admin'} onClick={() => setTela({ nome: 'admin' })} title="Painel do administrador: pessoas e acessos" aria-label="Painel do administrador">👑<span className="so-largo"> Admin</span></button>}
             <MenuDivulgar compacto nome={usuario.nome} />
             {seguindo.length > 1 && (
               <select aria-label="Concurso ativo" value={prefs.ativo || ''} onChange={(e) => { setPrefs({ ativo: e.target.value }); ir('inicio'); }} style={{ width: 'auto' }}>
                 {seguindo.map((id) => <option key={id} value={id}>{getConcurso(id)?.sigla}</option>)}
               </select>
             )}
-            <button className="btn peq" onClick={alternarCronometro} title="Abrir ou fechar o cronômetro flutuante">⏱ Cronômetro</button>
+            <button className="btn peq" onClick={alternarCronometro} title="Abrir ou fechar o cronômetro flutuante" aria-label="Cronômetro">⏱<span className="so-largo"> Cronômetro</span></button>
             <button className="btn peq" aria-label={tema === 'escuro' ? 'Usar modo claro' : 'Usar modo escuro'} onClick={() => setPrefs({ tema: tema === 'escuro' ? 'claro' : 'escuro' })}>
               {tema === 'escuro' ? '☀️' : '🌙'}
             </button>
@@ -347,7 +348,7 @@ export default function App() {
               <button aria-current={tela.nome === 'cronograma'} onClick={() => ir('cronograma')}>📆 Cronograma</button>
               <button aria-current={tela.nome === 'calendario'} onClick={() => ir('calendario')}>📅 Calendário</button>
               <button aria-current={tela.nome === 'painel'} onClick={() => ir('painel')}>📊 Painel</button>
-              <button aria-current={tela.nome.startsWith('mapa')} onClick={() => ir('mapas')}>🧠 Mapas</button>
+              <button aria-current={tela.nome.startsWith('mapa')} onClick={() => ir('mapas')}>📖 Estudar</button>
               <button aria-current={tela.nome === 'concursos' || tela.nome === 'ficha'} onClick={() => ir('concursos')}>🏆 Concursos</button>
             </nav>
           )}

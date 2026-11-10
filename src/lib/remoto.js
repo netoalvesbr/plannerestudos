@@ -280,3 +280,80 @@ export async function dadosAdmin(dias = 90) {
   }
   return { usuarios: usuarios || [], acessos };
 }
+
+// ---------- leis: jurisprudência/doutrina por artigo ----------
+const LS_ANOT = 'estudaai.anotacoesLei';
+export async function anotacoesDaLei(lei) {
+  if (!supabase) {
+    try {
+      return (JSON.parse(localStorage.getItem(LS_ANOT)) || []).filter((a) => a.lei === lei);
+    } catch {
+      return [];
+    }
+  }
+  const { data, error } = await supabase.from('anotacoes_lei').select('*').eq('lei', lei).order('criado_em');
+  if (error) throw new Error(/anotacoes_lei/.test(error.message) ? 'A jurisprudência por artigo ainda não foi ativada no banco de dados.' : error.message);
+  return data;
+}
+export async function salvarAnotacoes(lista) {
+  if (!supabase) {
+    const todas = JSON.parse(localStorage.getItem(LS_ANOT) || '[]');
+    const novas = lista.map((a) => ({ ...a, id: crypto.randomUUID(), criado_por: 'local', criado_em: new Date().toISOString() }));
+    localStorage.setItem(LS_ANOT, JSON.stringify([...todas, ...novas]));
+    return novas;
+  }
+  const { data, error } = await supabase.from('anotacoes_lei').insert(lista).select('*');
+  if (error) throw new Error(error.message);
+  return data;
+}
+export async function excluirAnotacao(id) {
+  if (!supabase) {
+    const todas = JSON.parse(localStorage.getItem(LS_ANOT) || '[]');
+    localStorage.setItem(LS_ANOT, JSON.stringify(todas.filter((a) => a.id !== id)));
+    return;
+  }
+  const { error } = await supabase.from('anotacoes_lei').delete().eq('id', id);
+  if (error) throw new Error(error.message);
+}
+
+// ---------- PDFs interativos ----------
+const LS_EST = 'estudaai.estudos';
+export async function listarEstudos(materia) {
+  if (!supabase) {
+    try {
+      return (JSON.parse(localStorage.getItem(LS_EST)) || []).filter((e) => !materia || e.materia === materia);
+    } catch {
+      return [];
+    }
+  }
+  let q = supabase.from('estudos_interativos').select('id, materia, topico, concurso_ref, criado_por, criado_em');
+  if (materia) q = q.eq('materia', materia);
+  const { data, error } = await q.order('criado_em');
+  if (error) throw new Error(/estudos_interativos/.test(error.message) ? 'Os PDFs interativos ainda não foram ativados no banco de dados.' : error.message);
+  return data;
+}
+export async function lerEstudo(id) {
+  if (!supabase) return (JSON.parse(localStorage.getItem(LS_EST)) || []).find((e) => e.id === id);
+  const { data, error } = await supabase.from('estudos_interativos').select('*').eq('id', id).single();
+  if (error) throw new Error(error.message);
+  return data;
+}
+export async function salvarEstudo(e) {
+  if (!supabase) {
+    const todos = JSON.parse(localStorage.getItem(LS_EST) || '[]');
+    const novo = { ...e, id: crypto.randomUUID(), criado_por: 'local', criado_em: new Date().toISOString() };
+    localStorage.setItem(LS_EST, JSON.stringify([...todos, novo]));
+    return novo;
+  }
+  const { data, error } = await supabase.from('estudos_interativos').insert(e).select('*').single();
+  if (error) throw new Error(error.message);
+  return data;
+}
+export async function excluirEstudo(id) {
+  if (!supabase) {
+    localStorage.setItem(LS_EST, JSON.stringify((JSON.parse(localStorage.getItem(LS_EST)) || []).filter((e) => e.id !== id)));
+    return;
+  }
+  const { error } = await supabase.from('estudos_interativos').delete().eq('id', id);
+  if (error) throw new Error(error.message);
+}

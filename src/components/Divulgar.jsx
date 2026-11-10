@@ -78,8 +78,8 @@ export default function MenuDivulgar({ nome, compacto = false }) {
   return (
     <>
       <div className={compacto ? 'linha' : 'linha extras-entrada'}>
-        <button type="button" className={`btn${compacto ? ' peq' : ''}`} aria-expanded={aberto === 'comp'} onClick={() => setAberto(aberto === 'comp' ? null : 'comp')}>🔗 Compartilhar</button>
-        <button type="button" className={`btn${compacto ? ' peq' : ''}`} aria-expanded={aberto === 'sug'} onClick={() => setAberto(aberto === 'sug' ? null : 'sug')}>💡 Sugestões e melhorias</button>
+        <button type="button" className={`btn${compacto ? ' peq' : ''}`} aria-expanded={aberto === 'comp'} onClick={() => setAberto(aberto === 'comp' ? null : 'comp')} aria-label="Compartilhar">🔗<span className={compacto ? 'so-largo' : ''}> Compartilhar</span></button>
+        <button type="button" className={`btn${compacto ? ' peq' : ''}`} aria-expanded={aberto === 'sug'} onClick={() => setAberto(aberto === 'sug' ? null : 'sug')} aria-label="Sugestões e melhorias">💡<span className={compacto ? 'so-largo' : ''}> Sugestões e melhorias</span></button>
       </div>
       {aberto && (
         <>
