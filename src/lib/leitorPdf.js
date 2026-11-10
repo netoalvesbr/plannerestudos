@@ -26,7 +26,7 @@ export function preCarregarLeitor() {
   else setTimeout(ir, 2000);
 }
 
-export async function textoDoPdf(arquivo, aoProgredir) {
+export async function textoDoPdf(arquivo, aoProgredir, maxPaginas) {
   let m;
   try {
     m = await carregar();
@@ -34,7 +34,7 @@ export async function textoDoPdf(arquivo, aoProgredir) {
     throw new Error(ehFalhaDeCarga(e) ? MSG_ATUALIZADA : 'Não foi possível abrir o leitor de PDF: ' + e.message);
   }
   try {
-    return await m.textoDoPdf(arquivo, aoProgredir);
+    return await m.textoDoPdf(arquivo, aoProgredir, maxPaginas);
   } catch (e) {
     if (ehFalhaDeCarga(e)) throw new Error(MSG_ATUALIZADA);
     if (/password/i.test(e?.name + e?.message)) throw new Error('Este PDF está protegido por senha. Salve uma cópia sem senha e tente de novo.');

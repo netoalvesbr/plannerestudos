@@ -23,12 +23,13 @@ export function prepararPdf() {
   return preparado;
 }
 
-export async function textoDoPdf(arquivo, aoProgredir) {
+export async function textoDoPdf(arquivo, aoProgredir, maxPaginas = Infinity) {
   await prepararPdf();
   const dados = new Uint8Array(await arquivo.arrayBuffer());
   const doc = await pdfjs.getDocument({ data: dados }).promise;
   const linhas = [];
-  for (let p = 1; p <= doc.numPages; p++) {
+  const total = Math.min(doc.numPages, maxPaginas);
+  for (let p = 1; p <= total; p++) {
     const pagina = await doc.getPage(p);
     const conteudo = await pagina.getTextContent();
     const largura = pagina.getViewport({ scale: 1 }).width;
@@ -63,7 +64,7 @@ export async function textoDoPdf(arquivo, aoProgredir) {
         });
     }
     linhas.push(''); // quebra de página
-    aoProgredir?.(p, doc.numPages);
+    aoProgredir?.(p, total);
   }
   return linhas;
 }

@@ -2,6 +2,8 @@ import { useEffect, useState } from 'react';
 import { contarBiblioteca, enviarArquivo, excluirArquivo, linkArquivo, listarBiblioteca } from '../lib/remoto.js';
 import { catalogoMaterias, mesmaMateria } from '../data/materias.js';
 import Leis from './Leis.jsx';
+import { ListaMapas } from './Mapas.jsx';
+import { adivinharMateria, classificar, textoDoArquivo } from '../lib/classificar.js';
 
 // 📚 Biblioteca: arquivos compartilhados entre os usuários (PDF, imagem, Word), por categoria
 export const CATEGORIAS = [
@@ -10,6 +12,7 @@ export const CATEGORIAS = [
   { id: 'leis', icone: '📜', nome: 'Leis', desc: 'Lei seca navegável e PDFs de legislação' },
   { id: 'questoes', icone: '✎', nome: 'Questões', desc: 'Provas anteriores, listas e simulados em PDF' },
   { id: 'pecas', icone: '🖋️', nome: 'Modelos de peças', desc: 'Modelos de peças processuais e pareceres' },
+  { id: 'mapas', icone: '🧠', nome: 'Mapas mentais', desc: 'Mapas mentais da plataforma e enviados pelos usuários' },
   { id: 'rascunho', icone: '🗒️', nome: 'Cadernos de rascunho', desc: 'Modelos de caderno de rascunho e folhas de resposta' },
   { id: 'outros', icone: '📁', nome: 'Outros arquivos', desc: 'Mapas, cronogramas, imagens e demais arquivos' },
 ];
@@ -30,13 +33,17 @@ export default function Biblioteca({ ctx }) {
     if (!cat) contarBiblioteca().then(setContagem).catch((e) => setErro(e.message));
   }, [cat]);
 
+  if (cat === 'importar') return <ImportarVarios ctx={ctx} voltar={() => ir(null)} />;
   if (cat) return <Categoria ctx={ctx} cat={cat === 'todas' ? TODAS : CATEGORIAS.find((c) => c.id === cat) || CATEGORIAS[0]} voltar={() => ir(null)} />;
   return (
     <div>
       <h1>📚 Biblioteca</h1>
       <p className="sub">Materiais compartilhados entre os usuários do EstudaAí. Escolha uma seção para ver os arquivos ou enviar os seus (PDF, imagem ou Word).</p>
       {erro && <p className="aviso">⚠️ {erro}</p>}
-      <button className="btn" style={{ marginBottom: 12 }} onClick={() => ir('todas')}>🔎 Procurar material por matéria (todas as seções)</button>
+      <div className="linha" style={{ marginBottom: 12 }}>
+        <button className="btn pri" onClick={() => ir('importar')}>📦 Importar vários materiais</button>
+        <button className="btn" onClick={() => ir('todas')}>🔎 Procurar material por matéria (todas as seções)</button>
+      </div>
       <div className="grade-bib">
         {CATEGORIAS.map((c) => (
           <button key={c.id} className="card bloco-bib" onClick={() => ir(c.id)}>
@@ -58,7 +65,7 @@ function Categoria({ ctx, cat, voltar }) {
   const [busca, setBusca] = useState('');
   const [materia, setMateria] = useState('');
   const [enviar, setEnviar] = useState(false);
-  const [aba, setAba] = useState(cat.id === 'leis' ? 'seca' : 'arquivos');
+  const [aba, setAba] = useState(cat.id === 'leis' || cat.id === 'mapas' ? 'seca' : 'arquivos');
   const [conf, setConf] = useState(null);
   const recarregar = () =>
     listarBiblioteca(cat.id === 'todas' ? null : cat.id)
@@ -109,8 +116,16 @@ function Categoria({ ctx, cat, voltar }) {
           <button role="tab" aria-selected={aba === 'arquivos'} onClick={() => setAba('arquivos')}>📄 Arquivos de leis</button>
         </div>
       )}
+      {cat.id === 'mapas' && (
+        <div className="abas" role="tablist">
+          <button role="tab" aria-selected={aba === 'seca'} onClick={() => setAba('seca')}>🧠 Mapas da plataforma</button>
+          <button role="tab" aria-selected={aba === 'arquivos'} onClick={() => setAba('arquivos')}>📄 Mapas enviados (arquivos)</button>
+        </div>
+      )}
       {cat.id === 'leis' && aba === 'seca' ? (
         <Leis ctx={ctx} />
+      ) : cat.id === 'mapas' && aba === 'seca' ? (
+        ctx.concurso ? <ListaMapas ctx={ctx} /> : <p className="sub">Acompanhe um concurso para ver os mapas mentais da plataforma.</p>
       ) : (
         <>
           {cat.id === 'questoes' && (
@@ -121,6 +136,7 @@ function Categoria({ ctx, cat, voltar }) {
           )}
           <div className="linha" style={{ margin: '10px 0' }}>
             <button className="btn pri" onClick={() => setEnviar(!enviar)} aria-expanded={enviar}>⬆️ Enviar arquivo</button>
+            <button className="btn" onClick={() => ctx.setPrefs({ bibliotecaCat: 'importar' })}>📦 Importar vários</button>
             <input type="search" value={busca} onChange={(e) => setBusca(e.target.value)} placeholder="🔎 Procurar por título, matéria ou concurso" aria-label="Procurar arquivo" style={{ flex: 1, minWidth: 180 }} />
           </div>
           {enviar && <FormEnvio cat={cat} materias={materias} materiaInicial={materia} concurso={concurso} aoEnviar={() => { setEnviar(false); recarregar(); }} />}
@@ -249,5 +265,126 @@ function FormEnvio({ cat, materias, materiaInicial, concurso, aoEnviar }) {
         <button className="btn pri" disabled={!ok || !arq || !!status}>⬆️ Enviar</button>
       </div>
     </form>
+  );
+}
+
+// título: o nome do arquivo; se for genérico (arquivo2, scan_01...), a primeira linha com conteúdo do texto
+function tituloDe(nome, texto) {
+  const base = nome.replace(/\.\w+$/, '').replace(/[-_]+/g, ' ').trim();
+  if (!/^(arquivo|doc|documento|scan|digitaliza\w*|material|img|image|imagem|file|download|novo|sem t[íi]tulo)?\s*\(?\d*\)?$/i.test(base) && base.length > 3) return base;
+  const linha = (texto || '').split('\n').map((l) => l.trim()).find((l) => /\p{L}{3}/u.test(l) && l.length > 8);
+  return linha ? linha.slice(0, 90) : base;
+}
+
+// 📦 Importar vários materiais de uma vez: o sistema reconhece a seção e a matéria de cada arquivo
+function ImportarVarios({ ctx, voltar }) {
+  const [itens, setItens] = useState([]);
+  const [lendo, setLendo] = useState(null);
+  const [ok, setOk] = useState(false);
+  const [enviando, setEnviando] = useState(false);
+  const materias = Object.values(catalogoMaterias()).flat();
+  const concurso = ctx.concurso?.sigla || '';
+
+  async function escolher(lista) {
+    const arqs = [...lista];
+    const novos = [];
+    for (let i = 0; i < arqs.length; i++) {
+      const a = arqs[i];
+      setLendo(`Analisando ${i + 1} de ${arqs.length}: ${a.name}`);
+      const erro = a.size > 25 * 1024 * 1024 ? 'Maior que 25 MB' : !/\.(pdf|png|jpe?g|webp|docx?|txt)$/i.test(a.name) ? 'Tipo não aceito' : null;
+      const texto = erro ? '' : await textoDoArquivo(a);
+      novos.push({
+        id: `${a.name}-${a.size}-${i}`,
+        arquivo: a,
+        titulo: tituloDe(a.name, texto),
+        categoria: classificar(a.name, texto),
+        materia: adivinharMateria(a.name, texto, materias),
+        concurso,
+        status: erro ? `✗ ${erro}` : 'pronto',
+        lido: !!texto,
+      });
+    }
+    setItens((v) => [...v, ...novos]);
+    setLendo(null);
+  }
+  const mudar = (id, k, val) => setItens((v) => v.map((x) => (x.id === id ? { ...x, [k]: val } : x)));
+  async function enviarTodos() {
+    setEnviando(true);
+    for (const x of itens) {
+      if (x.status !== 'pronto' && !x.status.startsWith('✗ Falhou')) continue;
+      if (!x.materia.trim()) {
+        mudar(x.id, 'status', '✗ Falta a matéria');
+        continue;
+      }
+      mudar(x.id, 'status', '⏳ enviando…');
+      try {
+        await enviarArquivo({ categoria: x.categoria, titulo: x.titulo.trim() || x.arquivo.name, descricao: null, materia: x.materia.trim(), concurso: x.concurso.trim() || null }, x.arquivo);
+        mudar(x.id, 'status', '✓ enviado');
+      } catch (e) {
+        mudar(x.id, 'status', `✗ Falhou: ${e.message}`);
+      }
+    }
+    setEnviando(false);
+  }
+  const [paraTodos, setParaTodos] = useState('');
+  const semMateria = itens.filter((x) => !x.materia.trim() && x.status !== '✓ enviado').length;
+  const prontos = itens.filter((x) => x.status === 'pronto' || x.status.startsWith('✗ Falhou') || x.status === '✗ Falta a matéria').length;
+  const enviados = itens.filter((x) => x.status === '✓ enviado').length;
+
+  return (
+    <div>
+      <button className="btn peq" onClick={voltar}>← Biblioteca</button>
+      <h1>📦 Importar vários materiais</h1>
+      <p className="sub">Selecione de uma vez quantos arquivos quiser (PDF, Word ou imagem, até 25 MB cada). O sistema lê o nome e o começo de cada arquivo e sugere a <b>seção</b> (questões, lei, jurisprudência, doutrina, mapa mental, modelo de peça…) e a <b>matéria</b>. Confira e corrija na tabela antes de enviar.</p>
+      <label className="btn pri" style={{ cursor: 'pointer' }}>
+        ➕ Escolher arquivos
+        <input type="file" multiple accept={ACEITOS} className="oculto" onChange={(e) => { if (e.target.files.length) escolher(e.target.files); e.target.value = ''; }} />
+      </label>
+      {lendo && <p className="aviso" role="status" style={{ background: 'var(--pri-claro)', color: 'var(--txt)' }}>⏳ {lendo}</p>}
+      {itens.length > 0 && (
+        <>
+          <datalist id="mat-imp">{materias.map((m) => <option key={m} value={m} />)}</datalist>
+          <div className="tabela-rolagem">
+            <table className="tabela-admin">
+              <thead><tr><th>Arquivo</th><th>Título</th><th>Seção (sugerida)</th><th>Matéria (sugerida)</th><th>Situação</th><th /></tr></thead>
+              <tbody>
+                {itens.map((x) => {
+                  const travado = x.status === '✓ enviado' || x.status.startsWith('⏳') || x.status.startsWith('✗ Maior') || x.status.startsWith('✗ Tipo');
+                  return (
+                    <tr key={x.id}>
+                      <td className="peq">{icoTipo(x.arquivo.type)} {x.arquivo.name}<div className="sub">{fmtTam(x.arquivo.size)}{x.lido ? '' : ' · classificado pelo nome'}</div></td>
+                      <td><input value={x.titulo} disabled={travado} onChange={(e) => mudar(x.id, 'titulo', e.target.value)} aria-label={`Título de ${x.arquivo.name}`} /></td>
+                      <td>
+                        <select value={x.categoria} disabled={travado} onChange={(e) => mudar(x.id, 'categoria', e.target.value)} aria-label={`Seção de ${x.arquivo.name}`}>
+                          {CATEGORIAS.map((c) => <option key={c.id} value={c.id}>{c.icone} {c.nome}</option>)}
+                        </select>
+                      </td>
+                      <td><input list="mat-imp" value={x.materia} disabled={travado} style={!x.materia.trim() && !travado ? { borderColor: 'var(--erro)' } : undefined} onChange={(e) => { mudar(x.id, 'materia', e.target.value); if (x.status === '✗ Falta a matéria') mudar(x.id, 'status', 'pronto'); }} placeholder="escolha a matéria" aria-label={`Matéria de ${x.arquivo.name}`} /></td>
+                      <td className="peq">{x.status === 'pronto' ? 'pronto para enviar' : x.status}</td>
+                      <td>{!travado && <button className="link peq" onClick={() => setItens((v) => v.filter((y) => y.id !== x.id))} aria-label={`Tirar ${x.arquivo.name} da lista`}>✕</button>}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+          {semMateria > 0 && (
+            <div className="aviso linha" style={{ marginTop: 8 }}>
+              <span>⚠️ {semMateria} {semMateria === 1 ? 'arquivo está' : 'arquivos estão'} sem matéria. Preencha na tabela ou use para todos:</span>
+              <input list="mat-imp" value={paraTodos} onChange={(e) => setParaTodos(e.target.value)} placeholder="matéria" aria-label="Matéria para os arquivos sem matéria" />
+              <button className="btn peq" disabled={!paraTodos.trim()} onClick={() => setItens((v) => v.map((x) => (x.materia.trim() || x.status === '✓ enviado' ? x : { ...x, materia: paraTodos, status: x.status === '✗ Falta a matéria' ? 'pronto' : x.status })))}>Aplicar</button>
+            </div>
+          )}
+          <label style={{ display: 'flex', gap: 8, alignItems: 'flex-start', marginTop: 10 }}>
+            <input type="checkbox" checked={ok} onChange={() => setOk(!ok)} style={{ width: 20, height: 20, marginTop: 2 }} />
+            <span className="peq">Declaro que posso compartilhar estes arquivos: são materiais meus, de domínio público (como leis e decisões judiciais) ou tenho autorização dos autores. Não envio apostilas ou livros pagos de terceiros.</span>
+          </label>
+          <div className="linha" style={{ marginTop: 8 }}>
+            <button className="btn pri" disabled={!ok || !prontos || enviando || !!lendo} onClick={enviarTodos}>⬆️ Enviar {prontos} {prontos === 1 ? 'arquivo' : 'arquivos'}</button>
+            {enviados > 0 && <span className="peq">✓ {enviados} {enviados === 1 ? 'enviado' : 'enviados'}</span>}
+          </div>
+        </>
+      )}
+    </div>
   );
 }
