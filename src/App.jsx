@@ -14,6 +14,7 @@ import Painel from './components/Painel.jsx';
 import { Mapa } from './components/Mapas.jsx';
 import Estudar from './components/Estudar.jsx';
 import Biblioteca from './components/Biblioteca.jsx';
+import MeusCronogramas from './components/MeusCronogramas.jsx';
 import MenuDesempenho from './components/MenuDesempenho.jsx';
 import MenuDivulgar from './components/Divulgar.jsx';
 import Admin from './components/Admin.jsx';
@@ -252,7 +253,7 @@ export default function App() {
               ativo: id,
               concursos: { ...(prefs.concursos || {}), [id]: { ...(prefs.concursos?.[id] || {}), fase: escolha.fase, area: escolha.area } },
             });
-            setTela({ nome: 'cronograma' });
+            setTela({ nome: 'cronograma', abrir: { cid: id, fase: escolha.fase || '', area: escolha.area || '' } });
             return;
           }
           if (!tela.id) setPrefs({ seguindo: [...new Set([...(prefs.seguindo || []), id])], ativo: id });
@@ -264,6 +265,20 @@ export default function App() {
     conteudo = <Biblioteca ctx={ctx} />;
   } else if (tela.nome === 'admin' && usuario?.admin) {
     conteudo = <Admin />;
+  } else if (tela.nome === 'cronograma' && !tela.abrir) {
+    conteudo = <MeusCronogramas ctx={ctx} abrir={(a) => setTela({ nome: 'cronograma', abrir: a })} />;
+  } else if (tela.nome === 'cronograma' && tela.abrir !== 'ativo' && getConcurso(tela.abrir.cid)) {
+    // cronograma de qualquer concurso que a pessoa acompanha (não só o ativo)
+    const cc = getConcurso(tela.abrir.cid);
+    const pcc = prefs.concursos?.[cc.id] || {};
+    const nC = cc.cargos?.length || 0;
+    conteudo = (
+      <Cronograma
+        key={[cc.id, tela.abrir.fase, tela.abrir.area].join('|')}
+        ctx={{ ...ctx, concurso: cc, fase: tela.abrir.fase || '', area: tela.abrir.area || '', cargo: nC > 1 ? pcc.cargo || 'ambos' : cc.cargos?.[0]?.id || 'ambos' }}
+        voltar={() => setTela({ nome: 'cronograma' })}
+      />
+    );
   } else if (tela.nome === 'concursos' || !concurso) {
     conteudo = (
       <>
@@ -285,7 +300,7 @@ export default function App() {
         aoEscolher={(v) => {
           setPrefConc(concurso.id, { fase: v, area: null });
           const f = concurso.fases.find((x) => x.id === v);
-          if (!f?.areas?.length) setTela({ nome: 'cronograma' });
+          if (!f?.areas?.length) setTela({ nome: 'cronograma', abrir: 'ativo' });
         }}
       />
     );
@@ -296,12 +311,12 @@ export default function App() {
         fase={faseObj}
         aoEscolher={(v) => {
           setPrefConc(concurso.id, { area: v });
-          setTela({ nome: 'cronograma' });
+          setTela({ nome: 'cronograma', abrir: 'ativo' });
         }}
       />
     );
   } else if (tela.nome === 'cronograma') {
-    conteudo = <Cronograma key={[concurso.id, fase, area].join('|')} ctx={ctx} />;
+    conteudo = <Cronograma key={[concurso.id, fase, area].join('|')} ctx={ctx} voltar={() => setTela({ nome: 'cronograma' })} />;
   } else if (tela.nome === 'painel') {
     conteudo = <Painel ctx={ctx} />;
   } else if (tela.nome === 'mapas') {

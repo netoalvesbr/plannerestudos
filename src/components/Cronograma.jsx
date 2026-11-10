@@ -36,7 +36,7 @@ function normalizar(cfg, dataProva) {
 
 const PASSOS = ['Modo', 'Cargos', 'Matérias', 'Dias e horas', 'Blocos', 'Revisões', 'Resumo'];
 
-export default function Cronograma({ ctx }) {
+export default function Cronograma({ ctx, voltar }) {
   const { concurso, cargo, fase, area, prefs, setPrefs, abrirAvulsas } = ctx;
   const faseObj = concurso.fases?.find((f) => f.id === fase);
   const areaObj = faseObj?.areas?.find((a) => a.id === area);
@@ -119,6 +119,7 @@ export default function Cronograma({ ctx }) {
 
     return (
       <div>
+        {voltar && <button className="btn peq" onClick={voltar} style={{ marginBottom: 8 }}>← Meus cronogramas</button>}
         <h1>📆 {salvo ? 'Ajustar cronograma' : 'Montar meu cronograma'}</h1>
         <p className="sub">{titulo} · {discs.length} {discs.length === 1 ? 'matéria' : 'matérias'} · {discs.reduce((s, d) => s + (d.topicos?.length || 0), 0)} tópicos{dataProva ? ` · prova em ${fmtData(dataProva)}` : ''}</p>
         <ol className="passos" aria-label="Etapas">
@@ -373,6 +374,7 @@ export default function Cronograma({ ctx }) {
 
   return (
     <div>
+      {voltar && <button className="btn peq" onClick={voltar} style={{ marginBottom: 8 }}>← Meus cronogramas</button>}
       <div className="linha entre">
         <h1 style={{ margin: 0 }}>📆 Cronograma de estudos</h1>
         <div className="linha">
