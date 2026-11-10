@@ -91,18 +91,60 @@ export function lerEdital(linhas) {
   }
   r.cronograma.sort((a, b) => a.data.localeCompare(b.data));
 
-  // data da prova: data mais próxima de expressões típicas
-  const reProva = /(aplica[çc][ãa]o d[ao]s? provas?|data d[ao]s? provas?|provas? objetivas?(?: e discursivas?)?(?: ser[ãa]o)? (?:aplicadas|realizadas)|realiza[çc][ãa]o d[ao]s? provas?|prova objetiva)/gi;
-  let m;
-  const ds = datasNoTexto(texto);
-  let melhorDist = Infinity;
-  while ((m = reProva.exec(texto))) {
-    for (const d of ds) {
-      const dist = d.pos - m.index;
-      const custo = dist >= 0 ? dist : 1000 - dist; // prefere a data que vem depois da expressão
-      if (dist >= -40 && dist < 400 && custo < melhorDist) {
-        melhorDist = custo;
-        r.dataProva = d.iso;
+  // data da prova
+  // 1º) linha do cronograma "Realização/Aplicação da(s) prova(s) ... dd/mm/aaaa" (a forma mais confiável)
+  // 2º) data mais próxima de expressões típicas, ignorando datas de leis, decretos, cabeçalhos e assinaturas
+  const naJanela = (d) => +d.iso.slice(0, 4) >= anoAtual - 1 && +d.iso.slice(0, 4) <= anoAtual + 2;
+  const NAO_E_DATA_DE_PROVA = /(divulga|loca(is|l) de|gabarito|padr[ãa]o de resposta|resultado|recurso|convoca|envio|inscri[çc]|isen[çc]|impugna|pagamento|t[íi]tulos|biopsicossocial|per[íi]cia|heteroidentifica)/i;
+  const candidatas = [];
+  for (let i = 0; i < linhas.length; i++) {
+    const l = linhas[i];
+    if (!/(realiza[çc][ãa]o|aplica[çc][ãa]o|data)\s+d[ao]s?\s+provas?|provas?\s+(objetiva|escrita|discursiva)s?.*(aplicad|realizad)/i.test(l) || NAO_E_DATA_DE_PROVA.test(l) || LEGAL.test(l)) continue;
+    // data na própria linha ou, em tabelas quebradas, numa linha seguinte que só tem datas
+    const prox = linhas[i + 1] || '';
+    const d = datasNoTexto(/^[\s\d/–-]+$/.test(prox) ? `${l} ${prox}` : l).filter(naJanela);
+    if (!d.length) continue;
+    const peso = /objetiva|escrita|discursiva|1[ªa] fase|primeira/i.test(l) ? 0 : /pr[áa]tica|f[íi]sic|oral/i.test(l) ? 2 : 1;
+    candidatas.push({ iso: d[0].iso, peso, i });
+  }
+  candidatas.sort((a, b) => a.peso - b.peso || a.iso.localeCompare(b.iso) || a.i - b.i);
+  if (candidatas.length) r.dataProva = candidatas[0].iso;
+  else {
+    const reProva = /(aplica[çc][ãa]o d[ao]s? provas?|data d[ao]s? provas?|provas? objetivas?(?: e discursivas?)?(?: ser[ãa]o)? (?:aplicadas|realizadas)|realiza[çc][ãa]o d[ao]s? provas?|provas? objetivas?)/gi;
+    let m;
+    // datas válidas: dentro da janela de anos e fora de linhas de leis, cabeçalhos do Diário Oficial e assinaturas
+    const ignorar = new Set();
+    let pos = 0;
+    for (const l of linhas) {
+      if (LEGAL.test(l) || /(segunda|ter[çc]a|quarta|quinta|sexta)-feira|s[áa]bado|domingo|^\s*[A-ZÀ-ú][\p{L} ]+[–-]?\s*\p{L}*,\s*\d{1,2}\s+de\s/iu.test(l)) ignorar.add(pos);
+      pos += l.length + 1;
+    }
+    const inicioLinha = [];
+    pos = 0;
+    for (const l of linhas) {
+      inicioLinha.push(pos);
+      pos += l.length + 1;
+    }
+    const linhaDe = (p) => {
+      let a = 0;
+      let b = inicioLinha.length - 1;
+      while (a < b) {
+        const c = (a + b + 1) >> 1;
+        if (inicioLinha[c] <= p) a = c;
+        else b = c - 1;
+      }
+      return inicioLinha[a];
+    };
+    const ds = datasNoTexto(texto).filter((d) => naJanela(d) && !ignorar.has(linhaDe(d.pos)));
+    let melhorDist = Infinity;
+    while ((m = reProva.exec(texto))) {
+      for (const d of ds) {
+        const dist = d.pos - m.index;
+        const custo = dist >= 0 ? dist : 1000 - dist; // prefere a data que vem depois da expressão
+        if (dist >= -40 && dist < 400 && custo < melhorDist) {
+          melhorDist = custo;
+          r.dataProva = d.iso;
+        }
       }
     }
   }
@@ -117,17 +159,21 @@ export function lerEdital(linhas) {
       const l = linhas[i];
       if (!reFase.test(l) || NAO_E_PROVA.test(l)) continue;
       if (!APLICA.test(l) && !/^\s*(prova|[12][ªa] fase)/i.test(l)) continue;
-      const juntas = [l, linhas[i + 1] || '', linhas[i + 2] || ''].join(' ');
+      const CABECALHO = /(segunda|ter[çc]a|quarta|quinta|sexta)-feira|s[áa]bado|domingo|di[áa]rio oficial/i;
+      const juntas = [l, linhas[i + 1] || '', linhas[i + 2] || ''].filter((x) => !CABECALHO.test(x) && !LEGAL.test(x)).join(' ');
       const d = datasNoTexto(juntas).filter((x) => +x.iso.slice(0, 4) >= anoAtual - 1);
       if (d.length) return d[0].iso;
     }
     return null;
   };
+  const ehDaTabela = (iso) => candidatas.some((c) => c.iso === iso);
   r.datasFases = {
-    primeira: dataDaFase(/(1[ªa] fase|primeira fase|prova objetiva)/i) || r.dataProva || null,
-    segunda: dataDaFase(/(2[ªa] fase|segunda fase|pr[áa]tico[- ]?profissional|prova discursiva)/i),
+    primeira: dataDaFase(/(1[ªa] fase|primeira fase|provas? objetivas?)/i) || r.dataProva || null,
+    segunda: dataDaFase(/(2[ªa] fase|segunda fase|pr[áa]tico[- ]?profissional|provas? discursivas?)/i),
   };
-  if (r.datasFases.primeira) r.dataProva = r.datasFases.primeira;
+  // a linha "Realização das provas" do cronograma tem prioridade; senão, usa a data da 1ª fase
+  if (candidatas.length) r.datasFases.primeira = r.datasFases.primeira && ehDaTabela(r.datasFases.primeira) ? r.datasFases.primeira : r.dataProva;
+  else if (r.datasFases.primeira) r.dataProva = r.datasFases.primeira;
 
   r.disciplinas = lerConteudoProgramatico(linhas);
   return r;

@@ -3,6 +3,10 @@ import { createRoot } from 'react-dom/client';
 import './index.css';
 import App from './App.jsx';
 import { preCarregarLeitor } from './lib/leitorPdf.js';
+import { lerEdital } from './lib/leitura.js';
+
+// usado para conferir a leitura de editais reais (diagnóstico)
+window.estudaaiLerEdital = lerEdital;
 
 // baixa o leitor de PDF logo no início, para a importação de editais não falhar após uma atualização
 preCarregarLeitor();
