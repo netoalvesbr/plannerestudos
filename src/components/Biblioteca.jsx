@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { contarBiblioteca, enviarArquivo, excluirArquivo, linkArquivo, listarBiblioteca } from '../lib/remoto.js';
+import { baixarArquivoBiblioteca, contarBiblioteca, enviarArquivo, excluirArquivo, linkArquivo, listarBiblioteca, mudarPrivacidade } from '../lib/remoto.js';
 import { arquivoTemMateria, catalogoMaterias, mesmaMateria } from '../data/materias.js';
 import { todosConcursos } from '../data/concursos.js';
 import Leis from './Leis.jsx';
@@ -96,6 +96,23 @@ function Categoria({ ctx, cat, voltar }) {
       setErro(e.message);
     }
   };
+  const gerarQuestoes = async (x) => {
+    try {
+      setErro(null);
+      const arquivo = await baixarArquivoBiblioteca(x);
+      ctx.abrirImportarProva(null, null, null, { arquivo, titulo: x.titulo, materia: x.materia && !/^mat[ée]rias diversas/i.test(x.materia) ? x.materia : '' });
+    } catch (e) {
+      setErro(e.message);
+    }
+  };
+  const privacidade = async (x) => {
+    try {
+      await mudarPrivacidade(x, !x.privado);
+      recarregar();
+    } catch (e) {
+      setErro(e.message);
+    }
+  };
   const excluir = async (x) => {
     try {
       await excluirArquivo(x);
@@ -183,7 +200,7 @@ function Categoria({ ctx, cat, voltar }) {
                 <div className="linha" style={{ alignItems: 'flex-start', flexWrap: 'nowrap' }}>
                   <span className="ico-arq" aria-hidden="true">{icoTipo(x.tipo)}</span>
                   <div style={{ flex: 1, minWidth: 0 }}>
-                    <b>{x.titulo}</b>
+                    <b>{x.titulo}</b>{x.privado && <span className="peq sub"> · 🔒 só você vê</span>}
                     {x.descricao && <div className="peq">{x.descricao}</div>}
                     <div className="peq sub">
                       {[x.materia, x.concurso, x.nome_arquivo && `${x.nome_arquivo.split('.').pop().toUpperCase()} · ${fmtTam(x.tamanho || 0)}`, `enviado por ${x.autor_nome || (x.criado_por === usuario?.id ? 'você' : 'usuário')} em ${new Date(x.criado_em).toLocaleDateString('pt-BR')}`].filter(Boolean).join(' · ')}
@@ -193,6 +210,14 @@ function Categoria({ ctx, cat, voltar }) {
                 <div className="linha" style={{ marginTop: 6 }}>
                   <button className="btn peq" onClick={() => abrir(x, false)}>👁️ Abrir</button>
                   <button className="btn peq" onClick={() => abrir(x, true)}>⬇️ Baixar</button>
+                  {(x.tipo || '').includes('pdf') && (x.criado_por === usuario?.id || x.criado_por === 'local' || usuario?.admin) && (
+                    <button className="btn peq" onClick={() => gerarQuestoes(x)} title="Lê as questões e o gabarito do PDF e coloca no banco de questões">✎ Gerar questões</button>
+                  )}
+                  {(x.criado_por === usuario?.id || x.criado_por === 'local' || usuario?.admin) && (
+                    <button className="btn peq" onClick={() => privacidade(x)} title={x.privado ? 'Hoje só você vê este arquivo' : 'Hoje todos os usuários veem este arquivo'}>
+                      {x.privado ? '🔒 Só eu → liberar para todos' : '🌐 Todos → deixar só para mim'}
+                    </button>
+                  )}
                   {(x.criado_por === usuario?.id || x.criado_por === 'local' || usuario?.admin) &&
                     (conf === x.id ? (
                       <>
@@ -219,6 +244,7 @@ function FormEnvio({ cat, materias, materiaInicial, concurso, aoEnviar }) {
   const [categoria, setCategoria] = useState(cat.id === 'todas' ? 'doutrina' : cat.id);
   const [f, setF] = useState({ titulo: '', descricao: '', materia: materiaInicial || '', concurso: concurso?.sigla || '' });
   const [ok, setOk] = useState(false);
+  const [privado, setPrivado] = useState(false);
   const [status, setStatus] = useState(null);
   const [erro, setErro] = useState(null);
   async function enviar(e) {
@@ -228,7 +254,7 @@ function FormEnvio({ cat, materias, materiaInicial, concurso, aoEnviar }) {
     if (arq.size > 25 * 1024 * 1024) return setErro('Arquivo grande demais: o máximo é 25 MB. Comprima o PDF e tente de novo.');
     try {
       setStatus('Enviando…');
-      await enviarArquivo({ categoria, titulo: f.titulo.trim() || arq.name.replace(/\.\w+$/, ''), descricao: f.descricao.trim() || null, materia: f.materia.trim() || null, concurso: f.concurso.trim() || null }, arq, setStatus);
+      await enviarArquivo({ categoria, titulo: f.titulo.trim() || arq.name.replace(/\.\w+$/, ''), descricao: f.descricao.trim() || null, materia: f.materia.trim() || null, concurso: f.concurso.trim() || null, ...(privado ? { privado: true } : {}) }, arq, setStatus);
       setStatus(null);
       aoEnviar();
     } catch (er) {
@@ -256,6 +282,11 @@ function FormEnvio({ cat, materias, materiaInicial, concurso, aoEnviar }) {
         <label className="campo">Concurso (opcional)<input value={f.concurso} onChange={(e) => setF({ ...f, concurso: e.target.value })} placeholder="ex.: OAB 48, PC/AC" /></label>
       </div>
       <label className="campo">Descrição (opcional)<textarea rows="2" value={f.descricao} onChange={(e) => setF({ ...f, descricao: e.target.value })} placeholder="Do que se trata, autor, ano, edição…" /></label>
+      <fieldset className="peq" style={{ border: 0, padding: 0, margin: 0 }}>
+        <legend className="sub">Quem pode ver e baixar o arquivo?</legend>
+        <label style={{ display: 'flex', gap: 8 }}><input type="radio" checked={!privado} onChange={() => setPrivado(false)} /> 🌐 Todos os usuários</label>
+        <label style={{ display: 'flex', gap: 8 }}><input type="radio" checked={privado} onChange={() => setPrivado(true)} /> 🔒 Só eu (para gerar questões ou guardar a fonte; os outros usuários não veem o arquivo)</label>
+      </fieldset>
       <label style={{ display: 'flex', gap: 8, alignItems: 'flex-start' }}>
         <input type="checkbox" checked={ok} onChange={() => setOk(!ok)} style={{ width: 20, height: 20, marginTop: 2 }} />
         <span className="peq">Declaro que posso compartilhar este arquivo: é material meu, de domínio público (como leis e decisões judiciais) ou tenho autorização do autor. Não envio apostilas ou livros pagos de terceiros.</span>
@@ -323,7 +354,7 @@ function ImportarVarios({ ctx, voltar }) {
       mudar(x.id, 'status', '⏳ enviando…');
       try {
         const descricao = x.varias?.length && /^mat[ée]rias diversas/i.test(x.materia) ? `Matérias: ${x.varias.join('; ')}` : null;
-        await enviarArquivo({ categoria: x.categoria, titulo: x.titulo.trim() || x.arquivo.name, descricao, materia: x.materia.trim(), concurso: x.concurso.trim() || null }, x.arquivo);
+        await enviarArquivo({ categoria: x.categoria, titulo: x.titulo.trim() || x.arquivo.name, descricao, materia: x.materia.trim(), concurso: x.concurso.trim() || null, ...(privadoTodos ? { privado: true } : {}) }, x.arquivo);
         mudar(x.id, 'status', '✓ enviado');
       } catch (e) {
         mudar(x.id, 'status', `✗ Falhou: ${e.message}`);
@@ -332,6 +363,7 @@ function ImportarVarios({ ctx, voltar }) {
     setEnviando(false);
   }
   const [paraTodos, setParaTodos] = useState('');
+  const [privadoTodos, setPrivadoTodos] = useState(false);
   const semMateria = itens.filter((x) => !x.materia.trim() && x.status !== '✓ enviado').length;
   const prontos = itens.filter((x) => x.status === 'pronto' || x.status.startsWith('✗ Falhou') || x.status === '✗ Falta a matéria').length;
   const enviados = itens.filter((x) => x.status === '✓ enviado').length;
@@ -381,6 +413,10 @@ function ImportarVarios({ ctx, voltar }) {
               <button className="btn peq" disabled={!paraTodos.trim()} onClick={() => setItens((v) => v.map((x) => (x.materia.trim() || x.status === '✓ enviado' ? x : { ...x, materia: paraTodos, status: x.status === '✗ Falta a matéria' ? 'pronto' : x.status })))}>Aplicar</button>
             </div>
           )}
+          <label style={{ display: 'flex', gap: 8, alignItems: 'flex-start', marginTop: 10 }}>
+            <input type="checkbox" checked={privadoTodos} onChange={() => setPrivadoTodos(!privadoTodos)} style={{ width: 20, height: 20, marginTop: 2 }} />
+            <span className="peq">🔒 Guardar estes arquivos <b>só para mim</b> (os outros usuários não veem; depois posso gerar questões a partir deles)</span>
+          </label>
           <label style={{ display: 'flex', gap: 8, alignItems: 'flex-start', marginTop: 10 }}>
             <input type="checkbox" checked={ok} onChange={() => setOk(!ok)} style={{ width: 20, height: 20, marginTop: 2 }} />
             <span className="peq">Declaro que posso compartilhar estes arquivos: são materiais meus, de domínio público (como leis e decisões judiciais) ou tenho autorização dos autores. Não envio apostilas ou livros pagos de terceiros.</span>

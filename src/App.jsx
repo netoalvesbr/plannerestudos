@@ -168,7 +168,7 @@ export default function App() {
     irInicio: () => setTela({ nome: 'inicio' }),
     abrirNovoConcurso: () => setTela({ nome: 'novo-concurso' }),
     abrirEditarConcurso: (id) => setTela({ nome: 'editar-concurso', id }),
-    abrirImportarProva: (cid, f, a) => setTela({ nome: 'questoes', aba: 'importar', importar: { cid: cid || concurso?.id, fase: f || fase, area: a || area } }),
+    abrirImportarProva: (cid, f, a, material = null) => setTela({ nome: 'questoes', aba: 'importar', importar: { cid: cid || concurso?.id, fase: f || fase, area: a || area, material } }),
     excluir: async (id) => {
       try {
         await remoto.excluirConcurso(id);

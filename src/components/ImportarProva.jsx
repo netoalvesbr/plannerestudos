@@ -1,5 +1,5 @@
 import { textoDoPdf } from '../lib/leitorPdf.js';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { lerGabarito, lerProva } from '../lib/leitura.js';
 import { salvarQuestoes, uidDe } from '../lib/remoto.js';
 
@@ -10,7 +10,35 @@ async function textoDeArquivo(arquivo, aoProgredir) {
   return textoDoPdf(arquivo, aoProgredir);
 }
 
-export default function ImportarProva({ concursos, concursoInicial, faseInicial, areaInicial, aoConcluir, aoCancelar }) {
+// Linhas que identificam de onde veio o material (cursinho, site, professor, contato, direitos autorais)
+const ORIGEM = /(https?:\/\/|www\.|\S+@\S+\.\S+|editora|apostila|material (exclusivo|protegido)|todos os direitos|direitos reservados|©|proibida a (reprodu|venda)|\bprof(\.|essora?)\s|instagram|whatsapp|telegram|youtube|p[áa]gina\s*\d+\s*(de|\/)\s*\d+)/i;
+const MARCA = /\b(concursos?|cursos?|cursinho|preparat[óo]rio|academia)\b/i;
+const QUESTAO_OU_ALT = /^\s*(QUEST[ÃA]O\s*\d|\d{1,3}\s*[.)\-–]|\(?[A-Ea-e]\s*[).\-–])/;
+export function limparOrigem(linhas, marcas = []) {
+  const re = marcas.length ? new RegExp(marcas.map((m) => m.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|'), 'gi') : null;
+  const out = [];
+  for (let l of linhas) {
+    if (!l) {
+      out.push(l);
+      continue;
+    }
+    if (QUESTAO_OU_ALT.test(l)) {
+      // na linha da questão, tira só a referência: "(Céus Concursos)", links e e-mails
+      l = l.replace(/\((?:[^()]*\b(?:concursos?|cursos?|prof\.?)\b[^()]*)\)/gi, '').replace(/https?:\/\/\S+|www\.\S+|\S+@\S+\.\S+/gi, '');
+    } else if (ORIGEM.test(l) || (MARCA.test(l) && l.length < 80)) continue;
+    if (re) l = l.replace(re, '');
+    out.push(l.replace(/\s{2,}/g, ' ').trim());
+  }
+  return out;
+}
+// separa a lista de questões do gabarito que vem no fim do mesmo PDF
+function separarGabarito(linhas) {
+  let i = -1;
+  for (let k = linhas.length - 1; k >= Math.floor(linhas.length * 0.4); k--) if (/^\s*(GABARITO|RESPOSTAS?)\b/i.test(linhas[k])) { i = k; break; }
+  return i < 0 ? { prova: linhas, gabarito: '' } : { prova: linhas.slice(0, i), gabarito: linhas.slice(i).join('\n') };
+}
+
+export default function ImportarProva({ concursos, concursoInicial, faseInicial, areaInicial, aoConcluir, aoCancelar, material = null }) {
   const [cid, setCid] = useState(concursoInicial || concursos[0]?.id || '');
   const concurso = concursos.find((c) => c.id === cid);
   const [fase, setFase] = useState(faseInicial || '');
@@ -25,6 +53,33 @@ export default function ImportarProva({ concursos, concursoInicial, faseInicial,
   const [colarProva, setColarProva] = useState('');
   const [colarGab, setColarGab] = useState('');
   const [salvando, setSalvando] = useState(false);
+  const [semOrigem, setSemOrigem] = useState(!!material);
+  const [marcas, setMarcas] = useState('');
+  // material da Biblioteca: lê o PDF, tira as referências de origem e separa o gabarito do fim
+  useEffect(() => {
+    if (!material?.arquivo) return;
+    (async () => {
+      setStatus('Lendo o material da Biblioteca…');
+      try {
+        const linhas = await textoDeArquivo(material.arquivo, (p, n) => setStatus(`Lendo página ${p} de ${n}…`));
+        const limpas = limparOrigem(linhas);
+        const { prova, gabarito } = separarGabarito(limpas);
+        if (material.materia) setMateriaPadrao(material.materia);
+        setMeta((m) => ({ ...m, banca: '', orgao: '', ano: '' }));
+        let qs = lerProva(prova, formato).map((q) => ({ ...q, incluir: true }));
+        if (!qs.length) throw new Error('Não consegui separar as questões deste PDF. Verifique se as questões são numeradas (1, 2, 3… ou "QUESTÃO 1") e se o PDF tem texto (não é imagem escaneada).');
+        const mapa = gabarito ? lerGabarito(gabarito, formato) : {};
+        qs = qs.map((q) => (mapa[q.numero] ? (mapa[q.numero] === 'ANULADA' ? { ...q, anulada: true, gabarito: '' } : { ...q, gabarito: mapa[q.numero] }) : q));
+        setQuestoes(qs);
+        const comGab = qs.filter((q) => q.gabarito).length;
+        setStatus(`${qs.length} questões encontradas${gabarito ? ` · gabarito do fim do PDF aplicado em ${comGab}` : ' · gabarito não encontrado no PDF: importe abaixo'}. Confira cada questão antes de salvar.`);
+      } catch (e) {
+        setErro(e.message);
+        setStatus(null);
+      }
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [material]);
 
   const disciplinas = useMemo(() => (concurso?.disciplinas || []).filter((d) => (!fase || !d.fase || d.fase === fase) && (!area || !d.area || d.area === area)).map((d) => d.nome), [concurso, fase, area]);
 
@@ -129,7 +184,9 @@ export default function ImportarProva({ concursos, concursoInicial, faseInicial,
           banca: meta.banca,
           ano: meta.ano,
           orgao: meta.orgao,
-          fonte: [meta.banca, meta.ano, meta.orgao].filter(Boolean).join(' · ') + ` – questão ${q.numero}`,
+          ...(semOrigem ? limparQuestao(q, marcas) : {}),
+          origem: material ? 'material_biblioteca' : q.origem,
+          fonte: semOrigem ? 'Banco de questões EstudaAí' : [meta.banca, meta.ano, meta.orgao].filter(Boolean).join(' · ') + ` – questão ${q.numero}`,
         });
       }
       const r = await salvarQuestoes(lista);
@@ -144,8 +201,23 @@ export default function ImportarProva({ concursos, concursoInicial, faseInicial,
   return (
     <div>
       <button className="btn peq" onClick={aoCancelar} style={{ marginBottom: 10 }}>← Voltar</button>
-      <h1>Importar prova</h1>
+      <h1>{material ? 'Gerar questões do material' : 'Importar prova'}</h1>
       <p className="sub">As questões vão para o <b>banco unificado</b>: ficam disponíveis para todos os usuários. Questões repetidas (mesmo enunciado) não são duplicadas.</p>
+      {material && (
+        <section className="card" style={{ borderColor: 'var(--pri)' }}>
+          <p style={{ marginTop: 0 }}>📚 Material da Biblioteca: <b>{material.titulo}</b>. O PDF continua guardado na Biblioteca; aqui só as questões vão para o banco.</p>
+          <label style={{ display: 'flex', gap: 8, alignItems: 'flex-start' }}>
+            <input type="checkbox" checked={semOrigem} onChange={() => setSemOrigem(!semOrigem)} style={{ width: 20, height: 20, marginTop: 2 }} />
+            <span>Tirar as referências de origem: linhas com nome de cursinho, site, e-mail, redes sociais, professor e direitos autorais. As questões entram como <b>“Banco de questões EstudaAí”</b>.</span>
+          </label>
+          {semOrigem && (
+            <label className="campo" style={{ marginTop: 8 }}>Nomes que também devem sair do texto (separe por vírgula)
+              <input style={campo} value={marcas} onChange={(e) => setMarcas(e.target.value)} placeholder="ex.: Céus Concursos, Prof. Fulano" />
+            </label>
+          )}
+          <p className="peq sub" style={{ marginBottom: 0 }}>Confira as questões abaixo antes de salvar: a leitura automática pode errar a separação ou o gabarito.</p>
+        </section>
+      )}
 
       <section className="card">
         <h2>1. De onde é a prova</h2>
@@ -273,4 +345,20 @@ export default function ImportarProva({ concursos, concursoInicial, faseInicial,
       )}
     </div>
   );
+}
+
+// tira nomes de cursinho/site/professor do enunciado, das alternativas e do comentário
+function limparQuestao(q, marcas) {
+  const lista = marcas.split(/[,;\n]/).map((x) => x.trim()).filter((x) => x.length > 2);
+  const limpa = (t) => {
+    if (!t) return t;
+    let r = t.replace(/https?:\/\/\S+|www\.\S+|\S+@\S+\.\S+/gi, '');
+    for (const m of lista) r = r.replace(new RegExp(m.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi'), '');
+    return r.replace(/\(\s*\)|\[\s*\]/g, '').replace(/\s{2,}/g, ' ').trim();
+  };
+  return {
+    enunciado: limpa(q.enunciado),
+    alternativas: q.alternativas ? Object.fromEntries(Object.entries(q.alternativas).map(([k, v]) => [k, limpa(v)])) : q.alternativas,
+    comentario: limpa(q.comentario),
+  };
 }

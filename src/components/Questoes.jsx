@@ -53,6 +53,7 @@ export default function Questoes({ ctx, aba: abaPedida, filtro, aoTrocarAba, aoI
           areaInicial={importar?.area ?? ctx.area}
           aoCancelar={() => aoTrocarAba('praticar')}
           aoConcluir={aoImportado}
+          material={importar?.material || null}
         />
       )}
     </div>

@@ -168,7 +168,7 @@ export async function salvarQuestoes(lista) {
     banca: q.banca || null,
     ano: q.ano ? Number(q.ano) : null,
     orgao_prova: q.orgao || null,
-    origem: 'prova_anterior',
+    origem: q.origem || 'prova_anterior',
     formato: q.formato,
     bloco: q.bloco || null,
     materia: q.materia,
@@ -179,6 +179,7 @@ export async function salvarQuestoes(lista) {
     espelho: q.espelho || null,
     anulada: !!q.anulada,
     fonte: q.fonte || null,
+    ...(q.comentario ? { comentario: q.comentario } : {}),
   }));
   if (!supabase) {
     const b = lerLocal();
@@ -463,4 +464,20 @@ export async function excluirArquivo(item) {
   const { error } = await supabase.from('biblioteca').delete().eq('id', item.id);
   if (error) throw new Error(error.message);
   await supabase.storage.from('biblioteca').remove([item.arquivo]);
+}
+
+// baixa o arquivo da biblioteca como File (para gerar questões a partir dele)
+export async function baixarArquivoBiblioteca(item) {
+  const url = supabase ? (await supabase.storage.from('biblioteca').createSignedUrl(item.arquivo, 600)).data?.signedUrl : item.arquivo;
+  if (!url) throw new Error('Não foi possível abrir o arquivo.');
+  const blob = await (await fetch(url)).blob();
+  return new File([blob], item.nome_arquivo || `${item.titulo}.pdf`, { type: item.tipo || blob.type || 'application/pdf' });
+}
+export async function mudarPrivacidade(item, privado) {
+  if (!supabase) {
+    localStorage.setItem(LS_BIB, JSON.stringify(bibLocal().map((x) => (x.id === item.id ? { ...x, privado } : x))));
+    return;
+  }
+  const { error } = await supabase.from('biblioteca').update({ privado }).eq('id', item.id);
+  if (error) throw new Error(/privado/.test(error.message) ? 'A opção de arquivo privado ainda não foi ativada no banco de dados.' : error.message);
 }
