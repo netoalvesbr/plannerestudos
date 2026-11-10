@@ -30,6 +30,7 @@ export async function textoDoPdf(arquivo, aoProgredir, maxPaginas = Infinity) {
   const doc = await pdfjs.getDocument({ data: dados }).promise;
   const linhas = [];
   const total = Math.min(doc.numPages, maxPaginas);
+  const estado = {}; // lembra se a página anterior terminou num quadro de datas
   for (let p = 1; p <= total; p++) {
     const pagina = await doc.getPage(p);
     const conteudo = await pagina.getTextContent();
@@ -38,7 +39,7 @@ export async function textoDoPdf(arquivo, aoProgredir, maxPaginas = Infinity) {
     const itens = conteudo.items
       .filter((i) => i.str && i.str.trim())
       .map((i) => ({ x: i.transform[4], y: Math.round(i.transform[5]), w: i.width, s: i.str }));
-    linhas.push(...linhasDaPagina(itens, largura));
+    linhas.push(...linhasDaPagina(itens, largura, estado));
     linhas.push(''); // quebra de página
     aoProgredir?.(p, total);
   }

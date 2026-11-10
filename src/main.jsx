@@ -7,7 +7,7 @@ import { lerEdital } from './lib/leitura.js';
 
 // usado para conferir a leitura de editais reais (diagnóstico)
 window.estudaaiLerEdital = lerEdital;
-window.estudaaiLinhasDaPagina = (itens, largura) => import('./lib/linhasPdf.js').then((m) => m.linhasDaPagina(itens, largura));
+window.estudaaiLinhasDaPagina = (itens, largura, estado) => import('./lib/linhasPdf.js').then((m) => m.linhasDaPagina(itens, largura, estado));
 
 // baixa o leitor de PDF logo no início, para a importação de editais não falhar após uma atualização
 preCarregarLeitor();

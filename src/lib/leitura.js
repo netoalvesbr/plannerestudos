@@ -208,7 +208,7 @@ export function lerEdital(linhasOriginais) {
   return r;
 }
 
-const PALAVRAS_MINUSC = new Set(['de', 'da', 'do', 'das', 'dos', 'e', 'a', 'o', 'em', 'para', 'por', 'com']);
+const PALAVRAS_MINUSC = new Set(['de', 'da', 'do', 'das', 'dos', 'e', 'a', 'o', 'em', 'para', 'por', 'com', 'à', 'às', 'ao', 'aos']);
 export function titulo(s) {
   return s
     .toLowerCase()
@@ -292,8 +292,8 @@ function lerCargosNumerados(linhas) {
     let bruto = m[2].trim();
     const prox = (linhas[i + 1] || '').trim();
     if (prox && prox.length < 70 && CONTINUA_CARGO.test(prox) && !/^REQUISITO/.test(prox)) bruto += ' ' + prox;
-    const nome = titulo(bruto.replace(/\([^)]*\)/g, ' ').replace(/\b(ESPECIALIDADE|ÁREA)\s*:\s*/g, '').replace(/\s*[–-]\s*/g, ' – '))
-      .replace(/ – (\p{Ll})/gu, (_, x) => ' – ' + x.toUpperCase());
+    const nome = titulo(bruto.replace(/\([^)]*\)/g, ' ').replace(/(ESPECIALIDADE|ÁREA)\s*:\s*/g, '').replace(/\s*[–-]\s*/g, ' – '))
+      .replace(/( – |\/)(\p{Ll})/gu, (_, s, x) => s + x.toUpperCase());
     porNum.set(+m[1], { id: `cargo-${m[1]}`, num: +m[1], nome });
   }
   return [...porNum.values()].sort((a, b) => a.num - b.num);
@@ -335,7 +335,11 @@ export function lerCargosEConteudo(linhas) {
   // cabeçalhos e rodapés repetidos (aparecem em todas as páginas)
   const freq = new Map();
   for (const l of linhas) freq.set(l.trim(), (freq.get(l.trim()) || 0) + 1);
-  const repetida = (l) => (freq.get(l) || 0) >= 4 && l.length < 120;
+  // em editais com o conteúdo repetido cargo a cargo (Cebraspe), uma matéria comum aparece várias vezes:
+  // aí só é cabeçalho/rodapé o que se repete em boa parte das páginas
+  const paginas = linhas.filter((l) => l === '').length || 1;
+  const minimo = numerados ? Math.max(6, Math.round(paginas * 0.4)) : 4;
+  const repetida = (l) => (freq.get(l) || 0) >= minimo && l.length < 120;
   const todos = cargos.map((c) => c.id);
   const cargosNoTexto = (t) => {
     const n = semAcento(t);

@@ -31,7 +31,7 @@ const TEM_DATA = /\d{1,2}\s*\/\s*\d{1,2}\s*\/\s*\d{4}/;
 // atividade, que pode ocupar várias linhas. Devolve uma linha por atividade, já com a data dela.
 function tabelaDeDatas(esq, dir) {
   const out = [];
-  const iData = dir.findIndex((l) => TEM_DATA.test(l.t));
+  const iData = dir.findIndex((l) => ehData(l));
   const cabDir = dir.slice(0, iData);
   const yCab = cabDir.length ? cabDir[cabDir.length - 1].y : Infinity;
   for (const l of esq.filter((x) => x.y >= yCab - 2)) out.push(l.t);
@@ -39,8 +39,11 @@ function tabelaDeDatas(esq, dir) {
   // blocos da direita: a data e as observações logo abaixo dela
   const blocos = [];
   for (const l of dir.slice(iData)) {
-    if (TEM_DATA.test(l.t) && l.t.length < 45) blocos.push({ y: l.y, data: l.t, obs: [] });
-    else if (blocos.length) blocos[blocos.length - 1].obs.push(l.t);
+    if (ehData(l)) blocos.push({ ys: [l.y], data: l.t, obs: [] });
+    else if (blocos.length) {
+      blocos[blocos.length - 1].obs.push(l.t);
+      blocos[blocos.length - 1].ys.push(l.y);
+    }
   }
   // atividades: cada uma começa com letra maiúscula; as linhas seguintes (minúsculas ou números) são continuação
   const grupos = [];
@@ -52,14 +55,18 @@ function tabelaDeDatas(esq, dir) {
       g.t += ' ' + l.t;
     }
   }
+  const centro = (ys) => (ys[0] + ys[ys.length - 1]) / 2;
+  // a primeira linha em minúscula é o fim de uma atividade que começou na página anterior (sem data própria)
+  const resto = grupos.length === blocos.length + 1 && grupos[0] && !/^\p{Lu}/u.test(grupos[0].t) ? 1 : 0;
+  const emOrdem = grupos.length - resto === blocos.length;
   const usados = new Set();
   grupos.forEach((g, i) => {
-    let b = blocos.length === grupos.length ? blocos[i] : null;
-    if (!b) {
-      // quantidades diferentes: usa a data mais próxima da altura do meio da atividade
-      const meio = (g.ys[0] + g.ys[g.ys.length - 1]) / 2;
-      b = blocos.filter((x) => !usados.has(x)).sort((p, q) => Math.abs(p.y - meio) - Math.abs(q.y - meio))[0];
-      if (b && Math.abs(b.y - meio) > 40) b = null;
+    let b = null;
+    if (emOrdem) b = i >= resto ? blocos[i - resto] : null;
+    else {
+      // quantidades diferentes: usa a data cujo bloco fica na mesma altura da atividade
+      b = blocos.filter((x) => !usados.has(x)).sort((p, q) => Math.abs(centro(p.ys) - centro(g.ys)) - Math.abs(centro(q.ys) - centro(g.ys)))[0];
+      if (b && Math.abs(centro(b.ys) - centro(g.ys)) > 30) b = null;
     }
     if (b) usados.add(b);
     out.push(b ? `${g.t} ${b.data}` : g.t);
@@ -67,17 +74,29 @@ function tabelaDeDatas(esq, dir) {
   });
   return out;
 }
+const ehData = (l) => TEM_DATA.test(l.t) && l.t.length < 45;
 
 // Linhas de uma página, na ordem de leitura. itens = [{ x, y, w, s }]
-export function linhasDaPagina(itens, largura) {
+// estado.tabela: a página anterior terminou num quadro de datas (o quadro pode continuar nesta)
+export function linhasDaPagina(itens, largura, estado = {}) {
   // colunas: se a página tem 2 colunas, lê a esquerda e depois a direita
   const meio = largura / 2;
-  const cruzaMeio = itens.filter((i) => i.x < meio - 10 && i.x + i.w > meio + 10).length;
+  const cruza = (i) => i.x < meio - 10 && i.x + i.w > meio + 10;
+  const cruzaMeio = itens.filter(cruza).length;
   const duasColunas = itens.length > 40 && cruzaMeio < itens.length * 0.08 && itens.some((i) => i.x > meio + 5) && itens.some((i) => i.x < meio - 40);
+  const datasDir = linhasDaColuna(itens.filter((i) => i.x >= meio)).filter(ehData);
+  const todasDir = linhasDaColuna(itens.filter((i) => i.x >= meio));
+  const ehTabela = (duasColunas && datasDir.length >= 3 && datasDir.length >= todasDir.length * 0.2) || (estado.tabela && datasDir.length >= 1 && itens.some((i) => i.x < meio - 40));
+  estado.tabela = ehTabela;
+  if (ehTabela) {
+    // o quadro termina pouco abaixo da última data; linhas de largura total depois dela (notas de rodapé) ficam fora
+    const yUltima = Math.min(...datasDir.map((l) => l.y));
+    const yNotas = Math.max(-Infinity, ...itens.filter((i) => cruza(i) && i.y < yUltima).map((i) => i.y));
+    const corte = Math.max(yUltima - 75, yNotas);
+    const dentro = itens.filter((i) => i.y > corte + 2);
+    const fora = itens.filter((i) => i.y <= corte + 2);
+    return [...tabelaDeDatas(linhasDaColuna(dentro.filter((i) => i.x < meio)), linhasDaColuna(dentro.filter((i) => i.x >= meio))), ...linhasDaColuna(fora).map((l) => l.t)];
+  }
   if (!duasColunas) return linhasDaColuna(itens).map((l) => l.t);
-  const esq = linhasDaColuna(itens.filter((i) => i.x < meio));
-  const dir = linhasDaColuna(itens.filter((i) => i.x >= meio));
-  const nDatas = dir.filter((l) => TEM_DATA.test(l.t) && l.t.length < 45).length;
-  if (nDatas >= 3 && nDatas >= dir.length * 0.2) return tabelaDeDatas(esq, dir);
-  return [...esq, ...dir].map((l) => l.t);
+  return [...linhasDaColuna(itens.filter((i) => i.x < meio)), ...todasDir].map((l) => l.t);
 }
