@@ -75,6 +75,61 @@ export function classificar(nomeArquivo, texto) {
   return Object.entries(p).sort((a, b) => b[1] - a[1])[0][0];
 }
 
+// pontuação de cada matéria do catálogo no nome e no texto do arquivo
+function pontuar(nomeArquivo, texto, materias) {
+  const n = norm(nomeArquivo).replace(/[-_]+/g, ' ');
+  const t = norm(texto).slice(0, 60000);
+  const out = [];
+  for (const m of materias) {
+    const chave = norm(m).replace(/\(.*?\)/g, '').replace(/^nocoes de /, '').trim();
+    if (chave.length < 4 || /^materias diversas/.test(chave)) continue;
+    const curta = chave.replace(/^direito (do |da |de )?/, '');
+    let s = 0;
+    if (n.includes(chave)) s += 20;
+    else if (curta.length > 4 && n.includes(curta)) s += 12;
+    s += Math.min(15, (t.split(chave).length - 1) * 2);
+    if (s >= 4) out.push({ m, s });
+  }
+  return out.sort((a, b) => b.s - a.s);
+}
+
+// concurso e cargo citados no arquivo (ou o concurso que o aluno está estudando)
+export function concursoDoArquivo(nomeArquivo, texto, concursos, ativo) {
+  const tudo = norm(`${nomeArquivo} ${texto}`.slice(0, 60000)).replace(/[-_]+/g, ' ');
+  let achado = null;
+  let max = 0;
+  for (const c of concursos) {
+    const nomes = [c.nome, c.orgao, c.sigla].filter((x) => x && x.length >= 3).map(norm);
+    const sc = nomes.reduce((a, x) => a + (tudo.split(x).length - 1) * (x.length > 6 ? 3 : 1), 0);
+    if (sc > max) {
+      max = sc;
+      achado = c;
+    }
+  }
+  // só considera o concurso quando ele é citado no arquivo; senão, é material geral
+  void ativo;
+  const c = max >= 3 ? achado : null;
+  if (!c) return { concurso: '', cargo: '' };
+  let cargo = (c.cargos || []).map((x) => x.nome).filter(Boolean).find((x) => tudo.includes(norm(x))) || '';
+  if (!cargo) {
+    // cargo citado no nome do arquivo (ex.: "apostila analista legislativo camara.pdf")
+    const m = norm(nomeArquivo).replace(/[-_]+/g, ' ').match(/\b(analista [a-z]+|agente [a-z]+|tecnico [a-z]+|auditor [a-z]+|oficial investigador|papiloscopista|escrivao|delegado|procurador|investigador|perito [a-z]+|assistente [a-z]+)\b/);
+    if (m) cargo = m[1].replace(/\b\w/g, (l) => l.toUpperCase());
+  }
+  return { concurso: c.sigla || c.nome, nomeConcurso: c.nome, cargo };
+}
+
+// "Matérias diversas – Câmara Municipal de Rio Branco (Analista Legislativo)" quando o arquivo traz várias matérias
+export function analisarMaterias(nomeArquivo, texto, materias, contexto = {}) {
+  const lista = pontuar(nomeArquivo, texto, materias);
+  const fortes = lista.filter((x) => x.s >= 6);
+  const nomeGeral = /apostila|completa|todas as materias|materias gerais|conhecimentos gerais|basicos|pacote|edital verticalizado/.test(norm(nomeArquivo));
+  const diversas = fortes.length >= 3 && (nomeGeral || fortes[0].s < 20 || fortes[2].s >= fortes[0].s * 0.4);
+  if (!diversas) return { materia: lista[0]?.m || '', varias: [] };
+  const alvo = contexto.cargo ? `${contexto.nomeConcurso || contexto.concurso} (${contexto.cargo})` : contexto.nomeConcurso || contexto.concurso || '';
+  return { materia: alvo ? `Matérias diversas – ${alvo}` : 'Matérias diversas (geral)', varias: fortes.slice(0, 12).map((x) => x.m) };
+}
+
 // matéria: a do catálogo mais citada no nome e no texto (nome vale mais)
 export function adivinharMateria(nomeArquivo, texto, materias) {
   const n = norm(nomeArquivo).replace(/[-_]+/g, ' ');

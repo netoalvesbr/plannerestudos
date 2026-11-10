@@ -18,6 +18,7 @@ export const MATERIAS_BASE = {
     'Contabilidade', 'Administração Financeira e Orçamentária (AFO)', 'Administração Pública', 'Arquivologia',
     'Ética no Serviço Público', 'Atualidades', 'História do Acre', 'Geografia do Acre', 'Realidade do Acre', 'Libras',
   ],
+  'Apostilas e materiais gerais': ['Matérias diversas (geral)'],
   'Câmara Municipal de Rio Branco': [
     'Lei Orgânica do Município de Rio Branco', 'Regimento Interno da Câmara Municipal de Rio Branco',
     'Estatuto dos Servidores de Rio Branco (Lei 1.794/2009)', 'Técnica Legislativa e Redação Oficial', 'Noções de Informática',
@@ -39,8 +40,10 @@ export function catalogoMaterias(extras = []) {
   for (const m of Object.keys(SUGESTOES_OAB)) add('OAB', m);
   for (const a of AREAS_OAB) add('OAB', a.nome);
   for (const c of todosConcursos()) for (const d of c.disciplinas || []) add(c.sigla || c.nome, d.nome);
-  for (const m of extras) add('Outras matérias', m);
+  for (const m of extras) add(/^mat[ée]rias diversas/i.test(m) ? 'Apostilas e materiais gerais' : 'Outras matérias', m);
   for (const g of Object.keys(grupos)) grupos[g].sort((a, b) => a.localeCompare(b, 'pt-BR'));
   return grupos;
 }
 export const mesmaMateria = (a, b) => norm(a) === norm(b);
+// o arquivo trata da matéria? (a principal ou uma das listadas em "Matérias: ..." na descrição)
+export const arquivoTemMateria = (x, m) => mesmaMateria(x.materia, m) || (x.descricao || '').split(/Matérias:\s*/)[1]?.split(';').some((y) => mesmaMateria(y, m));

@@ -1,9 +1,10 @@
 import { useEffect, useState } from 'react';
 import { contarBiblioteca, enviarArquivo, excluirArquivo, linkArquivo, listarBiblioteca } from '../lib/remoto.js';
-import { catalogoMaterias, mesmaMateria } from '../data/materias.js';
+import { arquivoTemMateria, catalogoMaterias, mesmaMateria } from '../data/materias.js';
+import { todosConcursos } from '../data/concursos.js';
 import Leis from './Leis.jsx';
 import { ListaMapas } from './Mapas.jsx';
-import { adivinharMateria, classificar, textoDoArquivo } from '../lib/classificar.js';
+import { analisarMaterias, classificar, concursoDoArquivo, textoDoArquivo } from '../lib/classificar.js';
 
 // 📚 Biblioteca: arquivos compartilhados entre os usuários (PDF, imagem, Word), por categoria
 export const CATEGORIAS = [
@@ -77,10 +78,10 @@ function Categoria({ ctx, cat, voltar }) {
   }, [cat.id]);
   const grupos = catalogoMaterias((lista || []).map((x) => x.materia).filter(Boolean));
   const materias = Object.values(grupos).flat();
-  const qtd = (m) => (lista || []).filter((x) => mesmaMateria(x.materia, m)).length;
+  const qtd = (m) => (lista || []).filter((x) => arquivoTemMateria(x, m)).length;
   const [filtroMat, setFiltroMat] = useState('');
   const termo = busca.trim().toLowerCase();
-  const vis = (lista || []).filter((x) => (!materia || mesmaMateria(x.materia, materia)) && (!termo || `${x.titulo} ${x.descricao || ''} ${x.materia || ''} ${x.concurso || ''} ${x.nome_arquivo || ''}`.toLowerCase().includes(termo)));
+  const vis = (lista || []).filter((x) => (!materia || arquivoTemMateria(x, materia)) && (!termo || `${x.titulo} ${x.descricao || ''} ${x.materia || ''} ${x.concurso || ''} ${x.nome_arquivo || ''}`.toLowerCase().includes(termo)));
   const fm = filtroMat.trim().toLowerCase();
   const abrir = async (x, baixar) => {
     try {
@@ -283,7 +284,7 @@ function ImportarVarios({ ctx, voltar }) {
   const [ok, setOk] = useState(false);
   const [enviando, setEnviando] = useState(false);
   const materias = Object.values(catalogoMaterias()).flat();
-  const concurso = ctx.concurso?.sigla || '';
+  const concursos = todosConcursos();
 
   async function escolher(lista) {
     const arqs = [...lista];
@@ -293,13 +294,16 @@ function ImportarVarios({ ctx, voltar }) {
       setLendo(`Analisando ${i + 1} de ${arqs.length}: ${a.name}`);
       const erro = a.size > 25 * 1024 * 1024 ? 'Maior que 25 MB' : !/\.(pdf|png|jpe?g|webp|docx?|txt)$/i.test(a.name) ? 'Tipo não aceito' : null;
       const texto = erro ? '' : await textoDoArquivo(a);
+      const conc = concursoDoArquivo(a.name, texto, concursos, ctx.concurso);
+      const mats = analisarMaterias(a.name, texto, materias, conc);
       novos.push({
         id: `${a.name}-${a.size}-${i}`,
         arquivo: a,
         titulo: tituloDe(a.name, texto),
         categoria: classificar(a.name, texto),
-        materia: adivinharMateria(a.name, texto, materias),
-        concurso,
+        materia: mats.materia,
+        varias: mats.varias,
+        concurso: conc.concurso || '',
         status: erro ? `✗ ${erro}` : 'pronto',
         lido: !!texto,
       });
@@ -318,7 +322,8 @@ function ImportarVarios({ ctx, voltar }) {
       }
       mudar(x.id, 'status', '⏳ enviando…');
       try {
-        await enviarArquivo({ categoria: x.categoria, titulo: x.titulo.trim() || x.arquivo.name, descricao: null, materia: x.materia.trim(), concurso: x.concurso.trim() || null }, x.arquivo);
+        const descricao = x.varias?.length && /^mat[ée]rias diversas/i.test(x.materia) ? `Matérias: ${x.varias.join('; ')}` : null;
+        await enviarArquivo({ categoria: x.categoria, titulo: x.titulo.trim() || x.arquivo.name, descricao, materia: x.materia.trim(), concurso: x.concurso.trim() || null }, x.arquivo);
         mudar(x.id, 'status', '✓ enviado');
       } catch (e) {
         mudar(x.id, 'status', `✗ Falhou: ${e.message}`);
@@ -346,7 +351,7 @@ function ImportarVarios({ ctx, voltar }) {
           <datalist id="mat-imp">{materias.map((m) => <option key={m} value={m} />)}</datalist>
           <div className="tabela-rolagem">
             <table className="tabela-admin">
-              <thead><tr><th>Arquivo</th><th>Título</th><th>Seção (sugerida)</th><th>Matéria (sugerida)</th><th>Situação</th><th /></tr></thead>
+              <thead><tr><th>Arquivo</th><th>Título</th><th>Seção (sugerida)</th><th>Matéria (sugerida)</th><th>Concurso</th><th>Situação</th><th /></tr></thead>
               <tbody>
                 {itens.map((x) => {
                   const travado = x.status === '✓ enviado' || x.status.startsWith('⏳') || x.status.startsWith('✗ Maior') || x.status.startsWith('✗ Tipo');
@@ -359,7 +364,8 @@ function ImportarVarios({ ctx, voltar }) {
                           {CATEGORIAS.map((c) => <option key={c.id} value={c.id}>{c.icone} {c.nome}</option>)}
                         </select>
                       </td>
-                      <td><input list="mat-imp" value={x.materia} disabled={travado} style={!x.materia.trim() && !travado ? { borderColor: 'var(--erro)' } : undefined} onChange={(e) => { mudar(x.id, 'materia', e.target.value); if (x.status === '✗ Falta a matéria') mudar(x.id, 'status', 'pronto'); }} placeholder="escolha a matéria" aria-label={`Matéria de ${x.arquivo.name}`} /></td>
+                      <td>{x.varias?.length > 0 && /^mat[ée]rias diversas/i.test(x.materia) && <div className="peq sub" title={x.varias.join(', ')}>contém {x.varias.length} matérias: {x.varias.slice(0, 3).join(', ')}{x.varias.length > 3 ? '…' : ''}</div>}<input list="mat-imp" value={x.materia} disabled={travado} style={!x.materia.trim() && !travado ? { borderColor: 'var(--erro)' } : undefined} onChange={(e) => { mudar(x.id, 'materia', e.target.value); if (x.status === '✗ Falta a matéria') mudar(x.id, 'status', 'pronto'); }} placeholder="escolha a matéria" aria-label={`Matéria de ${x.arquivo.name}`} /></td>
+                      <td><input value={x.concurso} disabled={travado} onChange={(e) => mudar(x.id, 'concurso', e.target.value)} placeholder="opcional" aria-label={`Concurso de ${x.arquivo.name}`} style={{ width: 110 }} /></td>
                       <td className="peq">{x.status === 'pronto' ? 'pronto para enviar' : x.status}</td>
                       <td>{!travado && <button className="link peq" onClick={() => setItens((v) => v.filter((y) => y.id !== x.id))} aria-label={`Tirar ${x.arquivo.name} da lista`}>✕</button>}</td>
                     </tr>
