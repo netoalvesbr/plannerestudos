@@ -267,6 +267,10 @@ export default function App() {
     conteudo = <Admin />;
   } else if (tela.nome === 'cronograma' && !tela.abrir) {
     conteudo = <MeusCronogramas ctx={ctx} abrir={(a) => setTela({ nome: 'cronograma', abrir: a })} />;
+  } else if (tela.nome === 'cronograma' && tela.abrir?.mix) {
+    const reg = prefs.cronogramas?.[tela.abrir.mix];
+    const combinado = { chave: tela.abrir.mix, itens: tela.abrir.itens || reg?.mix || [], nome: tela.abrir.nome || reg?.nome || 'Cronograma combinado' };
+    conteudo = <Cronograma key={tela.abrir.mix} ctx={{ ...ctx, cargo: 'ambos', fase: '', area: '' }} combinado={combinado} voltar={() => setTela({ nome: 'cronograma' })} />;
   } else if (tela.nome === 'cronograma' && tela.abrir !== 'ativo' && getConcurso(tela.abrir.cid)) {
     // cronograma de qualquer concurso que a pessoa acompanha (não só o ativo)
     const cc = getConcurso(tela.abrir.cid);

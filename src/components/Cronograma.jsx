@@ -1,3 +1,4 @@
+import { getConcurso } from '../data/concursos.js';
 import { useMemo, useState } from 'react';
 import { disciplinasDo } from '../lib/dados.js';
 import { chaveRevisao, chaveSessao, configPadrao, DIAS_SEMANA, gerarCronograma, gerarIcs, gerarRevisoes, INTERVALOS_REVISAO, materiasAtivas, NIVEIS, pesoDa, vespera } from '../lib/cronograma.js';
@@ -36,12 +37,38 @@ function normalizar(cfg, dataProva) {
 
 const PASSOS = ['Modo', 'Cargos', 'Matérias', 'Dias e horas', 'Blocos', 'Revisões', 'Resumo'];
 
-export default function Cronograma({ ctx, voltar }) {
-  const { concurso, cargo, fase, area, prefs, setPrefs, abrirAvulsas } = ctx;
+// junta as matérias de vários concursos num cronograma só (matérias iguais aparecem uma vez, com os tópicos somados)
+const normNome = (s) => (s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/^nocoes de /, '').replace(/[^a-z0-9]+/g, ' ').trim();
+export function mesclarConcursos(itens) {
+  const mapa = new Map();
+  for (const it of itens) {
+    const c = getConcurso(it.cid);
+    if (!c) continue;
+    for (const d of disciplinasDo(it.cid, it.cargo || 'ambos', it.fase || '', it.area || '')) {
+      const k = normNome(d.nome);
+      const e = mapa.get(k) || { nome: d.nome, topicos: [], origens: [] };
+      for (const t of d.topicos || []) if (!e.topicos.some((x) => normNome(x) === normNome(t))) e.topicos.push(t);
+      if (!e.origens.includes(c.sigla)) e.origens.push(c.sigla);
+      mapa.set(k, e);
+    }
+  }
+  return [...mapa.values()];
+}
+export function dataDoItem(it) {
+  const c = getConcurso(it.cid);
+  return c?.fases?.find((f) => f.id === it.fase)?.data || c?.dataProva || '';
+}
+
+export default function Cronograma({ ctx, voltar, combinado = null }) {
+  const { cargo, fase, area, prefs, setPrefs, abrirAvulsas } = ctx;
+  // cronograma combinado: um "concurso" virtual que junta vários
+  const concurso = combinado
+    ? { id: combinado.chave, sigla: 'Combinado', nome: combinado.nome, fases: [], cargos: [], formato: 'A-E', dataProva: combinado.itens.map(dataDoItem).filter(Boolean).sort()[0] || '' }
+    : ctx.concurso;
   const faseObj = concurso.fases?.find((f) => f.id === fase);
   const areaObj = faseObj?.areas?.find((a) => a.id === area);
   const dataProva = faseObj?.data || concurso.dataProva || '';
-  const chave = [concurso.id, fase || '', area || ''].join('|');
+  const chave = combinado ? combinado.chave : [concurso.id, fase || '', area || ''].join('|');
   const salvo = prefs.cronogramas?.[chave];
   const [editando, setEditando] = useState(!salvo);
   const [passo, setPasso] = useState(0);
@@ -49,7 +76,7 @@ export default function Cronograma({ ctx, voltar }) {
   const [todos, setTodos] = useState(false);
   const set = (k, v) => setCfg((c) => ({ ...c, [k]: v }));
 
-  const vert = verticalizadoDe(prefs, concurso.id, fase, area);
+  const vert = combinado ? null : verticalizadoDe(prefs, concurso.id, fase, area);
   // usa o edital verticalizado do aluno (se houver); senão, as matérias do concurso
   const usar = editando ? cfg : normalizar(salvo?.cfg, dataProva);
   // cargos: o cronograma pode juntar as matérias de um ou vários cargos
@@ -58,7 +85,9 @@ export default function Cronograma({ ctx, voltar }) {
   const cargosPadrao = cargo === 'ambos' || !cargo ? listaCargos.map((c) => c.id) : Array.isArray(cargo) ? cargo : [cargo];
   const cargosSel = (usar.cargos?.length ? usar.cargos : cargosPadrao).filter((id) => listaCargos.some((c) => c.id === id));
   const nomeCargo = (id) => listaCargos.find((c) => c.id === id)?.nome || id;
-  const discs = vert ? vert.disciplinas : disciplinasDo(concurso.id, temCargos ? (cargosSel.length ? cargosSel : 'ambos') : cargo, fase, area);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const discsMix = useMemo(() => (combinado ? mesclarConcursos(combinado.itens) : null), [combinado?.chave]);
+  const discs = discsMix || (vert ? vert.disciplinas : disciplinasDo(concurso.id, temCargos ? (cargosSel.length ? cargosSel : 'ambos') : cargo, fase, area));
   const discursiva = (faseObj?.formato || concurso.formato) === 'discursiva';
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const sessoes = useMemo(() => gerarCronograma(usar, discs, { discursiva }), [usar, discs.length, discursiva, concurso.id, fase, area, cargosSel.join()]);
@@ -66,14 +95,14 @@ export default function Cronograma({ ctx, voltar }) {
   const feitos = salvo?.feitos || {};
   const hoje = new Date().toLocaleDateString('sv-SE');
 
-  const salvar = (novo) => setPrefs({ cronogramas: { ...(prefs.cronogramas || {}), [chave]: novo } });
+  const salvar = (novo) => setPrefs({ cronogramas: { ...(prefs.cronogramas || {}), [chave]: { ...novo, ...(combinado ? { mix: combinado.itens, nome: combinado.nome } : {}) } } });
   const marcar = (k) => {
     const n = { ...feitos };
     n[k] ? delete n[k] : (n[k] = 1);
     salvar({ ...salvo, feitos: n });
   };
 
-  const titulo = `${concurso.sigla}${faseObj ? ` – ${faseObj.nome}` : ''}${areaObj ? ` – ${areaObj.nome}` : ''}`;
+  const titulo = combinado ? `🔀 ${combinado.nome}` : `${concurso.sigla}${faseObj ? ` – ${faseObj.nome}` : ''}${areaObj ? ` – ${areaObj.nome}` : ''}`;
   const horas = Math.round(sessoes.reduce((s, x) => s + minutos(x.fim) - minutos(x.ini), 0) / 60);
 
   function baixarIcs() {
@@ -194,6 +223,7 @@ export default function Cronograma({ ctx, voltar }) {
                         <input type="checkbox" checked={ativa} onChange={() => setMat(d.nome, { ativa: !ativa })} style={{ width: 20, height: 20 }} />
                         <span>
                           <b>{d.nome}</b>
+                          {d.origens?.length > 0 && <span className="peq sub" style={{ display: 'block' }}>concursos: {d.origens.join(' · ')}</span>}
                           {temCargos && (
                             <span className="peq sub" style={{ display: 'block' }}>
                               {!d.cargos?.length || d.cargos.length === listaCargos.length ? 'todos os cargos' : `cargo: ${d.cargos.filter((c) => cargosSel.includes(c)).map(nomeCargo).join(' · ') || d.cargos.map(nomeCargo).join(' · ')}`}
@@ -384,7 +414,18 @@ export default function Cronograma({ ctx, voltar }) {
         </div>
       </div>
       <p className="sub">{titulo}{dataProva ? ` · prova em ${fmtData(dataProva)}` : ''}{vert ? ' · baseado no seu edital verticalizado' : ''}</p>
-      <ProximaData eventos={eventosDoConcurso(concurso, fase)} />
+      <ProximaData
+        eventos={
+          combinado
+            ? combinado.itens
+                .flatMap((it) => {
+                  const c = getConcurso(it.cid);
+                  return c ? eventosDoConcurso(c, it.fase).map((e) => ({ ...e, titulo: `${c.sigla}: ${e.titulo}` })) : [];
+                })
+                .sort((a, b) => a.data.localeCompare(b.data))
+            : eventosDoConcurso(concurso, fase)
+        }
+      />
       {atrasadas > 0 && (
         <p className="aviso">
           ⚠️ {atrasadas} {atrasadas === 1 ? 'bloco atrasado' : 'blocos atrasados'}. {usar.modo === 'ciclo' ? 'No modo ciclo, ' : ''}você pode replanejar: o que já foi feito sai da fila e o restante é redistribuído a partir de hoje.{' '}
