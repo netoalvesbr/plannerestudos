@@ -4,7 +4,8 @@ import { disciplinasDo } from '../lib/dados.js';
 import { chaveRevisao, chaveSessao, configPadrao, DIAS_SEMANA, gerarCronograma, gerarIcs, gerarRevisoes, INTERVALOS_REVISAO, materiasAtivas, NIVEIS, pesoDa } from '../lib/cronograma.js';
 import { fmtData } from '../lib/stats.js';
 import { verticalizadoDe } from './EditalVerticalizado.jsx';
-import { eventosDoConcurso, ProximaData } from './Calendario.jsx';
+import { ProximaData } from './Calendario.jsx';
+import { eventosDoAluno } from '../lib/exameAnterior.js';
 import { cronometrar } from './Cronometro.jsx';
 
 const campo = { width: '100%', minHeight: 40, padding: '6px 9px', borderRadius: 9, border: '1px solid var(--borda)', background: 'var(--card)', color: 'var(--txt)', font: 'inherit' };
@@ -420,10 +421,10 @@ export default function Cronograma({ ctx, voltar, combinado = null }) {
             ? combinado.itens
                 .flatMap((it) => {
                   const c = getConcurso(it.cid);
-                  return c ? eventosDoConcurso(c, it.fase).map((e) => ({ ...e, titulo: `${c.sigla}: ${e.titulo}` })) : [];
+                  return c ? eventosDoAluno(c, prefs, it.fase).map((e) => ({ ...e, titulo: `${c.sigla}: ${e.titulo}` })) : [];
                 })
                 .sort((a, b) => a.data.localeCompare(b.data))
-            : eventosDoConcurso(concurso, fase)
+            : eventosDoAluno(concurso, prefs, fase)
         }
       />
       {atrasadas > 0 && (

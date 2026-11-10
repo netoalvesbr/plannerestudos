@@ -3,7 +3,7 @@ import { getConcurso } from '../data/concursos.js';
 import { disciplinasDo, QUESTOES, questoesDo } from '../lib/dados.js';
 import { chaveRevisao, chaveSessao, gerarCronograma, gerarRevisoes } from '../lib/cronograma.js';
 import { diasAte, fmtData, fmtPct, porCampo, porDia, resumo } from '../lib/stats.js';
-import { eventosDoConcurso } from './Calendario.jsx';
+import { anteriorDe, eventosDoAluno, proximaDoAnterior } from '../lib/exameAnterior.js';
 import { tipoEvento } from './CalendarioGeral.jsx';
 import { mesclarConcursos } from './Cronograma.jsx';
 import { verticalizadoDe } from './EditalVerticalizado.jsx';
@@ -83,7 +83,7 @@ export default function Dashboard({ ctx, ir, abrirCrono, estudarConcurso }) {
     const pc = prefs.concursos?.[c.id] || {};
     const f = c.fases?.find((x) => x.id === pc.fase);
     const prova = f?.data || c.dataProva || '';
-    const ev = eventosDoConcurso(c, pc.fase).filter((e) => (e.fim || e.data) >= hoje);
+    const ev = eventosDoAluno(c, prefs).filter((e) => (e.fim || e.data) >= hoje);
     const prox = ev.find((e) => e.data !== prova) || ev[0];
     let qs = [];
     try { qs = questoesDo(c.id, pc.cargo, pc.fase, { area: pc.area }); } catch { qs = []; }
@@ -91,7 +91,7 @@ export default function Dashboard({ ctx, ir, abrirCrono, estudarConcurso }) {
   }).sort((a, b) => (a.prova || '9999').localeCompare(b.prova || '9999'));
 
   const proximas = meus
-    .flatMap((c) => eventosDoConcurso(c, prefs.concursos?.[c.id]?.fase).map((e) => ({ ...e, sigla: c.sigla, ...tipoEvento(e) })))
+    .flatMap((c) => eventosDoAluno(c, prefs).map((e) => ({ ...e, sigla: c.sigla, ...tipoEvento(e) })))
     .filter((e) => (e.fim || e.data) >= hoje && !/não vai fazer/.test(e.titulo || ''))
     .sort((a, b) => a.data.localeCompare(b.data))
     .slice(0, 8);
@@ -168,6 +168,12 @@ export default function Dashboard({ ctx, ir, abrirCrono, estudarConcurso }) {
                   </p>
                 ) : (
                   <p className="sub" style={{ margin: '6px 0' }}>Data da prova ainda não informada.</p>
+                )}
+                {anteriorDe(prefs, c.id) && !anteriorDe(prefs, c.id).resultado && (
+                  <p className="peq" style={{ margin: '4px 0' }}>
+                    ⏳ Aguardando o resultado do <b>{anteriorDe(prefs, c.id).exame}</b>
+                    {proximaDoAnterior(prefs, c) && <> – {proximaDoAnterior(prefs, c).titulo.split(': ').slice(1).join(': ')} em <b>{fmtData(proximaDoAnterior(prefs, c).data)}</b></>}. Se não passar, esta prova é a sua repescagem.
+                  </p>
                 )}
                 {prox && prox.data !== prova && (
                   <p className="peq" style={{ margin: '4px 0' }}>
@@ -249,7 +255,7 @@ export default function Dashboard({ ctx, ir, abrirCrono, estudarConcurso }) {
             {proximas.map((e, i) => (
               <li key={i} style={{ padding: '7px 0', borderBottom: '1px solid var(--borda)' }}>
                 <b>{e.ico} {fmtData(e.data)}{e.fim && e.fim !== e.data ? ` a ${fmtData(e.fim)}` : ''}</b> <span className="peq sub">· {e.data <= hoje ? 'em andamento' : faltam(e.data)}</span>
-                <div className="peq">{e.sigla}: {e.titulo}{e.prova ? ' (dia de prova)' : ''}</div>
+                <div className="peq">{e.anterior ? e.titulo : `${e.sigla}: ${e.titulo}`}{e.prova ? ' (dia de prova)' : ''}</div>
               </li>
             ))}
           </ul>

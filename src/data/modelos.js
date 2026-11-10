@@ -121,10 +121,10 @@ export function eventosRepescagem(r) {
     .map((e) => ({ ...e, exame: r.sigla || 'novo exame' }));
 }
 
-export function aplicarRepescagem(c, r, editalUrl = null) {
+export function aplicarRepescagem(c, r, editalUrl = null, exameOriginal = null) {
   const hoje = new Date().toLocaleDateString('sv-SE');
   const segunda = r.datasFases?.segunda || null;
-  const anterior = c.repescagem?.exameOriginal || c.sigla;
+  const anterior = exameOriginal || c.repescagem?.exameOriginal || c.sigla;
   // mantém as datas já passadas do exame original (histórico) e troca as futuras pelas do novo edital
   const antigos = (c.cronograma || []).filter((e) => e.data < hoje && !e.exame);
   const novos = eventosRepescagem(r);
