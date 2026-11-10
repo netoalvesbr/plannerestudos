@@ -1,6 +1,6 @@
 // Busca o texto de uma lei no site oficial (Planalto ou Senado) e devolve o HTML em UTF-8.
 // Só aceita endereços desses sites oficiais. O resultado fica em cache por 1 dia na Vercel.
-const PERMITIDOS = /^https:\/\/(www\.|www4\.)?planalto\.gov\.br\/ccivil_03\/|^https:\/\/(legis|www)\.senado\.leg\.br\//;
+const PERMITIDOS = /^https?:\/\/(www\.|www4\.)?planalto\.gov\.br\/ccivil_03\/|^https:\/\/(legis|www)\.senado\.leg\.br\/|^https:\/\/normas\.leg\.br\//;
 
 export default async function handler(req, res) {
   const url = String(req.query.url || '');
