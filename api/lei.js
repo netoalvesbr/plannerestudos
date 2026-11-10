@@ -23,6 +23,6 @@ export default async function handler(req, res) {
     res.setHeader('Cache-Control', 'public, max-age=3600, s-maxage=86400, stale-while-revalidate=604800');
     res.status(200).send(html);
   } catch (e) {
-    res.status(502).json({ erro: 'Não foi possível acessar o site oficial agora.', detalhe: `${e.message} ${e.cause?.code || ''} ${e.cause?.message || ''}`.trim() });
+    res.status(502).json({ erro: 'Não foi possível acessar o site oficial agora.', regiao: process.env.VERCEL_REGION, detalhe: `${e.message} ${e.cause?.code || ''} ${e.cause?.message || ''}`.trim() });
   }
 }
