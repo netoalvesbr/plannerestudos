@@ -79,7 +79,7 @@ export function ProvasDiarias({ ctx }) {
                 </div>
               );
             })}
-            {dia.provas.length < 3 * (cargo === 'ambos' ? concurso.cargos?.length || 1 : 1) && (
+            {dia.provas.length < 3 * (cargo === 'ambos' ? concurso.cargos?.length || 1 : Array.isArray(cargo) ? cargo.length : 1) && (
               <div className="card sub">Os demais blocos deste dia (Tarde e Noite) serão publicados em breve.</div>
             )}
           </div>
@@ -93,7 +93,7 @@ export function ProvasDiarias({ ctx }) {
 export function SeletorCargos({ ctx }) {
   const { concurso, cargo, prefs, setPrefs } = ctx;
   const ids = concurso.cargos.map((c) => c.id);
-  const marcados = cargo === 'ambos' || !cargo ? ids : [cargo];
+  const marcados = cargo === 'ambos' || !cargo ? ids : Array.isArray(cargo) ? cargo : [cargo];
   const alternar = (id) => {
     const n = marcados.includes(id) ? marcados.filter((x) => x !== id) : [...marcados, id];
     if (!n.length) return;

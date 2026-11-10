@@ -63,7 +63,9 @@ export function lerEdital(linhas) {
     r.nome = r.orgao;
     r.sigla = siglaDe(r.orgao);
   }
-  if (/ORDEM DOS ADVOGADOS|EXAME DE ORDEM/i.test(plano)) {
+  // só é edital da OAB quando o próprio Exame de Ordem aparece no começo e se repete (outros editais citam a OAB como requisito)
+  const nExame = (plano.match(/EXAME DE ORDEM/gi) || []).length;
+  if (/EXAME DE ORDEM/i.test(linhas.slice(0, 60).join(' ')) && nExame >= 3) {
     const n = plano.match(/(\d{1,3})\s*[ºo°]\s*EXAME DE ORDEM/i);
     r.nome = n ? `${n[1]}º Exame de Ordem Unificado – OAB` : 'Exame de Ordem Unificado – OAB';
     r.sigla = n ? `OAB ${n[1]}` : 'OAB';
@@ -181,7 +183,9 @@ export function lerEdital(linhas) {
   if (candidatas.length) r.datasFases.primeira = r.datasFases.primeira && ehDaTabela(r.datasFases.primeira) ? r.datasFases.primeira : r.dataProva;
   else if (r.datasFases.primeira) r.dataProva = r.datasFases.primeira;
 
-  r.disciplinas = lerConteudoProgramatico(linhas);
+  const porCargo = lerCargosEConteudo(linhas);
+  r.cargos = porCargo.cargos;
+  r.disciplinas = porCargo.disciplinas.length >= 3 ? porCargo.disciplinas : lerConteudoProgramatico(linhas);
   return r;
 }
 
@@ -253,6 +257,132 @@ export function lerConteudoProgramatico(linhas) {
   }
   fechar();
   return disciplinas.slice(0, 60);
+}
+
+// ---------------- cargos e conteúdo por cargo ----------------
+const semAcento = (x) => x.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+const slug = (x) => semAcento(x).replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 40);
+
+export function lerCargos(linhas) {
+  const plano = linhas.join(' ').replace(/\s+/g, ' ');
+  const nomes = [];
+  const add = (n) => {
+    const nome = n.replace(/\s+/g, ' ').replace(/[\s,;:.–-]+$/, '').trim();
+    if (nome.length < 4 || nome.length > 70 || /^(o|a|os|as|de|do|da)\b/i.test(nome)) return;
+    const t = titulo(nome);
+    if (!nomes.some((x) => semAcento(x) === semAcento(t))) nomes.push(t);
+  };
+  // "74 (setenta e quatro) vagas para o cargo de Oficial Investigador de Polícia;"
+  for (const m of plano.matchAll(/vagas?\s+para\s+o\s+cargo\s+de\s+([A-ZÀ-Ý][\p{L}\-–/ ]{3,70}?)(?=\s*[;,.(]|\s+e\s+\d|\s+conforme|\s+do\s+quadro)/gu)) add(m[1]);
+  // "SUBTOTAIS - OFICIAL INVESTIGADOR DE POLÍCIA" (quadro de vagas)
+  for (const l of linhas) {
+    const m = l.match(/^\s*SUBTOTA(?:L|IS)\s*[-–:]\s*(.+)$/i);
+    if (m) add(m[1]);
+  }
+  return nomes.slice(0, 30).map((nome) => ({ id: slug(nome), nome }));
+}
+
+// Conteúdo programático organizado por cargo:
+// "CONHECIMENTOS BÁSICOS PARA TODOS OS CARGOS", "... PARA OS CARGOS DE X, Y E Z", e cabeçalhos "CARGO X:" com as matérias específicas.
+export function lerCargosEConteudo(linhas) {
+  const cargos = lerCargos(linhas);
+  if (!cargos.length) return { cargos: [], disciplinas: [] };
+  const ini = linhas.map((l, i) => (/CONTE[ÚU]DOS? PROGRAM[ÁA]TICOS?/i.test(l) ? i : -1)).filter((i) => i >= 0);
+  if (!ini.length) return { cargos, disciplinas: [] };
+  // o último título "conteúdos programáticos" (o do anexo), não o sumário
+  const comeco = ini.find((i) => (linhas.slice(i + 1, i + 6).join(' ').match(/[A-ZÀ-Ý ]{4,}:/) || []).length) ?? ini[ini.length - 1];
+  // cabeçalhos e rodapés repetidos (aparecem em todas as páginas)
+  const freq = new Map();
+  for (const l of linhas) freq.set(l.trim(), (freq.get(l.trim()) || 0) + 1);
+  const repetida = (l) => (freq.get(l) || 0) >= 4 && l.length < 120;
+  const todos = cargos.map((c) => c.id);
+  const cargosNoTexto = (t) => {
+    const n = semAcento(t);
+    return cargos.filter((c) => n.includes(semAcento(c.nome)) || n.includes(semAcento(c.nome).replace(/ de policia( civil)?$/, ''))).map((c) => c.id);
+  };
+  const disciplinas = [];
+  let escopo = todos;
+  let bloco = '';
+  let atual = null;
+  let cabecalho = null; // título de seção que pode continuar na linha de baixo
+  const fechar = () => {
+    if (atual) {
+      atual.topicos = dividirTopicos(atual._txt);
+      delete atual._txt;
+      if (atual.topicos.length && !/^(anexo|observa|nota)/i.test(atual.nome)) {
+        const igual = disciplinas.find((d) => semAcento(d.nome) === semAcento(atual.nome) && d.bloco === atual.bloco);
+        if (igual) igual.cargos = [...new Set([...igual.cargos, ...atual.cargos])];
+        else disciplinas.push(atual);
+      }
+    }
+    atual = null;
+  };
+  const abrirMateria = (nome, resto) => {
+    fechar();
+    let cs = escopo;
+    const exceto = nome.match(/\(EXCETO[^)]*\)/i);
+    if (exceto) cs = cs.filter((c) => !cargosNoTexto(exceto[0]).includes(c));
+    const so = nome.match(/\((?:APENAS|SOMENTE)[^)]*\)/i);
+    if (so && cargosNoTexto(so[0]).length) cs = cargosNoTexto(so[0]);
+    const limpo = titulo(nome.replace(/\([^)]*\)/g, '').replace(/^NO[ÇC][ÕO]ES DE\s+/i, 'Noções de ').trim());
+    atual = { nome: limpo.replace(/^Noções De /, 'Noções de '), bloco, cargos: cs, _txt: resto || '' };
+  };
+  for (let i = comeco + 1; i < linhas.length; i++) {
+    const l = linhas[i].trim();
+    if (!l || repetida(l) || /^(Edital|P[áa]gina)\b.*\d+\s*de\s*\d+/i.test(l)) continue;
+    if (/^ANEXO\s+[IVX]+\b/i.test(l) && disciplinas.length > 2) break;
+    // título de seção: "2. CONHECIMENTOS ... PARA OS CARGOS DE ..." (pode quebrar em várias linhas)
+    if (/^\d+(\.\d+)*\.?\s+(CONHECIMENTOS|CONTE[ÚU]DOS?|PROVA|M[ÓO]DULO|BLOCO|DISCIPLINAS)/i.test(l) || (cabecalho && MAIUSC.test(l) && !/:\s*$/.test(l) && l.length < 110)) {
+      fechar();
+      cabecalho = (cabecalho && !/^\d/.test(l) ? cabecalho + ' ' : '') + l;
+      const cs = /TODOS OS CARGOS/i.test(cabecalho) ? todos : cargosNoTexto(cabecalho);
+      if (/^\d+\.\s/.test(cabecalho) || /CARGOS?/i.test(cabecalho)) escopo = cs.length ? cs : escopo;
+      bloco = titulo(cabecalho.replace(/^\d+(\.\d+)*\.?\s+/, '').replace(/\s+PARA\s+(O|OS)\s+CARGOS?.*$/i, '').replace(/\s+PARA TODOS OS CARGOS/i, ''));
+      continue;
+    }
+    cabecalho = null;
+    // cabeçalho de cargo: "OFICIAL INVESTIGADOR DE POLÍCIA:" ou "PERITO CRIMINAL – CONTEÚDO COMUM...:"
+    const cab = l.match(/^([A-ZÀ-ÖØ-Ý][A-ZÀ-ÖØ-Ý\s,\-–()/ºª]{3,110}?):\s*(.*)$/);
+    if (cab && temLetra(cab[1])) {
+      const nomeCab = cab[1].trim();
+      const cs = cargosNoTexto(nomeCab);
+      const ehCargo = cs.length === 1 && semAcento(nomeCab).startsWith(semAcento(cargos.find((c) => c.id === cs[0]).nome).split(' ')[0]);
+      if (ehCargo) {
+        fechar();
+        escopo = cs;
+        const depois = nomeCab.split(/\s+[–-]\s+/).slice(1).join(' – ');
+        bloco = 'Específicos – ' + cargos.find((c) => c.id === cs[0]).nome + (depois && !/CONTE[ÚU]DO/i.test(depois) ? ` – ${titulo(depois)}` : '');
+        if (cab[2]) lerInline(cab[2]);
+        continue;
+      }
+      if (/^ESPECIALIDADE\b/i.test(nomeCab)) {
+        abrirMateria(nomeCab.replace(/^ESPECIALIDADE\s*[–-]\s*/i, ''), '');
+        if (cab[2]) lerInline(cab[2]);
+        continue;
+      }
+      abrirMateria(nomeCab, '');
+      if (cab[2]) lerInline(cab[2]);
+      continue;
+    }
+    lerInline(l);
+  }
+  fechar();
+  return { cargos, disciplinas: disciplinas.slice(0, 80) };
+
+  // dentro do texto: "... ESTATÍSTICA: 1 Conceitos ..." abre uma nova matéria no meio da linha
+  function lerInline(t) {
+    const re = /(?:^|[.;]\s+|\s)([A-ZÀ-ÖØ-Ý][A-ZÀ-ÖØ-Ý ,\-–()/]{4,70}):\s+(?=\d|[A-ZÀ-Ý])/g;
+    let ult = 0;
+    let m;
+    while ((m = re.exec(t))) {
+      if (!temLetra(m[1]) || m[1].trim().split(' ').length > 10) continue;
+      const antes = t.slice(ult, m.index);
+      if (atual) atual._txt += ' ' + antes;
+      abrirMateria(m[1].trim(), '');
+      ult = m.index + m[0].length;
+    }
+    if (atual) atual._txt += ' ' + t.slice(ult);
+  }
 }
 
 export function dividirTopicos(txt) {

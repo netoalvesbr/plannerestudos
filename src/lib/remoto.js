@@ -66,7 +66,7 @@ const concursoParaBanco = (c) => ({
   meta: c.meta ?? 0.75,
   fases: c.fases || [],
   cargos: c.cargos || [],
-  disciplinas: (c.disciplinas || []).map(({ nome, bloco, fase, area, topicos }) => ({ nome, bloco: bloco || null, fase: fase || null, area: area || null, topicos: topicos || [] })),
+  disciplinas: (c.disciplinas || []).map(({ nome, bloco, fase, area, topicos, cargos }) => ({ nome, bloco: bloco || null, fase: fase || null, area: area || null, topicos: topicos || [], ...(cargos?.length ? { cargos } : {}) })),
   cronograma: c.cronograma || [],
   prova: c.prova?.blocos || c.modelo || c.repescagem ? { ...(c.prova?.blocos ? c.prova : {}), modelo: c.modelo || null, repescagem: c.repescagem || null } : null,
 });

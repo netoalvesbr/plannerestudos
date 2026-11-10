@@ -34,7 +34,7 @@ function normalizar(cfg, dataProva) {
   return n;
 }
 
-const PASSOS = ['Modo', 'Matérias', 'Dias e horas', 'Blocos', 'Revisões', 'Resumo'];
+const PASSOS = ['Modo', 'Cargos', 'Matérias', 'Dias e horas', 'Blocos', 'Revisões', 'Resumo'];
 
 export default function Cronograma({ ctx }) {
   const { concurso, cargo, fase, area, prefs, setPrefs, abrirAvulsas } = ctx;
@@ -51,11 +51,17 @@ export default function Cronograma({ ctx }) {
 
   const vert = verticalizadoDe(prefs, concurso.id, fase, area);
   // usa o edital verticalizado do aluno (se houver); senão, as matérias do concurso
-  const discs = vert ? vert.disciplinas : disciplinasDo(concurso.id, cargo, fase, area);
   const usar = editando ? cfg : normalizar(salvo?.cfg, dataProva);
+  // cargos: o cronograma pode juntar as matérias de um ou vários cargos
+  const listaCargos = concurso.cargos || [];
+  const temCargos = listaCargos.length > 1;
+  const cargosPadrao = cargo === 'ambos' || !cargo ? listaCargos.map((c) => c.id) : Array.isArray(cargo) ? cargo : [cargo];
+  const cargosSel = (usar.cargos?.length ? usar.cargos : cargosPadrao).filter((id) => listaCargos.some((c) => c.id === id));
+  const nomeCargo = (id) => listaCargos.find((c) => c.id === id)?.nome || id;
+  const discs = vert ? vert.disciplinas : disciplinasDo(concurso.id, temCargos ? (cargosSel.length ? cargosSel : 'ambos') : cargo, fase, area);
   const discursiva = (faseObj?.formato || concurso.formato) === 'discursiva';
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  const sessoes = useMemo(() => gerarCronograma(usar, discs, { discursiva }), [usar, discs.length, discursiva, concurso.id, fase, area]);
+  const sessoes = useMemo(() => gerarCronograma(usar, discs, { discursiva }), [usar, discs.length, discursiva, concurso.id, fase, area, cargosSel.join()]);
   const revisoes = useMemo(() => gerarRevisoes(sessoes, usar), [sessoes, usar]);
   const feitos = salvo?.feitos || {};
   const hoje = new Date().toLocaleDateString('sv-SE');
@@ -87,6 +93,8 @@ export default function Cronograma({ ctx }) {
     setCfg({ ...usar, inicio: hoje, pular: [...pular] });
   }
 
+  const passos = PASSOS.filter((p) => p !== 'Cargos' || temCargos);
+  const nomePasso = passos[passo];
   if (editando) {
     const mat = (nome) => cfg.materias[nome] || {};
     const setMat = (nome, v) => set('materias', { ...cfg.materias, [nome]: { ...mat(nome), ...v } });
@@ -105,7 +113,7 @@ export default function Cronograma({ ctx }) {
     const contagem = {};
     for (const s of sessoes) if (s.tipo !== 'revisao-final') contagem[s.disciplina] = (contagem[s.disciplina] || 0) + 1;
     const semAparecer = ativas.filter((d) => !contagem[d.nome]).map((d) => d.nome);
-    const ultimo = passo === PASSOS.length - 1;
+    const ultimo = passo === passos.length - 1;
 
     const confirmar = () => { salvar({ cfg, feitos: salvo?.feitos || {} }); setEditando(false); };
 
@@ -114,12 +122,12 @@ export default function Cronograma({ ctx }) {
         <h1>📆 {salvo ? 'Ajustar cronograma' : 'Montar meu cronograma'}</h1>
         <p className="sub">{titulo} · {discs.length} {discs.length === 1 ? 'matéria' : 'matérias'} · {discs.reduce((s, d) => s + (d.topicos?.length || 0), 0)} tópicos{dataProva ? ` · prova em ${fmtData(dataProva)}` : ''}</p>
         <ol className="passos" aria-label="Etapas">
-          {PASSOS.map((p, i) => (
+          {passos.map((p, i) => (
             <li key={p}><button aria-current={i === passo ? 'step' : undefined} onClick={() => setPasso(i)}>{i < passo ? '✓' : i + 1}. {p}</button></li>
           ))}
         </ol>
 
-        {passo === 0 && (
+        {nomePasso === 'Modo' && (
           <section className="card">
             <h2>Como você prefere estudar?</h2>
             <div className="opcoes-modo">
@@ -142,7 +150,33 @@ export default function Cronograma({ ctx }) {
           </section>
         )}
 
-        {passo === 1 && (
+        {nomePasso === 'Cargos' && (
+          <section className="card">
+            <h2>Para quais cargos você vai estudar?</h2>
+            <p className="sub peq">Marque um ou mais. As matérias do cronograma serão as dos cargos marcados; as comuns aparecem uma vez só.</p>
+            <div className="escolha">
+              {listaCargos.map((k) => {
+                const on = cargosSel.includes(k.id);
+                const n = disciplinasDo(concurso.id, k.id, fase, area).length;
+                return (
+                  <button key={k.id} type="button" role="checkbox" aria-checked={on} className="card bloco-card" style={{ margin: 0, borderWidth: 2, borderColor: on ? 'var(--pri)' : undefined, background: on ? 'var(--pri-claro)' : undefined }}
+                    onClick={() => {
+                      const novo = on ? cargosSel.filter((x) => x !== k.id) : [...cargosSel, k.id];
+                      set('cargos', novo);
+                      const pc = prefs.concursos?.[concurso.id] || {};
+                      setPrefs({ concursos: { ...(prefs.concursos || {}), [concurso.id]: { ...pc, cargo: novo.length === listaCargos.length ? 'ambos' : novo.length === 1 ? novo[0] : novo } } });
+                    }}>
+                    <b>{on ? '☑' : '☐'} {k.nome}</b>
+                    <span className="peq sub" style={{ display: 'block' }}>{n} {n === 1 ? 'matéria' : 'matérias'}</span>
+                  </button>
+                );
+              })}
+            </div>
+            {!cargosSel.length && <p className="aviso">Marque pelo menos um cargo.</p>}
+          </section>
+        )}
+
+        {nomePasso === 'Matérias' && (
           <section className="card">
             <h2>Quais matérias e qual o seu nível em cada uma?</h2>
             <p className="sub peq">Quanto mais fraco o seu nível (e maior o peso na prova), mais vezes a matéria aparece. Use ↑ ↓ para definir a prioridade: as primeiras entram antes.</p>
@@ -157,7 +191,14 @@ export default function Cronograma({ ctx }) {
                     <div className="linha" style={{ alignItems: 'center' }}>
                       <label style={{ flex: 1, display: 'flex', gap: 8, alignItems: 'center' }}>
                         <input type="checkbox" checked={ativa} onChange={() => setMat(d.nome, { ativa: !ativa })} style={{ width: 20, height: 20 }} />
-                        <b>{d.nome}</b>
+                        <span>
+                          <b>{d.nome}</b>
+                          {temCargos && (
+                            <span className="peq sub" style={{ display: 'block' }}>
+                              {!d.cargos?.length || d.cargos.length === listaCargos.length ? 'todos os cargos' : `cargo: ${d.cargos.filter((c) => cargosSel.includes(c)).map(nomeCargo).join(' · ') || d.cargos.map(nomeCargo).join(' · ')}`}
+                            </span>
+                          )}
+                        </span>
                       </label>
                       <button className="btn peq" aria-label={`Subir ${d.nome}`} disabled={i === 0} onClick={() => mover(i, -1)}>↑</button>
                       <button className="btn peq" aria-label={`Descer ${d.nome}`} disabled={i === ordenadas.length - 1} onClick={() => mover(i, 1)}>↓</button>
@@ -181,7 +222,7 @@ export default function Cronograma({ ctx }) {
           </section>
         )}
 
-        {passo === 2 && (
+        {nomePasso === 'Dias e horas' && (
           <section className="card">
             <h2>Em quais dias e horários você vai estudar?</h2>
             <ul className="lista-materias">
@@ -212,7 +253,7 @@ export default function Cronograma({ ctx }) {
           </section>
         )}
 
-        {passo === 3 && (
+        {nomePasso === 'Blocos' && (
           <section className="card">
             <h2>Como serão os blocos de estudo?</h2>
             <div className="filtros">
@@ -229,7 +270,7 @@ export default function Cronograma({ ctx }) {
           </section>
         )}
 
-        {passo === 4 && (
+        {nomePasso === 'Revisões' && (
           <section className="card">
             <h2>Deseja incluir revisões?</h2>
             <label style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
@@ -253,11 +294,12 @@ export default function Cronograma({ ctx }) {
           </section>
         )}
 
-        {passo === 5 && (
+        {nomePasso === 'Resumo' && (
           <section className="card">
             <h2>Resumo do seu cronograma</h2>
             <ul>
               <li>Modo: <b>{cfg.modo === 'ciclo' ? 'Ciclo (dinâmico)' : 'Fixo (previsível)'}</b></li>
+              {temCargos && <li>Cargos: <b>{cargosSel.map(nomeCargo).join(', ')}</b></li>}
               <li><b>{blocosSemana} blocos</b> de {cfg.bloco} min por semana ({fmtHoras(minSemana)})</li>
               <li>Dias: {ORDEM_DIAS.filter((d) => cfg.dias.includes(d)).map((d) => `${NOME_DIA[d]} (${fmtHoras(blocosNoDia(cfg, d) * cfg.bloco)})`).join(', ') || 'nenhum'}</li>
               <li>Até {cfg.simultaneas || 'todas as'} matérias por dia</li>
@@ -276,7 +318,7 @@ export default function Cronograma({ ctx }) {
 
         <div className="linha">
           {passo > 0 && <button className="btn" onClick={() => setPasso(passo - 1)}>← Voltar</button>}
-          {!ultimo && <button className="btn pri" onClick={() => setPasso(passo + 1)}>Continuar →</button>}
+          {!ultimo && <button className="btn pri" disabled={nomePasso === 'Cargos' && !cargosSel.length} onClick={() => setPasso(passo + 1)}>Continuar →</button>}
           {(ultimo || salvo) && <button className={`btn${ultimo ? ' pri' : ''}`} disabled={!sessoes.length} onClick={confirmar}>{salvo ? 'Salvar alterações' : '✓ Criar cronograma'}</button>}
           {salvo && <button className="btn" onClick={() => { setCfg(normalizar(salvo.cfg, dataProva)); setEditando(false); }}>Cancelar</button>}
         </div>

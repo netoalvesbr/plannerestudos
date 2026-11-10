@@ -52,12 +52,15 @@ export function registrarQuestoesRemotas(lista) {
 }
 
 // Disciplinas do concurso visíveis para o cargo ('oi', 'pap', 'ambos'...) e a fase escolhidos
+// cargo: id de um cargo, lista de ids (vários cargos) ou 'ambos'/vazio (todos)
+export const cargoInclui = (cargo, lista) => cargo === 'ambos' || !cargo || (Array.isArray(cargo) && !cargo.length) || !lista || (Array.isArray(cargo) ? cargo.some((c) => lista.includes(c)) : lista.includes(cargo));
+
 export function disciplinasDo(concursoId, cargo, fase, area) {
   const c = getConcurso(concursoId);
   if (!c) return [];
   return c.disciplinas.filter(
     (d) =>
-      (cargo === 'ambos' || !cargo || !d.cargos || d.cargos.includes(cargo)) &&
+      cargoInclui(cargo, d.cargos) &&
       (!fase || !d.fase || d.fase === fase) &&
       (!area || !d.area || d.area === area),
   );
@@ -91,7 +94,7 @@ export function diasDo(concursoId, cargo) {
   return (DIAS[concursoId] || [])
     .map((d) => ({
       ...d,
-      provas: d.provas.filter((p) => !p.cargos || cargo === 'ambos' || !cargo || p.cargos.includes(cargo)),
+      provas: d.provas.filter((p) => cargoInclui(cargo, p.cargos)),
     }))
     .filter((d) => d.provas.length);
 }

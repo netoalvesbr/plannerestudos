@@ -25,6 +25,7 @@ const vazio = {
   fases: [],
   cronograma: [],
   disciplinas: [],
+  cargos: [],
 };
 
 const campo = { width: '100%', minHeight: 40, padding: '6px 9px', borderRadius: 9, border: '1px solid var(--borda)', background: 'var(--card)', color: 'var(--txt)', font: 'inherit' };
@@ -73,6 +74,7 @@ export default function NovoConcurso({ inicial, escolhaInicial, aoSalvar, aoCanc
           edital: pega(x.edital, r.edital),
           dataProva: pega(x.dataProva, r.dataProva),
           cronograma: trocar ? (r.cronograma.length ? r.cronograma : x.cronograma) : x.cronograma.length ? x.cronograma : r.cronograma,
+          cargos: (trocar || !x.cargos?.length) && r.cargos?.length > 1 ? r.cargos : x.cargos || [],
           disciplinas:
             (trocar ? r.disciplinas.length > 0 : !x.disciplinas.length) && !oab
               ? r.disciplinas.map((d) => ({ ...d, fase: '', topicosTxt: d.topicos.join('\n') }))
@@ -100,6 +102,7 @@ export default function NovoConcurso({ inicial, escolhaInicial, aoSalvar, aoCanc
           ['Banca', r.banca],
           ['Data da prova', r.dataProva ? r.dataProva.split('-').reverse().join('/') : ''],
           ['Datas do cronograma', r.cronograma.length ? `${r.cronograma.length} datas` : ''],
+          ['Cargos', r.cargos?.length ? `${r.cargos.length}: ${r.cargos.map((c) => c.nome).join(', ')}` : ''],
           ['Matérias do conteúdo programático', oab ? 'modelo OAB (20 matérias + 7 áreas)' : r.disciplinas.length ? `${r.disciplinas.length} matérias, ${r.disciplinas.reduce((s, d) => s + d.topicos.length, 0)} tópicos` : ''],
         ],
       });
@@ -306,6 +309,11 @@ export default function NovoConcurso({ inicial, escolhaInicial, aoSalvar, aoCanc
             ? `Automático pelo modelo OAB/FGV: ${c.disciplinas.filter((d) => d.fase === 'f1').length} matérias da 1ª fase e as 7 áreas da 2ª fase. O candidato monta o edital verticalizado dele na ficha do concurso.`
             : 'Uma disciplina por bloco; um tópico por linha. Indique a fase (e a área, se houver) de cada disciplina.'}
         </p>
+        {c.cargos?.length > 1 && (
+          <p className="peq">
+            <b>Cargos do edital ({c.cargos.length}):</b> {c.cargos.map((k) => k.nome).join(' · ')}. Cada matéria mostra para quais cargos ela vale; ao montar o cronograma você escolhe os seus cargos.
+          </p>
+        )}
         <details open={c.modelo !== 'oab'}>
           <summary className="sub">{c.modelo === 'oab' ? 'Ver ou ajustar as matérias' : 'Disciplinas'}</summary>
         {c.disciplinas.map((d, i) => (
@@ -329,6 +337,24 @@ export default function NovoConcurso({ inicial, escolhaInicial, aoSalvar, aoCanc
                 </select>
               )}
             </div>
+            {c.cargos?.length > 1 && (
+              <div className="linha peq" role="group" aria-label={`Cargos de ${d.nome}`} style={{ marginBottom: 6 }}>
+                <span className="sub">Vale para:</span>
+                {c.cargos.map((k) => {
+                  const on = !d.cargos?.length || d.cargos.includes(k.id);
+                  return (
+                    <label key={k.id} className="btn peq" style={{ background: on ? 'var(--pri-claro)' : undefined }}>
+                      <input type="checkbox" className="oculto" checked={on} onChange={() => {
+                        const atual = d.cargos?.length ? d.cargos : c.cargos.map((x) => x.id);
+                        const novo = on ? atual.filter((x) => x !== k.id) : [...atual, k.id];
+                        setItem('disciplinas', i, 'cargos', novo.length === c.cargos.length ? undefined : novo);
+                      }} />
+                      {on ? '✓ ' : ''}{k.nome}
+                    </label>
+                  );
+                })}
+              </div>
+            )}
             <textarea rows={Math.min(8, Math.max(3, (d.topicosTxt || '').split('\n').length))} style={{ ...campo, minHeight: 70 }} value={d.topicosTxt || ''} onChange={(e) => setItem('disciplinas', i, 'topicosTxt', e.target.value)} placeholder="Tópicos, um por linha" aria-label={`Tópicos de ${d.nome}`} />
           </div>
         ))}

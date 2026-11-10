@@ -384,7 +384,7 @@ export function EscolhaCargo({ concurso, aoEscolher }) {
           </button>
         ))}
       </div>
-      <button className="btn pri" style={{ marginTop: 14, width: '100%' }} disabled={!sel.length} onClick={() => aoEscolher(sel.length === concurso.cargos.length ? 'ambos' : sel[0])}>
+      <button className="btn pri" style={{ marginTop: 14, width: '100%' }} disabled={!sel.length} onClick={() => aoEscolher(sel.length === concurso.cargos.length ? 'ambos' : sel.length === 1 ? sel[0] : sel)}>
         {sel.length ? 'Confirmar' : 'Marque pelo menos um cargo'}
       </button>
     </section>
