@@ -8,11 +8,18 @@ const hojeIso = () => new Date().toLocaleDateString('sv-SE');
 const diasEntre = (de, ate) => Math.round((new Date(ate + 'T12:00:00') - new Date(de + 'T12:00:00')) / 86400000);
 
 // Eventos do concurso: datas do edital + datas das provas (em vermelho)
-export function eventosDoConcurso(concurso) {
+export function eventosDoConcurso(concurso, estudando = null) {
   const ev = [];
   const nome = concurso.nome || concurso.sigla;
   // provas das fases primeiro: o nome da fase é o título preferido para o dia da prova
-  for (const f of concurso.fases || []) if (f.data) ev.push({ data: f.data, titulo: f.nome.includes('–') ? f.nome.replace(/–/, 'do ' + (concurso.nome || concurso.sigla).replace(/ – OAB$/, '') + ' –') : `${f.nome} – ${nome}`, prova: true });
+  // quem estuda só uma fase (ex.: 2ª fase da OAB) vê as outras fases como informação, não como a sua prova
+  const fEst = estudando ? (concurso.fases || []).find((f) => f.id === estudando) : null;
+  for (const f of concurso.fases || []) {
+    if (!f.data) continue;
+    const t = f.nome.includes('–') ? f.nome.replace(/–/, 'do ' + (concurso.nome || concurso.sigla).replace(/ – OAB$/, '') + ' –') : `${f.nome} – ${nome}`;
+    const naoFaz = fEst && f.id !== fEst.id;
+    ev.push({ data: f.data, titulo: naoFaz ? `${t} (você não vai fazer)` : t, prova: !naoFaz });
+  }
   // se o candidato apagou uma fase, as datas que são só daquela fase não aparecem
   const fases = concurso.fases || [];
   const temFase = (n) => fases.some((f) => new RegExp(`^${n}`).test(f.nome));
@@ -23,7 +30,8 @@ export function eventosDoConcurso(concurso) {
   for (const e of concurso.cronograma || []) {
     if (!e.data || ignorar(e.evento)) continue;
     const prova = /aplica|realiza[çc][ãa]o d[ao]s? prova|prova (objetiva|pr[áa]tico|discursiva)|[12][ªa] fase/i.test(e.evento) && !/divulga|local|gabarito|padr|resultado|recurso/i.test(e.evento);
-    ev.push({ data: e.data, fim: e.fim || '', titulo: e.evento, prova });
+    const daOutraFase = fEst && fases[0] && fEst.id !== fases[0].id && /objetiva|1[ªa] fase|primeira fase/i.test(e.evento) && !/pr[áa]tico|2[ªa] fase|segunda/i.test(e.evento);
+    ev.push({ data: e.data, fim: e.fim || '', titulo: daOutraFase ? `${e.evento} (1ª fase – você não vai fazer)` : e.evento, prova: prova && !daOutraFase });
   }
   if (!concurso.fases?.length && concurso.dataProva) ev.push({ data: concurso.dataProva, titulo: `Prova – ${nome}`, prova: true });
   // remove repetidos (mesma data e prova já representada pela fase)

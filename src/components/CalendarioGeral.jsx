@@ -43,7 +43,7 @@ export default function CalendarioGeral({ ctx }) {
   const eventos = useMemo(() => {
     const lista = filtro === 'todos' ? meus : meus.filter((c) => c.id === filtro);
     return lista
-      .flatMap((c) => eventosDoConcurso(c).map((e) => ({ ...e, concurso: c.sigla, concursoNome: c.nome, ...tipoEvento(e) })))
+      .flatMap((c) => eventosDoConcurso(c, prefs.concursos?.[c.id]?.fase).map((e) => ({ ...e, concurso: c.sigla, concursoNome: c.nome, ...tipoEvento(e) })))
       .sort((a, b) => a.data.localeCompare(b.data));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [filtro, prefs.seguindo, ctx.bancoVersao]);

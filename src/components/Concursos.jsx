@@ -229,8 +229,12 @@ export function MeusConcursos({ ctx }) {
           const pc = prefs.concursos?.[c.id] || {};
           const s = resumo(questoesDo(c.id, pc.cargo || 'ambos', pc.fase, { area: pc.area }), respostas);
           const nQ = questoesDo(c.id, 'ambos', null).length;
-          const faltam = c.dataProva ? diasAte(c.dataProva) : null;
           const fase = c.fases?.find((f) => f.id === pc.fase);
+          // a data que importa é a da fase que a pessoa está estudando (ex.: só a 2ª fase da OAB)
+          const dataSua = (seg && fase?.data) || c.dataProva;
+          const faltam = dataSua ? diasAte(dataSua) : null;
+          const outrasFases = seg && fase?.data ? (c.fases || []).filter((f) => f.id !== fase.id && f.data) : [];
+          const so2fase = seg && c.fases?.length > 1 && fase && c.fases[0].id !== fase.id;
           return (
             <div key={c.id} className="card" style={{ borderColor: seg ? 'var(--pri)' : undefined }}>
               <h2>{c.sigla} – {c.nome}</h2>
@@ -238,7 +242,24 @@ export function MeusConcursos({ ctx }) {
                 {[c.banca, c.cargos?.length ? c.cargos.map((x) => x.nome).join(' / ') : null].filter(Boolean).join(' · ')}
                 {c.fases?.length > 0 && <><br />Fases: {c.fases.map((f) => f.nome).join(' · ')}</>}
                 <br />
-                {c.dataProva ? <>Prova em {fmtData(c.dataProva)} {faltam >= 0 && <span className="contagem">· faltam {faltam} dias</span>}</> : 'Data da prova a definir'}
+                {dataSua ? (
+                  <>
+                    {seg && fase?.data ? <>Sua prova ({fase.nome.split(' – ')[0]}): <b>{fmtData(dataSua)}</b></> : <>Prova em {fmtData(dataSua)}</>}{' '}
+                    {faltam >= 0 && <span className="contagem">· faltam {faltam} dias</span>}
+                  </>
+                ) : (
+                  'Data da prova a definir'
+                )}
+                {outrasFases.map((f) => (
+                  <span key={f.id} className="peq" style={{ display: 'block' }}>
+                    {f.nome.split(' – ')[0]}: {fmtData(f.data)}{so2fase && f.id === c.fases[0].id ? ' – você não vai fazer' : ''}
+                  </span>
+                ))}
+                {so2fase && (
+                  <span className="peq" style={{ display: 'block' }}>
+                    ℹ️ Você estuda só a {fase.nome.split(' – ')[0]}{c.modelo === 'oab' || ehOAB(c) ? ' (reaproveitamento da 1ª fase / repescagem, se não passar no exame anterior)' : ''}.
+                  </span>
+                )}
                 <br />
                 {nQ} questões no banco{c.editalUrl ? ' · edital em PDF' : ''}
                 {c.repescagem && <><br /><b>🔁 Repescagem: 2ª fase do {c.repescagem.exame}{c.repescagem.data ? ` em ${fmtData(c.repescagem.data)}` : ''}</b></>}
@@ -466,8 +487,8 @@ export function Ficha({ ctx, concurso, voltar }) {
 
       <section className="card">
         <h2>📅 Datas importantes</h2>
-        <ProximaData eventos={eventosDoConcurso(concurso)} />
-        <Calendario eventos={eventosDoConcurso(concurso)} />
+        <ProximaData eventos={eventosDoConcurso(concurso, pc.fase)} />
+        <Calendario eventos={eventosDoConcurso(concurso, pc.fase)} />
         {concurso.editalUrl && <p className="peq" style={{ marginTop: 10 }}><a href={concurso.editalUrl} target="_blank" rel="noreferrer">📄 Edital de abertura (PDF)</a></p>}
       </section>
 

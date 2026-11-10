@@ -382,7 +382,7 @@ export default function Cronograma({ ctx }) {
         </div>
       </div>
       <p className="sub">{titulo}{dataProva ? ` · prova em ${fmtData(dataProva)}` : ''}{vert ? ' · baseado no seu edital verticalizado' : ''}</p>
-      <ProximaData eventos={eventosDoConcurso(concurso)} />
+      <ProximaData eventos={eventosDoConcurso(concurso, fase)} />
       {atrasadas > 0 && (
         <p className="aviso">
           ⚠️ {atrasadas} {atrasadas === 1 ? 'bloco atrasado' : 'blocos atrasados'}. {usar.modo === 'ciclo' ? 'No modo ciclo, ' : ''}você pode replanejar: o que já foi feito sai da fila e o restante é redistribuído a partir de hoje.{' '}
