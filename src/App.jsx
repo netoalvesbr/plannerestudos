@@ -5,6 +5,7 @@ import * as remoto from './lib/remoto.js';
 import NovoConcurso from './components/NovoConcurso.jsx';
 import Cronograma from './components/Cronograma.jsx';
 import CalendarioGeral from './components/CalendarioGeral.jsx';
+import Dashboard from './components/Dashboard.jsx';
 import Questoes from './components/Questoes.jsx';
 import ImportarProva from './components/ImportarProva.jsx';
 import * as store from './lib/store.js';
@@ -291,6 +292,15 @@ export default function App() {
         <MeusConcursos ctx={ctx} />
       </>
     );
+  } else if (tela.nome === 'dashboard') {
+    conteudo = (
+      <Dashboard
+        ctx={ctx}
+        ir={(nome) => setTela({ nome })}
+        abrirCrono={(ab) => setTela({ nome: 'cronograma', abrir: ab })}
+        estudarConcurso={(id) => { setPrefs({ ativo: id }); setTela({ nome: 'questoes' }); }}
+      />
+    );
   } else if (tela.nome === 'calendario') {
     conteudo = <CalendarioGeral ctx={ctx} />;
   } else if (tela.nome === 'questoes' && tela.aba === 'importar') {
@@ -366,6 +376,7 @@ export default function App() {
           </div>
           {concurso && (
             <nav className="nav" aria-label="Principal">
+              <button aria-current={tela.nome === 'dashboard'} onClick={() => ir('dashboard')}>🏠 Início</button>
               <button aria-current={naQuestoes} onClick={() => ir('questoes')}>📝 Questões</button>
               <button aria-current={tela.nome === 'cronograma'} onClick={() => ir('cronograma')}>📆 Cronograma</button>
               <button aria-current={tela.nome === 'calendario'} onClick={() => ir('calendario')}>📅 Calendário</button>

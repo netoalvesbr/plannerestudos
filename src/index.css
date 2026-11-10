@@ -349,3 +349,10 @@ mark { background: #ffe082; color: #000; border-radius: 2px; }
 .ico-arq { font-size: 1.8rem; }
 .lista-disc > div { display: flex; flex-direction: column; }
 @media (max-width: 819px) { .lista-disc { max-height: 42vh; } }
+
+/* 🏠 Início (visão geral) */
+.lista-limpa { list-style: none; margin: 8px 0 0; padding: 0; }
+.trilho-simples { height: 8px; border-radius: 99px; background: var(--borda); overflow: hidden; margin: 6px 0; }
+.trilho-simples i { display: block; height: 100%; background: var(--pri); border-radius: 99px; }
+.dash > section, .dash > .grade { margin-top: 16px; }
+.dash > .grade > .card { margin: 0; }
