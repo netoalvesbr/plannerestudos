@@ -263,18 +263,22 @@ export default function App() {
         inicial={tela.id ? getConcurso(tela.id) : null}
         aoCancelar={() => setTela({ nome: tela.id ? 'ficha' : 'concursos', id: tela.id })}
         escolhaInicial={tela.id ? prefs.concursos?.[tela.id] : null}
-        aoSalvar={async (id, escolha) => {
+        aoSalvar={async (id, escolha, cargo) => {
           await recarregarBanco();
+          // cargo(s) a que a pessoa vai concorrer, escolhidos no cadastro
+          const comCargo = (pc = {}) => (cargo ? { ...pc, cargo } : pc);
           if (escolha) {
             setPrefs({
               seguindo: [...new Set([...(prefs.seguindo || []), id])],
               ativo: id,
-              concursos: { ...(prefs.concursos || {}), [id]: { ...(prefs.concursos?.[id] || {}), fase: escolha.fase, area: escolha.area } },
+              concursos: { ...(prefs.concursos || {}), [id]: { ...comCargo(prefs.concursos?.[id]), fase: escolha.fase, area: escolha.area } },
             });
             setTela({ nome: 'cronograma', abrir: { cid: id, fase: escolha.fase || '', area: escolha.area || '' } });
             return;
           }
-          if (!tela.id) setPrefs({ seguindo: [...new Set([...(prefs.seguindo || []), id])], ativo: id });
+          const pcs = cargo ? { concursos: { ...(prefs.concursos || {}), [id]: comCargo(prefs.concursos?.[id]) } } : {};
+          if (!tela.id) setPrefs({ seguindo: [...new Set([...(prefs.seguindo || []), id])], ativo: id, ...pcs });
+          else if (cargo) setPrefs(pcs);
           setTela({ nome: 'ficha', id });
         }}
       />

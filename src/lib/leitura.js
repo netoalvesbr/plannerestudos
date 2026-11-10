@@ -28,7 +28,16 @@ function iso(a, m, d) {
 }
 
 // ---------------- edital ----------------
-export function lerEdital(linhas) {
+// "15/10 a 17/11/2026" -> "15/10/2026 a 17/11/2026"; "19 a 21/1/2027" e "4 e 5/11/2026" -> "19/1/2027 a 21/1/2027"
+export function expandirPeriodos(l) {
+  if (!/\d\s*\/\s*\d{1,2}\s*\/\s*\d{4}/.test(l)) return l;
+  return l
+    .replace(/(?<![\d/])(\d{1,2})\s*\/\s*(\d{1,2})\s*(?:a|e|até)\s*(\d{1,2})\s*\/\s*(\d{1,2})\s*\/\s*(\d{4})/gi, (_, d1, m1, d2, m2, a) => `${d1}/${m1}/${+m1 > +m2 ? a - 1 : a} a ${d2}/${m2}/${a}`)
+    .replace(/(?<![\d/])(\d{1,2})\s*(?:a|e|até)\s*(\d{1,2})\s*\/\s*(\d{1,2})\s*\/\s*(\d{4})/gi, (_, d1, d2, m, a) => `${d1}/${m}/${a} a ${d2}/${m}/${a}`);
+}
+
+export function lerEdital(linhasOriginais) {
+  const linhas = linhasOriginais.map(expandirPeriodos);
   const texto = linhas.join('\n');
   const plano = linhas.join(' ');
   const r = { sigla: '', nome: '', orgao: '', banca: '', edital: '', dataProva: '', cronograma: [], disciplinas: [] };
@@ -76,9 +85,19 @@ export function lerEdital(linhas) {
   const LEGAL = /(provimento|publicad[oa] no di[áa]rio|lei\b|lei n|decreto|resolu[çc][ãa]o|portaria|instru[çc][ãa]o normativa|s[úu]mula|emenda|regido|publicad[oa] no d)/i;
   const anoAtual = new Date().getFullYear();
   const vistos = new Set();
-  for (let i = 0; i < linhas.length && r.cronograma.length < 25; i++) {
-    const l = linhas[i];
-    if (l.length > 220 || LEGAL.test(l) || !EVENTO.test(l)) continue;
+  // o quadro "CRONOGRAMA" (em geral um anexo, no fim do edital) é a fonte mais confiável: é lido primeiro
+  let iCrono = -1;
+  linhas.forEach((l, i) => {
+    if (/^\s*(ANEXO\s+[IVX\d]+\s*[–-]?\s*)?CRONOGRAMA\b/.test(l) && l.length < 80) iCrono = i;
+  });
+  const ordem = [];
+  if (iCrono >= 0) for (let i = iCrono; i < linhas.length; i++) ordem.push(i);
+  for (let i = 0; i < (iCrono >= 0 ? iCrono : linhas.length); i++) ordem.push(i);
+  for (const i of ordem) {
+    if (r.cronograma.length >= 40) break;
+    const noQuadro = iCrono >= 0 && i >= iCrono;
+    const l = linhas[i].replace(/\*+/g, ' ');
+    if (l.length > 220 || (!noQuadro && LEGAL.test(l)) || !EVENTO.test(l)) continue;
     const ds = datasNoTexto(l).filter((d) => +d.iso.slice(0, 4) >= anoAtual - 1 && +d.iso.slice(0, 4) <= anoAtual + 2);
     if (!ds.length) continue;
     let ev = l
@@ -263,7 +282,26 @@ export function lerConteudoProgramatico(linhas) {
 const semAcento = (x) => x.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
 const slug = (x) => semAcento(x).replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 40);
 
+const RE_CARGO_NUM = /^\s*(?:\d+(?:\.\d+)*\s+)?CARGO\s+(\d{1,3})\s*:\s*(.+)$/;
+const CONTINUA_CARGO = /^[–-]?\s*(?:(?:ÁREA|ESPECIALIDADE)\s*:\s*)?[A-ZÀ-ÖØ-Ý][A-ZÀ-ÖØ-Ý/ ,\-–]*$/;
+function lerCargosNumerados(linhas) {
+  const porNum = new Map();
+  for (let i = 0; i < linhas.length; i++) {
+    const m = linhas[i].match(RE_CARGO_NUM);
+    if (!m || porNum.has(+m[1]) || m[2] !== m[2].toUpperCase()) continue;
+    let bruto = m[2].trim();
+    const prox = (linhas[i + 1] || '').trim();
+    if (prox && prox.length < 70 && CONTINUA_CARGO.test(prox) && !/^REQUISITO/.test(prox)) bruto += ' ' + prox;
+    const nome = titulo(bruto.replace(/\([^)]*\)/g, ' ').replace(/\b(ESPECIALIDADE|ÁREA)\s*:\s*/g, '').replace(/\s*[–-]\s*/g, ' – '))
+      .replace(/ – (\p{Ll})/gu, (_, x) => ' – ' + x.toUpperCase());
+    porNum.set(+m[1], { id: `cargo-${m[1]}`, num: +m[1], nome });
+  }
+  return [...porNum.values()].sort((a, b) => a.num - b.num);
+}
+
 export function lerCargos(linhas) {
+  const numerados = lerCargosNumerados(linhas);
+  if (numerados.length >= 2) return numerados.slice(0, 60);
   const plano = linhas.join(' ').replace(/\s+/g, ' ');
   const nomes = [];
   const add = (n) => {
@@ -289,7 +327,8 @@ export function lerCargos(linhas) {
 export function lerCargosEConteudo(linhas) {
   const cargos = lerCargos(linhas);
   if (!cargos.length) return { cargos: [], disciplinas: [] };
-  const ini = linhas.map((l, i) => (/CONTE[ÚU]DOS? PROGRAM[ÁA]TICOS?/i.test(l) ? i : -1)).filter((i) => i >= 0);
+  const numerados = cargos.some((c) => c.num);
+  const ini = linhas.map((l, i) => (/CONTE[ÚU]DOS? PROGRAM[ÁA]TICOS?/i.test(l) || /^\s*[\d.]*\s*(DOS\s+)?OBJETOS DE AVALIA[ÇC][ÃA]O/.test(l) ? i : -1)).filter((i) => i >= 0);
   if (!ini.length) return { cargos, disciplinas: [] };
   // o último título "conteúdos programáticos" (o do anexo), não o sumário
   const comeco = ini.find((i) => (linhas.slice(i + 1, i + 6).join(' ').match(/[A-ZÀ-Ý ]{4,}:/) || []).length) ?? ini[ini.length - 1];
@@ -310,6 +349,8 @@ export function lerCargosEConteudo(linhas) {
   let cabecalho = null; // título de seção que pode continuar na linha de baixo
   let partes = ''; // nome de matéria quebrado em duas linhas ("REALIDADE ... DO" / "ESTADO DO ACRE:")
   let cauda = ''; // palavras em maiúsculas no fim da linha anterior ("... TI E SEGURANÇA DA" / "INFORMAÇÃO: 1 ...")
+  let aposCargo = false; // a linha anterior foi um título "CARGO 1: ..." (o nome pode continuar nesta linha)
+  let materiaPadrao = ''; // cargo cujo conteúdo vem sem nome de matéria: usa a área do cargo
   const fechar = () => {
     if (atual) {
       atual.topicos = dividirTopicos(atual._txt);
@@ -336,6 +377,36 @@ export function lerCargosEConteudo(linhas) {
     const l = linhas[i].trim();
     if (!l || repetida(l) || /^(Edital|P[áa]gina)\b.*\d+\s*de\s*\d+/i.test(l)) continue;
     if (/^ANEXO\s+[IVX]+\b/i.test(l) && disciplinas.length > 2) break;
+    if (numerados) {
+      // "CARGO 1: ...", "CARGOS 6 A 9: ...", "CARGOS 1, 2 E 3: ..."
+      const mc = l.match(/^(?:\d+(?:\.\d+)*\s+)?CARGOS?\s+(\d{1,3}(?:\s*(?:,|E|A)\s*\d{1,3})*)\s*:/);
+      if (mc) {
+        fechar();
+        const ns = [];
+        const faixa = mc[1].match(/^(\d+)\s*A\s*(\d+)$/);
+        if (faixa) for (let n = +faixa[1]; n <= +faixa[2]; n++) ns.push(n);
+        else for (const n of mc[1].match(/\d+/g)) ns.push(+n);
+        const cs = cargos.filter((c) => ns.includes(c.num));
+        escopo = cs.length ? cs.map((c) => c.id) : escopo;
+        bloco = 'Conhecimentos Específicos';
+        materiaPadrao = cs.length === 1 ? cs[0].nome.split(' – ').pop() : '';
+        cabecalho = null;
+        partes = '';
+        cauda = '';
+        aposCargo = true;
+        continue;
+      }
+      if (aposCargo) {
+        aposCargo = false;
+        if (l.length < 70 && CONTINUA_CARGO.test(l)) continue;
+      }
+      if (/Retificad[oa] por meio/i.test(l) || /^dispon[íi]vel no endere[çc]o/i.test(l)) continue;
+      // conteúdo que começa direto nos tópicos ("1 Projetos. 1.1 ..."), sem o nome da matéria
+      if (!atual && materiaPadrao && /^\d+\s+\p{Lu}/u.test(l)) {
+        abrirMateria(materiaPadrao.toUpperCase(), '');
+        materiaPadrao = '';
+      }
+    }
     // título de seção: "2. CONHECIMENTOS ... PARA OS CARGOS DE ..." (pode quebrar em várias linhas)
     const continua =
       cabecalho && MAIUSC.test(l) && !/:\s*$/.test(l) && l.length < 110 &&
@@ -345,6 +416,7 @@ export function lerCargosEConteudo(linhas) {
       cabecalho = (cabecalho && !/^\d/.test(l) ? cabecalho + ' ' : '') + l;
       const cs = /TODOS OS CARGOS/i.test(cabecalho) ? todos : cargosNoTexto(cabecalho);
       if (/^\d+\.\s/.test(cabecalho) || /CARGOS?/i.test(cabecalho)) escopo = cs.length ? cs : escopo;
+      else if (numerados && /B[ÁA]SICOS|GERAIS|COMUNS/i.test(cabecalho)) escopo = todos;
       bloco = titulo(cabecalho.replace(/^\d+(\.\d+)*\.?\s+/, '').replace(/\s+PARA\s+(O|OS)\s+CARGOS?.*$/i, '').replace(/\s+PARA TODOS OS CARGOS/i, ''));
       continue;
     }

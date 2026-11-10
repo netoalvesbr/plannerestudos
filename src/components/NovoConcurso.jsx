@@ -40,6 +40,12 @@ export default function NovoConcurso({ inicial, escolhaInicial, aoSalvar, aoCanc
   // escolha pessoal de quem está cadastrando: fase que vai estudar, fases descartadas e área
   const [estudar, setEstudar] = useState(escolhaInicial?.fase || null);
   const [area, setArea] = useState(escolhaInicial?.area || null);
+  // cargos a que a pessoa vai concorrer (pode ser mais de um, quando as provas são no mesmo dia)
+  const [meusCargos, setMeusCargos] = useState(() => {
+    const k = escolhaInicial?.cargo;
+    return !k || k === 'ambos' ? [] : Array.isArray(k) ? k : [k];
+  });
+  const [novoCargo, setNovoCargo] = useState('');
   const [descartadas, setDescartadas] = useState([]);
   const [substituir, setSubstituir] = useState(true);
   const set = (k, v) => setC((x) => ({ ...x, [k]: v }));
@@ -137,7 +143,10 @@ export default function NovoConcurso({ inicial, escolhaInicial, aoSalvar, aoCanc
           .map(({ topicosTxt, ...d }) => ({ ...d, nome: d.nome.trim(), topicos: (topicosTxt || '').split('\n').map((t) => t.trim()).filter(Boolean) })),
       };
       const id = await salvarConcurso(dados, pdf, inicial?.id || null);
-      aoSalvar(id, estudar ? { fase: estudar, area: area || null } : null);
+      const ids = dados.cargos.map((k) => k.id);
+      const meus = meusCargos.filter((k) => ids.includes(k));
+      const cargo = !meus.length ? null : meus.length === ids.length ? 'ambos' : meus.length === 1 ? meus[0] : meus;
+      aoSalvar(id, estudar ? { fase: estudar, area: area || null } : null, cargo);
     } catch (er) {
       setErro(er.message);
     } finally {
@@ -182,6 +191,61 @@ export default function NovoConcurso({ inicial, escolhaInicial, aoSalvar, aoCanc
           </label>
         </div>
       </section>
+
+      {c.modelo !== 'oab' && (
+        <section className="card">
+          <h2>🎯 Cargos do concurso</h2>
+          {c.cargos?.length ? (
+            <>
+              <p className="sub">
+                {pdf ? 'Cargos lidos do edital. ' : ''}Marque o cargo a que <b>você vai concorrer</b>. Se o edital permitir (provas no mesmo dia, em turnos diferentes), marque dois ou mais.
+              </p>
+              <div className="escolha" role="group" aria-label="Meus cargos">
+                {c.cargos.map((k) => {
+                  const on = meusCargos.includes(k.id);
+                  return (
+                    <button key={k.id} type="button" role="checkbox" aria-checked={on} className={'opcao' + (on ? ' sel' : '')} style={{ flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', padding: '9px 12px' }} onClick={() => setMeusCargos(on ? meusCargos.filter((x) => x !== k.id) : [...meusCargos, k.id])}>
+                      <span aria-hidden="true">{on ? '☑' : '☐'}</span> {k.nome}
+                      {on && <span className="peq"> · ✓ vou concorrer</span>}
+                    </button>
+                  );
+                })}
+              </div>
+              <p className="peq sub" role="status">
+                {meusCargos.length === 0
+                  ? 'Nenhum cargo marcado: você escolhe depois, ao montar o cronograma.'
+                  : `✓ ${meusCargos.length} ${meusCargos.length === 1 ? 'cargo marcado' : 'cargos marcados'}: as matérias do seu cronograma e das suas questões serão as ${meusCargos.length === 1 ? 'desse cargo' : 'desses cargos'}.`}
+              </p>
+              <details>
+                <summary className="sub peq">Corrigir a lista de cargos</summary>
+                {c.cargos.map((k, i) => (
+                  <div key={k.id} className="linha" style={{ marginBottom: 6, flexWrap: 'nowrap' }}>
+                    <input style={{ ...campo, flex: 1 }} value={k.nome} onChange={(e) => setItem('cargos', i, 'nome', e.target.value)} aria-label={`Nome do cargo ${i + 1}`} />
+                    <button type="button" className="btn peq perigo" aria-label={`Remover o cargo ${k.nome}`} onClick={() => { remover('cargos', i); setMeusCargos(meusCargos.filter((x) => x !== k.id)); }}>✕</button>
+                  </div>
+                ))}
+              </details>
+            </>
+          ) : (
+            <p className="sub">{pdf ? 'Não encontrei a lista de cargos neste edital (ou ele tem um cargo só).' : 'Anexe o edital acima para puxar os cargos automaticamente,'} {pdf ? 'Se' : 'ou, se'} houver mais de um cargo, inclua abaixo.</p>
+          )}
+          <div className="linha" style={{ marginTop: 8, flexWrap: 'nowrap', maxWidth: 520 }}>
+            <input style={{ ...campo, flex: 1 }} value={novoCargo} onChange={(e) => setNovoCargo(e.target.value)} placeholder="Ex.: Analista Legislativo" aria-label="Nome de um cargo para incluir" />
+            <button
+              type="button"
+              className="btn peq"
+              disabled={!novoCargo.trim()}
+              onClick={() => {
+                const id = slug(novoCargo.trim()).slice(0, 40) || 'cargo-' + (c.cargos.length + 1);
+                if (!c.cargos.some((k) => k.id === id)) incluir('cargos', { id, nome: novoCargo.trim() });
+                setNovoCargo('');
+              }}
+            >
+              + Incluir cargo
+            </button>
+          </div>
+        </section>
+      )}
 
       {c.modelo === 'oab' ? (
         <section className="card">
