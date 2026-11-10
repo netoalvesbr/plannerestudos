@@ -274,10 +274,12 @@ export function lerCargos(linhas) {
   };
   // "74 (setenta e quatro) vagas para o cargo de Oficial Investigador de Polícia;"
   for (const m of plano.matchAll(/vagas?\s+para\s+o\s+cargo\s+de\s+([A-ZÀ-Ý][\p{L}\-–/ ]{3,70}?)(?=\s*[;,.(]|\s+e\s+\d|\s+conforme|\s+do\s+quadro)/gu)) add(m[1]);
-  // "SUBTOTAIS - OFICIAL INVESTIGADOR DE POLÍCIA" (quadro de vagas)
-  for (const l of linhas) {
-    const m = l.match(/^\s*SUBTOTA(?:L|IS)\s*[-–:]\s*(.+)$/i);
-    if (m) add(m[1]);
+  // "SUBTOTAIS - OFICIAL INVESTIGADOR DE POLÍCIA" (quadro de vagas), só se o texto não listou os cargos
+  if (!nomes.length) {
+    for (const l of linhas) {
+      const m = l.match(/^\s*SUBTOTA(?:L|IS)\s*[-–:]\s*([^\d]+?)\s*[\d-]*\s*$/i);
+      if (m && !/^CONHECIMENTOS?\b/i.test(m[1])) add(m[1]);
+    }
   }
   return nomes.slice(0, 30).map((nome) => ({ id: slug(nome), nome }));
 }
@@ -300,11 +302,14 @@ export function lerCargosEConteudo(linhas) {
     const n = semAcento(t);
     return cargos.filter((c) => n.includes(semAcento(c.nome)) || n.includes(semAcento(c.nome).replace(/ de policia( civil)?$/, ''))).map((c) => c.id);
   };
+  const palavrasCargo = [...new Set(cargos.flatMap((c) => semAcento(c.nome).split(/[\s-]+/).filter((w) => w.length >= 6)))];
   const disciplinas = [];
   let escopo = todos;
   let bloco = '';
   let atual = null;
   let cabecalho = null; // título de seção que pode continuar na linha de baixo
+  let partes = ''; // nome de matéria quebrado em duas linhas ("REALIDADE ... DO" / "ESTADO DO ACRE:")
+  let cauda = ''; // palavras em maiúsculas no fim da linha anterior ("... TI E SEGURANÇA DA" / "INFORMAÇÃO: 1 ...")
   const fechar = () => {
     if (atual) {
       atual.topicos = dividirTopicos(atual._txt);
@@ -332,7 +337,10 @@ export function lerCargosEConteudo(linhas) {
     if (!l || repetida(l) || /^(Edital|P[áa]gina)\b.*\d+\s*de\s*\d+/i.test(l)) continue;
     if (/^ANEXO\s+[IVX]+\b/i.test(l) && disciplinas.length > 2) break;
     // título de seção: "2. CONHECIMENTOS ... PARA OS CARGOS DE ..." (pode quebrar em várias linhas)
-    if (/^\d+(\.\d+)*\.?\s+(CONHECIMENTOS|CONTE[ÚU]DOS?|PROVA|M[ÓO]DULO|BLOCO|DISCIPLINAS)/i.test(l) || (cabecalho && MAIUSC.test(l) && !/:\s*$/.test(l) && l.length < 110)) {
+    const continua =
+      cabecalho && MAIUSC.test(l) && !/:\s*$/.test(l) && l.length < 110 &&
+      (/(\bDE|\bDO|\bDA|\bDOS|\bDAS|\bE|,|–|-)\s*$/.test(cabecalho) || palavrasCargo.some((w) => semAcento(l).includes(w)));
+    if (/^\d+(\.\d+)*\.?\s+(CONHECIMENTOS|CONTE[ÚU]DOS?|PROVA|M[ÓO]DULO|BLOCO|DISCIPLINAS)/i.test(l) || continua) {
       fechar();
       cabecalho = (cabecalho && !/^\d/.test(l) ? cabecalho + ' ' : '') + l;
       const cs = /TODOS OS CARGOS/i.test(cabecalho) ? todos : cargosNoTexto(cabecalho);
@@ -341,8 +349,15 @@ export function lerCargosEConteudo(linhas) {
       continue;
     }
     cabecalho = null;
+    if (MAIUSC.test(l) && temLetra(l) && !/:/.test(l) && l.length < 110 && !/^\d/.test(l)) {
+      partes = (partes ? partes + ' ' : '') + l;
+      continue;
+    }
+    const lc = partes && /^[A-ZÀ-ÖØ-Ý][A-ZÀ-ÖØ-Ý\s,\-–()/ºª]{1,110}:/.test(l) ? `${partes} ${l}` : l;
+    if (partes && lc === l && atual) atual._txt += ' ' + partes;
+    partes = '';
     // cabeçalho de cargo: "OFICIAL INVESTIGADOR DE POLÍCIA:" ou "PERITO CRIMINAL – CONTEÚDO COMUM...:"
-    const cab = l.match(/^([A-ZÀ-ÖØ-Ý][A-ZÀ-ÖØ-Ý\s,\-–()/ºª]{3,110}?):\s*(.*)$/);
+    const cab = lc.match(/^([A-ZÀ-ÖØ-Ý][A-ZÀ-ÖØ-Ý\s,\-–()/ºª]{3,140}?):\s*(.*)$/);
     if (cab && temLetra(cab[1])) {
       const nomeCab = cab[1].trim();
       const cs = cargosNoTexto(nomeCab);
@@ -360,7 +375,14 @@ export function lerCargosEConteudo(linhas) {
         if (cab[2]) lerInline(cab[2]);
         continue;
       }
-      abrirMateria(nomeCab, '');
+      // nome que começou no fim da linha anterior ("... TI E SEGURANÇA DA" / "INFORMAÇÃO: 1 ...")
+      let nomeFinal = nomeCab;
+      if (cauda && atual && atual._txt.trimEnd().endsWith(cauda)) {
+        atual._txt = atual._txt.trimEnd().slice(0, -cauda.length);
+        nomeFinal = `${cauda} ${nomeCab}`;
+      }
+      cauda = '';
+      abrirMateria(nomeFinal, '');
       if (cab[2]) lerInline(cab[2]);
       continue;
     }
@@ -371,6 +393,15 @@ export function lerCargosEConteudo(linhas) {
 
   // dentro do texto: "... ESTATÍSTICA: 1 Conceitos ..." abre uma nova matéria no meio da linha
   function lerInline(t) {
+    // nome de matéria começado no fim da linha anterior
+    const mIni = t.match(/^([A-ZÀ-ÖØ-Ý][A-ZÀ-ÖØ-Ý ,\-–()/]{2,70}):\s+(?=\d|[A-ZÀ-Ý])/);
+    if (mIni && cauda && atual && atual._txt.trimEnd().endsWith(cauda)) {
+      atual._txt = atual._txt.trimEnd().slice(0, -cauda.length);
+      abrirMateria(`${cauda} ${mIni[1]}`.trim(), '');
+      t = t.slice(mIni[0].length);
+    }
+    const mFim = t.match(/(?:^|[.;]\s+)((?:[A-ZÀ-ÖØ-Ý]{1,}[ ,\-–]*){1,8})$/);
+    cauda = mFim && temLetra(mFim[1]) && mFim[1].trim().length > 1 ? mFim[1].trim() : '';
     const re = /(?:^|[.;]\s+|\s)([A-ZÀ-ÖØ-Ý][A-ZÀ-ÖØ-Ý ,\-–()/]{4,70}):\s+(?=\d|[A-ZÀ-Ý])/g;
     let ult = 0;
     let m;
