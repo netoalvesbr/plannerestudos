@@ -8,6 +8,7 @@ import CalendarioGeral from './components/CalendarioGeral.jsx';
 import Dashboard from './components/Dashboard.jsx';
 import Questoes from './components/Questoes.jsx';
 import ErroTela from './components/ErroTela.jsx';
+import NovaVersao from './components/NovaVersao.jsx';
 import * as store from './lib/store.js';
 import { EscolhaArea, EscolhaCargo, EscolhaFase, Ficha, Login, MeusConcursos, NovaSenha } from './components/Concursos.jsx';
 import Questao, { Conclusao } from './components/Questao.jsx';
@@ -409,6 +410,7 @@ export default function App() {
           )}
         </header>
       )}
+      <NovaVersao />
       {somenteLocal && !semTopo && naInicio && <p className="aviso">Respostas salvas apenas neste aparelho.</p>}
       {avisoBanco && !semTopo && <p className="aviso">{avisoBanco}</p>}
       {tela.nome === 'questoes' && tela.msg && <p className="aviso" role="status" style={{ background: 'var(--ok-bg)', color: 'var(--ok)' }}>{tela.msg}</p>}
