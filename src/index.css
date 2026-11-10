@@ -347,3 +347,5 @@ mark { background: #ffe082; color: #000; border-radius: 2px; }
 .ico-bib { font-size: 2rem; }
 .lista-bib { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 8px; }
 .ico-arq { font-size: 1.8rem; }
+.lista-disc > div { display: flex; flex-direction: column; }
+@media (max-width: 819px) { .lista-disc { max-height: 42vh; } }

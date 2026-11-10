@@ -48,10 +48,16 @@ export function lerEdital(linhas) {
   if (ed) r.edital = ed.replace(/\s+/g, ' ').trim().slice(0, 120);
 
   // órgão: linha em maiúsculas com palavras típicas; prefere o órgão específico ao "Governo do Estado"
-  const topo = linhas.slice(0, 80).filter((l) => MAIUSC.test(l) && temLetra(l));
-  const orgao =
-    topo.find((l) => /(POL[IÍ]CIA|TRIBUNAL|ORDEM DOS ADVOGADOS|MINIST[EÉ]RIO P|DEFENSORIA|PROCURADORIA|C[AÂ]MARA|ASSEMBLEIA|SENADO|CORPO DE BOMBEIROS|DETRAN|RECEITA|BANCO|AG[EÊ]NCIA|CONSELHO|EX[EÉ]RCITO|MARINHA|AERON[AÁ]UTICA|UNIVERSIDADE|INSTITUTO FEDERAL)/.test(l)) ||
-    topo.find((l) => /(PREFEITURA|SECRETARIA|MINIST[EÉ]RIO|DEPARTAMENTO|GOVERNO)/.test(l));
+  // (editais publicados no Diário Oficial trazem outros órgãos no começo: vence o órgão mais citado no documento)
+  const ESPEC = /(POL[IÍ]CIA|TRIBUNAL|ORDEM DOS ADVOGADOS|MINIST[EÉ]RIO P|DEFENSORIA|PROCURADORIA|C[AÂ]MARA|ASSEMBLEIA|SENADO|CORPO DE BOMBEIROS|DETRAN|RECEITA|BANCO|AG[EÊ]NCIA|CONSELHO|EX[EÉ]RCITO|MARINHA|AERON[AÁ]UTICA|UNIVERSIDADE|INSTITUTO FEDERAL)/;
+  const GERAL = /(PREFEITURA|SECRETARIA|MINIST[EÉ]RIO|DEPARTAMENTO|GOVERNO)/;
+  const cand = linhas.filter((l) => l.length < 90 && MAIUSC.test(l) && temLetra(l) && (ESPEC.test(l) || GERAL.test(l)) && !/^(EDITAL|CONCURSO|ANEXO)/.test(l.trim()));
+  const freq = new Map();
+  for (const l of cand) {
+    const k = l.replace(/\s+/g, ' ').replace(/\s*[–-]\s*[A-Z]{2}\s*$|\/[A-Z]{2}\s*$/, '').trim();
+    freq.set(k, (freq.get(k) || 0) + (ESPEC.test(l) ? 2 : 1));
+  }
+  const orgao = [...freq.entries()].sort((a, b) => b[1] - a[1])[0]?.[0];
   if (orgao) {
     r.orgao = titulo(orgao);
     r.nome = r.orgao;
@@ -207,7 +213,7 @@ export function lerConteudoProgramatico(linhas) {
   const disciplinas = [];
   let bloco = '';
   let atual = null;
-  const NAO_MATERIA = /^(edital|conselho|exame|anexo|ordem dos|funda[çc][ãa]o|minist[ée]rio|cronograma|tabela|quadro|cargo|vagas|governo|secretaria|prefeitura|tribunal|pol[íi]cia|universidade|instituto|coordena|comiss[ãa]o|presid|disposi[çc]|das? |do |dos |item|cap[íi]tulo|se[çc][ãa]o|t[íi]tulo|requisito|atribui|remunera|evento|data|local|hor[áa]rio)/i;
+  const NAO_MATERIA = /^(di[áa]rio oficial|r e s o l v e|resolve|decreta|observa[çc]|edital|conselho|exame|anexo|ordem dos|funda[çc][ãa]o|minist[ée]rio|cronograma|tabela|quadro|cargo|vagas|governo|secretaria|prefeitura|tribunal|pol[íi]cia|universidade|instituto|coordena|comiss[ãa]o|presid|disposi[çc]|das? |do |dos |item|cap[íi]tulo|se[çc][ãa]o|t[íi]tulo|requisito|atribui|remunera|evento|data|local|hor[áa]rio)/i;
   const fechar = () => {
     if (atual) {
       atual.topicos = dividirTopicos(atual._txt);

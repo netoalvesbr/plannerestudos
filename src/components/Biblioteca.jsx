@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { contarBiblioteca, enviarArquivo, excluirArquivo, linkArquivo, listarBiblioteca } from '../lib/remoto.js';
-import { disciplinasDo } from '../lib/dados.js';
+import { catalogoMaterias, mesmaMateria } from '../data/materias.js';
 import Leis from './Leis.jsx';
 
 // 📚 Biblioteca: arquivos compartilhados entre os usuários (PDF, imagem, Word), por categoria
@@ -13,6 +13,7 @@ export const CATEGORIAS = [
   { id: 'rascunho', icone: '🗒️', nome: 'Cadernos de rascunho', desc: 'Modelos de caderno de rascunho e folhas de resposta' },
   { id: 'outros', icone: '📁', nome: 'Outros arquivos', desc: 'Mapas, cronogramas, imagens e demais arquivos' },
 ];
+const TODAS = { id: 'todas', icone: '🔎', nome: 'Todos os materiais', desc: 'Arquivos de todas as seções, por matéria' };
 const ACEITOS = '.pdf,.png,.jpg,.jpeg,.webp,.doc,.docx,.txt';
 const fmtTam = (b) => (b > 1048576 ? `${(b / 1048576).toFixed(1)} MB` : `${Math.max(1, Math.round(b / 1024))} KB`);
 const icoTipo = (t = '') => (t.includes('pdf') ? '📄' : t.startsWith('image') ? '🖼️' : t.includes('word') || t.includes('msword') ? '📝' : '📎');
@@ -29,12 +30,13 @@ export default function Biblioteca({ ctx }) {
     if (!cat) contarBiblioteca().then(setContagem).catch((e) => setErro(e.message));
   }, [cat]);
 
-  if (cat) return <Categoria ctx={ctx} cat={CATEGORIAS.find((c) => c.id === cat) || CATEGORIAS[0]} voltar={() => ir(null)} />;
+  if (cat) return <Categoria ctx={ctx} cat={cat === 'todas' ? TODAS : CATEGORIAS.find((c) => c.id === cat) || CATEGORIAS[0]} voltar={() => ir(null)} />;
   return (
     <div>
       <h1>📚 Biblioteca</h1>
       <p className="sub">Materiais compartilhados entre os usuários do EstudaAí. Escolha uma seção para ver os arquivos ou enviar os seus (PDF, imagem ou Word).</p>
       {erro && <p className="aviso">⚠️ {erro}</p>}
+      <button className="btn" style={{ marginBottom: 12 }} onClick={() => ir('todas')}>🔎 Procurar material por matéria (todas as seções)</button>
       <div className="grade-bib">
         {CATEGORIAS.map((c) => (
           <button key={c.id} className="card bloco-bib" onClick={() => ir(c.id)}>
@@ -50,7 +52,7 @@ export default function Biblioteca({ ctx }) {
 }
 
 function Categoria({ ctx, cat, voltar }) {
-  const { usuario, concurso, cargo, fase, area } = ctx;
+  const { usuario, concurso } = ctx;
   const [lista, setLista] = useState(null);
   const [erro, setErro] = useState(null);
   const [busca, setBusca] = useState('');
@@ -59,17 +61,20 @@ function Categoria({ ctx, cat, voltar }) {
   const [aba, setAba] = useState(cat.id === 'leis' ? 'seca' : 'arquivos');
   const [conf, setConf] = useState(null);
   const recarregar = () =>
-    listarBiblioteca(cat.id)
+    listarBiblioteca(cat.id === 'todas' ? null : cat.id)
       .then(setLista)
       .catch((e) => setErro(e.message));
   useEffect(() => {
     recarregar();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [cat.id]);
-  const materiasConc = concurso ? disciplinasDo(concurso.id, cargo, fase, area).map((d) => d.nome) : [];
-  const materias = [...new Set([...(lista || []).map((x) => x.materia).filter(Boolean), ...materiasConc])].sort((a, b) => a.localeCompare(b, 'pt-BR'));
+  const grupos = catalogoMaterias((lista || []).map((x) => x.materia).filter(Boolean));
+  const materias = Object.values(grupos).flat();
+  const qtd = (m) => (lista || []).filter((x) => mesmaMateria(x.materia, m)).length;
+  const [filtroMat, setFiltroMat] = useState('');
   const termo = busca.trim().toLowerCase();
-  const vis = (lista || []).filter((x) => (!materia || x.materia === materia) && (!termo || `${x.titulo} ${x.descricao || ''} ${x.materia || ''} ${x.concurso || ''} ${x.nome_arquivo || ''}`.toLowerCase().includes(termo)));
+  const vis = (lista || []).filter((x) => (!materia || mesmaMateria(x.materia, materia)) && (!termo || `${x.titulo} ${x.descricao || ''} ${x.materia || ''} ${x.concurso || ''} ${x.nome_arquivo || ''}`.toLowerCase().includes(termo)));
+  const fm = filtroMat.trim().toLowerCase();
   const abrir = async (x, baixar) => {
     try {
       const url = await linkArquivo(x, baixar);
@@ -117,15 +122,44 @@ function Categoria({ ctx, cat, voltar }) {
           <div className="linha" style={{ margin: '10px 0' }}>
             <button className="btn pri" onClick={() => setEnviar(!enviar)} aria-expanded={enviar}>⬆️ Enviar arquivo</button>
             <input type="search" value={busca} onChange={(e) => setBusca(e.target.value)} placeholder="🔎 Procurar por título, matéria ou concurso" aria-label="Procurar arquivo" style={{ flex: 1, minWidth: 180 }} />
-            <select value={materia} onChange={(e) => setMateria(e.target.value)} aria-label="Filtrar por matéria">
-              <option value="">Todas as matérias</option>
-              {materias.map((m) => <option key={m}>{m}</option>)}
-            </select>
           </div>
-          {enviar && <FormEnvio cat={cat} materias={materias} concurso={concurso} aoEnviar={() => { setEnviar(false); recarregar(); }} />}
+          {enviar && <FormEnvio cat={cat} materias={materias} materiaInicial={materia} concurso={concurso} aoEnviar={() => { setEnviar(false); recarregar(); }} />}
           {erro && <p className="aviso" role="alert">⚠️ {erro}</p>}
+          <div className="pdf-layout">
+          <nav className="card lista-disc" aria-label="Matérias">
+            <input type="search" value={filtroMat} onChange={(e) => setFiltroMat(e.target.value)} placeholder="Filtrar matérias" aria-label="Filtrar matérias" />
+            <button aria-current={!materia} onClick={() => setMateria('')}>
+              Todas as matérias<span className="peq sub">{(lista || []).length} {(lista || []).length === 1 ? 'arquivo' : 'arquivos'}</span>
+            </button>
+            {Object.entries(grupos).map(([g, ms]) => {
+              const vm = ms.filter((m) => !fm || m.toLowerCase().includes(fm));
+              if (!vm.length) return null;
+              return (
+                <div key={g}>
+                  <div className="peq sub" style={{ margin: '8px 8px 2px', fontWeight: 700 }}>{g}</div>
+                  {vm.map((m) => {
+                    const n = qtd(m);
+                    return (
+                      <button key={m} aria-current={mesmaMateria(materia, m)} onClick={() => { setMateria(m); window.scrollTo(0, 0); }}>
+                        {m}
+                        <span className="peq sub">{n ? `${n} ${n === 1 ? 'arquivo' : 'arquivos'}` : 'sem material'}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              );
+            })}
+          </nav>
+          <div>
+          {materia && <h2 style={{ marginTop: 0 }}>{materia}</h2>}
           {!lista && !erro && <p className="sub">Carregando…</p>}
-          {lista && !vis.length && <p className="card sub">{lista.length ? 'Nenhum arquivo com esse filtro.' : 'Ainda não há arquivos nesta seção. Seja o primeiro a compartilhar!'}</p>}
+          {lista && !vis.length && (
+            <p className="card sub">
+              {materia && !termo
+                ? `📭 A matéria “${materia}” ainda não tem material${cat.id === 'todas' ? '' : ` em ${cat.nome}`}. Use ⬆️ Enviar arquivo para compartilhar o primeiro.`
+                : lista.length ? 'Nenhum arquivo com esse filtro.' : 'Ainda não há arquivos nesta seção. Seja o primeiro a compartilhar!'}
+            </p>
+          )}
           <ul className="lista-bib">
             {vis.map((x) => (
               <li key={x.id} className="card">
@@ -155,15 +189,18 @@ function Categoria({ ctx, cat, voltar }) {
               </li>
             ))}
           </ul>
+          </div>
+          </div>
         </>
       )}
     </div>
   );
 }
 
-function FormEnvio({ cat, materias, concurso, aoEnviar }) {
+function FormEnvio({ cat, materias, materiaInicial, concurso, aoEnviar }) {
   const [arq, setArq] = useState(null);
-  const [f, setF] = useState({ titulo: '', descricao: '', materia: '', concurso: concurso?.sigla || '' });
+  const [categoria, setCategoria] = useState(cat.id === 'todas' ? 'doutrina' : cat.id);
+  const [f, setF] = useState({ titulo: '', descricao: '', materia: materiaInicial || '', concurso: concurso?.sigla || '' });
   const [ok, setOk] = useState(false);
   const [status, setStatus] = useState(null);
   const [erro, setErro] = useState(null);
@@ -174,7 +211,7 @@ function FormEnvio({ cat, materias, concurso, aoEnviar }) {
     if (arq.size > 25 * 1024 * 1024) return setErro('Arquivo grande demais: o máximo é 25 MB. Comprima o PDF e tente de novo.');
     try {
       setStatus('Enviando…');
-      await enviarArquivo({ categoria: cat.id, titulo: f.titulo.trim() || arq.name.replace(/\.\w+$/, ''), descricao: f.descricao.trim() || null, materia: f.materia.trim() || null, concurso: f.concurso.trim() || null }, arq, setStatus);
+      await enviarArquivo({ categoria, titulo: f.titulo.trim() || arq.name.replace(/\.\w+$/, ''), descricao: f.descricao.trim() || null, materia: f.materia.trim() || null, concurso: f.concurso.trim() || null }, arq, setStatus);
       setStatus(null);
       aoEnviar();
     } catch (er) {
@@ -184,14 +221,19 @@ function FormEnvio({ cat, materias, concurso, aoEnviar }) {
   }
   return (
     <form className="card form-anot" onSubmit={enviar}>
-      <h3 style={{ margin: 0 }}>Enviar para {cat.nome}</h3>
+      <h3 style={{ margin: 0 }}>Enviar arquivo</h3>
+      <label className="campo">Seção
+        <select value={categoria} onChange={(e) => setCategoria(e.target.value)}>
+          {CATEGORIAS.map((c) => <option key={c.id} value={c.id}>{c.icone} {c.nome}</option>)}
+        </select>
+      </label>
       <label className="campo">Arquivo (PDF, imagem ou Word, até 25 MB) *
         <input type="file" accept={ACEITOS} onChange={(e) => { const a = e.target.files[0]; setArq(a); if (a && !f.titulo) setF({ ...f, titulo: a.name.replace(/\.\w+$/, '').replace(/[-_]+/g, ' ') }); }} />
       </label>
       <label className="campo">Título *<input value={f.titulo} onChange={(e) => setF({ ...f, titulo: e.target.value })} required /></label>
       <div className="filtros">
-        <label className="campo">Matéria
-          <input list="mat-bib" value={f.materia} onChange={(e) => setF({ ...f, materia: e.target.value })} />
+        <label className="campo">Matéria *
+          <input list="mat-bib" required value={f.materia} onChange={(e) => setF({ ...f, materia: e.target.value })} />
           <datalist id="mat-bib">{materias.map((m) => <option key={m} value={m} />)}</datalist>
         </label>
         <label className="campo">Concurso (opcional)<input value={f.concurso} onChange={(e) => setF({ ...f, concurso: e.target.value })} placeholder="ex.: OAB 48, PC/AC" /></label>
