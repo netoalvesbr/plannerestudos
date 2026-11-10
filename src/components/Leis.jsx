@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { getLei, leisPorMateria } from '../data/leis.js';
+import { getLei, leisPorMateria, PORTAL_LEGISLACAO, registrarLeisExtras } from '../data/leis.js';
 import { separarNotas } from '../lib/leiParser.js';
-import { anotacoesDaLei, excluirAnotacao, salvarAnotacoes, textoLei } from '../lib/remoto.js';
+import { anotacoesDaLei, excluirAnotacao, salvarAnotacoes, statusLeis, textoLei } from '../lib/remoto.js';
 
 // ⚖️ Leis: texto oficial do Planalto, artigo por artigo, com jurisprudência/doutrina ligada a cada artigo.
 const cacheLeis = new Map();
@@ -30,6 +30,15 @@ export default function Leis({ ctx }) {
   const grupos = leisPorMateria(busca);
   const recentes = (estado.recentes || []).map((r) => ({ ...r, lei: getLei(r.id) })).filter((r) => r.lei);
   const [fechados, setFechados] = useState({});
+  const [carregadas, setCarregadas] = useState(null);
+  useEffect(() => {
+    statusLeis()
+      .then((l) => {
+        registrarLeisExtras(l.map((x) => x.meta && { id: x.id, ...x.meta }).filter(Boolean));
+        setCarregadas(new Set(l.map((x) => x.id)));
+      })
+      .catch(() => setCarregadas(new Set()));
+  }, []);
 
   const abrir = (id, art) => {
     setAberta({ id, art });
@@ -42,7 +51,8 @@ export default function Leis({ ctx }) {
   return (
     <div>
       <h2 style={{ marginTop: 0 }}>⚖️ Leis</h2>
-      <p className="sub">Texto oficial e atualizado, direto do site do Planalto (sem os trechos revogados). Navegue artigo por artigo e veja jurisprudência, súmulas e doutrina de cada artigo.</p>
+      <p className="sub">Texto oficial e atualizado, copiado do site do Planalto (sem os trechos revogados). Navegue artigo por artigo e veja jurisprudência, súmulas e doutrina de cada artigo.</p>
+      <p className="peq">🔎 Procurando outra lei? Consulte o <a href={PORTAL_LEGISLACAO} target="_blank" rel="noreferrer">Portal da Legislação do Planalto ↗</a> e peça a inclusão em 💡 Sugestões.</p>
       {recentes.length > 0 && (
         <section className="card">
           <h3 style={{ marginTop: 0 }}>Abertos recentemente</h3>
@@ -69,7 +79,11 @@ export default function Leis({ ctx }) {
                   const lidos = (estado.lidos?.[l.id] || []).length;
                   return (
                     <li key={l.id}>
-                      <span>Lei seca – {l.nome}{lidos > 0 && <span className="peq sub"> · ✓ {lidos} artigos lidos</span>}</span>
+                      <span>
+                        Lei seca – {l.nome}
+                        {lidos > 0 && <span className="peq sub"> · ✓ {lidos} artigos lidos</span>}
+                        {carregadas && !carregadas.has(l.id) && <span className="peq sub"> · texto ainda não carregado</span>}
+                      </span>
                       <button className="btn peq" onClick={() => abrir(l.id, estado.ultimo?.[l.id])}>{estado.ultimo?.[l.id] ? 'Retomar' : 'Começar'}</button>
                     </li>
                   );

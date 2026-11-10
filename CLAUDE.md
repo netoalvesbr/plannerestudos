@@ -9,3 +9,4 @@ Plataforma de estudos para concursos (React 19 + Vite, Supabase opcional, deploy
 - Regras obrigatórias do conteúdo (seção 13 da especificação): gabarito de cálculo gerado por programa (ver `ferramentas/`), 4 de cada letra por bloco de 20, comentário + fundamentação, legislação vigente e revisão independente sem gabarito antes de publicar.
 - Nunca mudar o link nem apagar o histórico dos usuários ao publicar novidades.
 - Antes de entregar, rode `npm run build` e teste no navegador.
+- Legislação: a referência para procurar leis é sempre o Portal da Legislação do Planalto (https://www4.planalto.gov.br/legislacao/); textos em www.planalto.gov.br/ccivil_03/ (versão compilada). O Planalto bloqueia servidores: a importação do texto é feita pelo navegador do administrador (👑 Admin → Textos das leis).

@@ -374,8 +374,8 @@ export async function textoLei(id) {
   return data;
 }
 export async function statusLeis() {
-  if (!supabase) return Object.entries(lerLeisLocal()).map(([id, v]) => ({ id, atualizado: v.atualizado }));
-  const { data, error } = await supabase.from('leis_texto').select('id, atualizado');
+  if (!supabase) return Object.entries(lerLeisLocal()).map(([id, v]) => ({ id, atualizado: v.atualizado, fonte: v.fonte, meta: v.dados?.meta }));
+  const { data, error } = await supabase.from('leis_texto').select('id, atualizado, fonte, meta:dados->meta');
   if (error) throw new Error(/leis_texto/.test(error.message) ? 'O banco de leis ainda não foi ativado no banco de dados.' : error.message);
   return data;
 }

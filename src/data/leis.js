@@ -53,14 +53,33 @@ export const LEIS = [
 
   { id: 'l8906', nome: 'Estatuto da Advocacia e da OAB (Lei 8.906/1994)', materia: 'Ética Profissional (OAB)', url: P + 'leis/l8906.htm' },
   { id: 'l8159', nome: 'Lei 8.159/1991 – Política Nacional de Arquivos', materia: 'Arquivologia', url: P + 'leis/l8159.htm' },
+  { id: 'l4737', nome: 'Código Eleitoral (Lei 4.737/1965)', materia: 'Direito Eleitoral', url: P + 'leis/l4737compilado.htm' },
+  { id: 'l12651', nome: 'Código Florestal (Lei 12.651/2012)', materia: 'Direito Ambiental', url: P + '_ato2011-2014/2012/lei/l12651.htm' },
+  { id: 'l9605', nome: 'Lei 9.605/1998 – Crimes Ambientais', materia: 'Direito Ambiental', url: P + 'leis/l9605.htm' },
+  { id: 'l10257', nome: 'Estatuto da Cidade (Lei 10.257/2001)', materia: 'Direito Administrativo', url: P + 'leis/leis_2001/l10257.htm' },
+  { id: 'lc123', nome: 'Estatuto da Microempresa (LC 123/2006)', materia: 'Direito Empresarial', url: P + 'leis/lcp/lcp123.htm' },
+  { id: 'l13445', nome: 'Lei de Migração (Lei 13.445/2017)', materia: 'Direitos Humanos e Legislação Especial', url: P + '_ato2015-2018/2017/lei/l13445.htm' },
+  { id: 'l12288', nome: 'Estatuto da Igualdade Racial (Lei 12.288/2010)', materia: 'Direitos Humanos e Legislação Especial', url: P + '_ato2007-2010/2010/lei/l12288.htm' },
+  { id: 'l9474', nome: 'Estatuto dos Refugiados (Lei 9.474/1997)', materia: 'Direitos Humanos e Legislação Especial', url: P + 'leis/l9474.htm' },
+  { id: 'l12852', nome: 'Estatuto da Juventude (Lei 12.852/2013)', materia: 'Direitos Humanos e Legislação Especial', url: P + '_ato2011-2014/2013/lei/l12852.htm' },
+  { id: 'l6880', nome: 'Estatuto dos Militares (Lei 6.880/1980)', materia: 'Direito Militar', url: P + 'leis/l6880.htm' },
 ];
 
-export const getLei = (id) => LEIS.find((l) => l.id === id);
+// Fonte de referência para procurar qualquer outra lei: Portal da Legislação do Planalto
+export const PORTAL_LEGISLACAO = 'https://www4.planalto.gov.br/legislacao/';
+
+// Leis acrescentadas pelo administrador (pelo link do Planalto) ficam no banco, com nome e matéria
+let extras = [];
+export const registrarLeisExtras = (lista) => {
+  extras = lista.filter((l) => l?.id && l.nome && !LEIS.some((x) => x.id === l.id));
+};
+export const todasAsLeis = () => [...LEIS, ...extras];
+export const getLei = (id) => todasAsLeis().find((l) => l.id === id);
 
 export function leisPorMateria(busca = '') {
   const termo = busca.trim().toLowerCase();
   const grupos = new Map();
-  for (const l of LEIS) {
+  for (const l of todasAsLeis()) {
     if (termo && !`${l.nome} ${l.curto || ''} ${l.materia}`.toLowerCase().includes(termo)) continue;
     if (!grupos.has(l.materia)) grupos.set(l.materia, []);
     grupos.get(l.materia).push(l);
