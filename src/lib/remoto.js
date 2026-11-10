@@ -297,6 +297,7 @@ export async function anotacoesDaLei(lei) {
   return data;
 }
 export async function salvarAnotacoes(lista) {
+  lista = lista.map((a) => ({ ...a, url: /^https?:\/\//i.test((a.url || '').trim()) ? a.url.trim() : null }));
   if (!supabase) {
     const todas = JSON.parse(localStorage.getItem(LS_ANOT) || '[]');
     const novas = lista.map((a) => ({ ...a, id: crypto.randomUUID(), criado_por: 'local', criado_em: new Date().toISOString() }));

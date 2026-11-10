@@ -149,7 +149,7 @@ export function lerResposta(saida, texto) {
 }
 
 // Página de impressão (o usuário salva como PDF pela janela de impressão)
-const escapar = (s) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+export const escapar = (s) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 export function mdParaHtml(md) {
   const linhas = md.split('\n');
   let html = '';

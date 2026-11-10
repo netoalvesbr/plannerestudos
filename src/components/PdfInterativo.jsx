@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { disciplinasDo } from '../lib/dados.js';
 import { todosConcursos } from '../data/concursos.js';
 import { excluirEstudo, lerEstudo, listarEstudos, salvarEstudo } from '../lib/remoto.js';
-import { imprimir } from '../lib/materiais.js';
+import { imprimir, escapar } from '../lib/materiais.js';
 import exemploPenal from '../data/estudos/lei-penal-no-tempo.js';
 
 // 📘 PDF interativo: texto de estudo por tópico, com caixas de lei seca, doutrina,
@@ -265,7 +265,7 @@ function Leitor({ estudo, progresso, salvarProgresso, voltar, usuario, aoExcluir
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
   const podeExcluir = !estudo.id.startsWith('base:') && (estudo.criado_por === usuario?.id || estudo.criado_por === 'local' || usuario?.admin);
-  const baixar = () => imprimir(titulo || estudo.topico, `<style>.caixa{border-left:4px solid #1d3f9e;background:#f3f6fd;padding:8px 12px;margin:10px 0;border-radius:6px}.caixa-lei{border-color:#2e7d32;background:#eef7ef}.caixa-jurisprudencia{border-color:#6a1b9a;background:#f6eefa}.caixa-atencao{border-color:#c62828;background:#fdeeee}.caixa-caso{border-color:#ef6c00;background:#fff4e8}.caixa-tit{font-weight:700;margin-bottom:4px}details .resposta{display:block}.acoes-sec,.peq.sub{display:none}</style><h1>${titulo || estudo.topico}</h1>${corpo.current.innerHTML.replace(/<details/g, '<div').replace(/<\/details>/g, '</div>').replace(/<summary/g, '<div').replace(/<\/summary>/g, '</div>')}`);
+  const baixar = () => imprimir(titulo || estudo.topico, `<style>.caixa{border-left:4px solid #1d3f9e;background:#f3f6fd;padding:8px 12px;margin:10px 0;border-radius:6px}.caixa-lei{border-color:#2e7d32;background:#eef7ef}.caixa-jurisprudencia{border-color:#6a1b9a;background:#f6eefa}.caixa-atencao{border-color:#c62828;background:#fdeeee}.caixa-caso{border-color:#ef6c00;background:#fff4e8}.caixa-tit{font-weight:700;margin-bottom:4px}details .resposta{display:block}.acoes-sec,.peq.sub{display:none}</style><h1>${escapar(titulo || estudo.topico)}</h1>${corpo.current.innerHTML.replace(/<details/g, '<div').replace(/<\/details>/g, '</div>').replace(/<summary/g, '<div').replace(/<\/summary>/g, '</div>')}`);
 
   return (
     <div>

@@ -1,7 +1,7 @@
 import { getConcurso } from '../data/concursos.js';
 import { useMemo, useState } from 'react';
 import { disciplinasDo } from '../lib/dados.js';
-import { chaveRevisao, chaveSessao, configPadrao, DIAS_SEMANA, gerarCronograma, gerarIcs, gerarRevisoes, INTERVALOS_REVISAO, materiasAtivas, NIVEIS, pesoDa, vespera } from '../lib/cronograma.js';
+import { chaveRevisao, chaveSessao, configPadrao, DIAS_SEMANA, gerarCronograma, gerarIcs, gerarRevisoes, INTERVALOS_REVISAO, materiasAtivas, NIVEIS, pesoDa } from '../lib/cronograma.js';
 import { fmtData } from '../lib/stats.js';
 import { verticalizadoDe } from './EditalVerticalizado.jsx';
 import { eventosDoConcurso, ProximaData } from './Calendario.jsx';

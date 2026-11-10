@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { getConcurso, registrarConcursos, todosConcursos } from './data/concursos.js';
+import { getConcurso, registrarConcursos } from './data/concursos.js';
 import { POR_UID, questoesDo, registrarQuestoesRemotas } from './lib/dados.js';
 import * as remoto from './lib/remoto.js';
 import NovoConcurso from './components/NovoConcurso.jsx';
@@ -7,7 +7,7 @@ import Cronograma from './components/Cronograma.jsx';
 import CalendarioGeral from './components/CalendarioGeral.jsx';
 import Dashboard from './components/Dashboard.jsx';
 import Questoes from './components/Questoes.jsx';
-import ImportarProva from './components/ImportarProva.jsx';
+import ErroTela from './components/ErroTela.jsx';
 import * as store from './lib/store.js';
 import { EscolhaArea, EscolhaCargo, EscolhaFase, Ficha, Login, MeusConcursos, NovaSenha } from './components/Concursos.jsx';
 import Questao, { Conclusao } from './components/Questao.jsx';
@@ -75,6 +75,23 @@ export default function App() {
     iniciar();
     return store.aoMudarSessao((ev) => (ev === 'recuperar' ? setRecuperando(true) : iniciar()));
   }, [iniciar]);
+
+  // estudou no celular e voltou ao computador (ou o contrário): ao voltar para a aba, busca o que mudou na conta
+  useEffect(() => {
+    if (!usuario || store.getModo() !== 'conta' || somenteLocal) return undefined; // com algo ainda não salvo na conta, não troca nada
+    let saiu = 0;
+    const aoMudar = async () => {
+      if (document.visibilityState === 'hidden') { saiu = Date.now(); return; }
+      if (!saiu || Date.now() - saiu < 60000) return;
+      saiu = 0;
+      const d = await store.carregarDados();
+      if (d.somenteLocal) return; // sem conexão: mantém o que está na tela
+      setRespostas(d.respostas);
+      setPrefsState(d.prefs);
+    };
+    document.addEventListener('visibilitychange', aoMudar);
+    return () => document.removeEventListener('visibilitychange', aoMudar);
+  }, [usuario, somenteLocal]);
 
   // tema: escolha do usuário ou o do sistema
   const tema = prefs.tema || (window.matchMedia?.('(prefers-color-scheme: dark)').matches ? 'escuro' : 'claro');
@@ -391,7 +408,7 @@ export default function App() {
       {somenteLocal && !semTopo && naInicio && <p className="aviso">Respostas salvas apenas neste aparelho.</p>}
       {avisoBanco && !semTopo && <p className="aviso">{avisoBanco}</p>}
       {tela.nome === 'questoes' && tela.msg && <p className="aviso" role="status" style={{ background: 'var(--ok-bg)', color: 'var(--ok)' }}>{tela.msg}</p>}
-      <main>{conteudo}</main>
+      <main><ErroTela chave={tela.nome} aoSair={() => setTela({ nome: 'concursos' })}>{conteudo}</ErroTela></main>
       {!semTopo && <Cronometro materias={materiasCrono} hojeSeg={hojeSeg} aoRegistrar={registrarTempo} />}
       {concurso && !precisaCargo && !precisaFase && <MenuDesempenho questoes={questoes} respostas={respostas} aoAbrirPainel={() => ir('painel')} />}
     </div>

@@ -24,9 +24,6 @@ export function Login({ aoEntrar }) {
 
 function LoginForm({ aoEntrar }) {
   const [nome, setNome] = useState('');
-  const [email, setEmail] = useState('');
-  const [msg, setMsg] = useState(null);
-  const [erro, setErro] = useState(null);
 
   if (getModo() !== 'conta') {
     return (

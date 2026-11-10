@@ -206,17 +206,23 @@ export async function carregarDados() {
   }
   if (supabase) {
     try {
-      const [r, p] = await Promise.all([
-        supabase.from('respostas').select('uid,letra,acertou,ts,segundos'),
-        supabase.from('preferencias').select('dados').maybeSingle(),
-      ]);
-      if (r.error) throw r.error;
+      // o banco devolve no máximo 1000 linhas por consulta: lê as respostas em páginas
+      const lerRespostas = async () => {
+        const todas = [];
+        for (let de = 0; ; de += 1000) {
+          const { data, error } = await supabase.from('respostas').select('uid,letra,acertou,ts,segundos').order('uid').range(de, de + 999);
+          if (error) throw error;
+          todas.push(...data);
+          if (data.length < 1000) return todas;
+        }
+      };
+      const [linhas, p] = await Promise.all([lerRespostas(), supabase.from('preferencias').select('dados').maybeSingle()]);
       const daConta = {};
-      for (const x of r.data) daConta[x.uid] = [x.letra, x.acertou ? 1 : 0, Number(x.ts), x.segundos || 0];
+      for (const x of linhas) daConta[x.uid] = [x.letra, x.acertou ? 1 : 0, Number(x.ts), x.segundos || 0];
       // mescla: o que estiver só no aparelho (ex.: respondido offline) sobe para a conta
       const pendentes = Object.entries(respostas).filter(([uid]) => !daConta[uid]);
       respostas = { ...respostas, ...daConta };
-      if (pendentes.length) await enviarRespostas(pendentes);
+      for (let i = 0; i < pendentes.length; i += 500) await enviarRespostas(pendentes.slice(i, i + 500));
       if (!p.error && p.data?.dados) prefs = { ...prefs, ...p.data.dados };
       lsSet(kResp(), respostas);
       lsSet(kPrefs(), prefs);
