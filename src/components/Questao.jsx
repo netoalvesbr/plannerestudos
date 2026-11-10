@@ -1,20 +1,17 @@
 import { useEffect, useRef, useState } from 'react';
+import CartaoQuestao from './CartaoQuestao.jsx';
 import { POR_UID } from '../lib/dados.js';
 import { fmtPct, porCampo, resumo } from '../lib/stats.js';
 
-const LETRAS_AE = ['A', 'B', 'C', 'D', 'E'];
-const ROTULO_CE = { C: 'Certo', E: 'Errado' };
 
-export default function Questao({ sessao, respostas, responder, aoSair, aoConcluir, aoAnotar, notas }) {
+export default function Questao({ sessao, respostas, responder, aoSair, aoConcluir, aoAnotar, notas, marcadores, aoMarcador }) {
   const { uids, titulo, modo } = sessao;
   const [idx, setIdx] = useState(sessao.idx || 0);
   const [marcadas, setMarcadas] = useState({}); // simulado
   const [restante, setRestante] = useState(modo === 'simulado' ? (sessao.minutos || 50) * 60 : null);
   const inicio = useRef(Date.now());
-  const explicacao = useRef(null);
   const q = POR_UID[uids[idx]];
   const resp = respostas[q.uid];
-  const revelar = modo !== 'simulado' && !!resp;
 
   useEffect(() => {
     inicio.current = Date.now();
@@ -41,7 +38,6 @@ export default function Questao({ sessao, respostas, responder, aoSair, aoConclu
     }
     if (resp) return;
     responder(q.uid, letra, seg);
-    setTimeout(() => explicacao.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 60);
   }
 
   function concluir(porTempo = false) {
@@ -57,10 +53,6 @@ export default function Questao({ sessao, respostas, responder, aoSair, aoConclu
 
   const acertosSessao = uids.filter((u) => respostas[u]?.[1]).length;
   const respondidasSessao = uids.filter((u) => respostas[u] || marcadas[u]).length;
-  const discursiva = q.formato === 'discursiva';
-  const letras = q.formato === 'CE' ? ['C', 'E'] : discursiva ? [] : LETRAS_AE.filter((l) => q.alternativas?.[l] != null && (q.formato !== 'A-D' || l !== 'E'));
-  const nomeLetra = (L) => (q.formato === 'CE' ? ROTULO_CE[L] : L);
-  const marcadaSim = marcadas[q.uid]?.[0];
   const mm = restante != null ? `${String(Math.max(0, Math.floor(restante / 60))).padStart(2, '0')}:${String(Math.max(0, restante % 60)).padStart(2, '0')}` : null;
 
   return (
@@ -85,77 +77,21 @@ export default function Questao({ sessao, respostas, responder, aoSair, aoConclu
         <span style={{ width: 52 }} aria-hidden="true" />
       </div>
 
-      <article className="card">
-        <div className="etiqueta">
-          {[q.banca, q.ano, q.materia, q.assunto, q.dificuldade].filter(Boolean).join(' · ')}
-          {q.origem === 'prova_anterior' && q.orgao_prova_original ? ` · ${q.orgao_prova_original}` : ''}
-        </div>
-        <div className="enunciado">{q.enunciado}</div>
-
-        <div className="alts" role="group" aria-label="Alternativas">
-          {letras.map((L) => {
-            let cls = '';
-            if (revelar) {
-              if (L === q.gabarito) cls = 'certa';
-              else if (L === resp[0]) cls = 'errada';
-            } else if (modo === 'simulado' && (marcadaSim === L || resp?.[0] === L)) cls = 'marcada';
-            const texto = q.formato === 'CE' ? ROTULO_CE[L] : q.alternativas[L];
-            return (
-              <button key={L} className={`alt ${cls}`} disabled={!!resp} onClick={() => marcar(L)} aria-pressed={resp?.[0] === L || marcadaSim === L}>
-                <span className="letra">{L}</span>
-                <span>
-                  {texto}
-                  {revelar && L === q.gabarito && <b className="oculto"> (gabarito)</b>}
-                </span>
-              </button>
-            );
-          })}
-        </div>
-
-        {discursiva && (
-          <Discursiva q={q} resp={resp} aoAvaliar={(ok) => { const seg = Math.round((Date.now() - inicio.current) / 1000); responder(q.uid, ok ? 'OK' : 'X', seg); }} />
-        )}
-
-        {modo === 'simulado' && resp && (
-          <p className="sub" style={{ marginTop: 10 }}>Você já respondeu esta questão antes; vale a primeira resposta.</p>
-        )}
-
-        {revelar && !discursiva && (
-          <div ref={explicacao} className="explica">
-            {resp[1] ? (
-              <div className="veredito ok" role="status">✓ Resposta certa!</div>
-            ) : (
-              <div className="veredito erro" role="status">✗ Resposta errada. Você marcou {nomeLetra(resp[0])}; o gabarito é {nomeLetra(q.gabarito)}.</div>
-            )}
-            {q.comentario ? (
-              <>
-                <h3>Comentário</h3>
-                <p>{q.comentario}</p>
-              </>
-            ) : (
-              <p className="sub">Questão de prova anterior, ainda sem comentário.</p>
-            )}
-            {q.fonte && (
-              <>
-                <h3>{q.origem === 'prova_anterior' ? 'Origem' : 'Fundamentação'}</h3>
-                <p>{q.fonte}</p>
-              </>
-            )}
-          </div>
-        )}
-
-        <details style={{ marginTop: 12 }}>
-          <summary className="sub">📝 Minha anotação</summary>
-          <textarea
-            defaultValue={notas?.[q.uid] || ''}
-            key={q.uid}
-            rows={3}
-            style={{ width: '100%', marginTop: 6, borderRadius: 10, border: '1px solid var(--borda)', padding: 8, background: 'var(--card)', color: 'var(--txt)', font: 'inherit' }}
-            onBlur={(e) => aoAnotar(q.uid, e.target.value)}
-            placeholder="Anote algo para revisar depois…"
-          />
-        </details>
-      </article>
+      <CartaoQuestao
+        key={q.uid}
+        q={q}
+        numero={idx + 1}
+        resp={resp}
+        respostas={respostas}
+        modo={modo}
+        marcadaSim={marcadas[q.uid]?.[0]}
+        aoResponder={(letra, seg) => responder(q.uid, letra, seg || Math.round((Date.now() - inicio.current) / 1000))}
+        aoMarcarSim={(letra) => marcar(letra)}
+        nota={notas?.[q.uid]}
+        aoAnotar={(t) => aoAnotar(q.uid, t)}
+        marcadores={marcadores?.[q.uid] || []}
+        aoMarcador={(k) => aoMarcador?.(q.uid, k)}
+      />
 
       <div className="q-nav">
         <button className="btn" disabled={idx === 0} onClick={() => setIdx(idx - 1)}>← Anterior</button>
@@ -224,40 +160,6 @@ export function Conclusao({ sessao, info, respostas, aoRevisar, aoVoltar }) {
         </div>
       </section>
       <button className="btn pri" onClick={aoVoltar}>Voltar às questões</button>
-    </div>
-  );
-}
-
-function Discursiva({ q, resp, aoAvaliar }) {
-  const [ver, setVer] = useState(!!resp);
-  return (
-    <div style={{ marginTop: 6 }}>
-      {!resp && (
-        <label className="campo">
-          Sua resposta (rascunho – não é salvo)
-          <textarea rows={6} style={{ width: '100%', borderRadius: 10, border: '1px solid var(--borda)', padding: 8, background: 'var(--card)', color: 'var(--txt)', font: 'inherit', marginTop: 4 }} />
-        </label>
-      )}
-      {!ver ? (
-        <button className="btn pri" style={{ marginTop: 10 }} onClick={() => setVer(true)}>Ver espelho de resposta</button>
-      ) : (
-        <div className="explica">
-          <h3>Espelho / padrão de resposta</h3>
-          <p style={{ whiteSpace: 'pre-line' }}>{q.espelho || 'Esta questão ainda não tem espelho cadastrado.'}</p>
-          {q.fonte && <p className="sub">{q.fonte}</p>}
-          {!resp ? (
-            <>
-              <p><b>Comparando com o espelho, como foi a sua resposta?</b></p>
-              <div className="linha">
-                <button className="btn" style={{ color: 'var(--ok)', borderColor: 'var(--ok)' }} onClick={() => aoAvaliar(true)}>✓ Acertei</button>
-                <button className="btn" style={{ color: 'var(--erro)', borderColor: 'var(--erro)' }} onClick={() => aoAvaliar(false)}>✗ Errei</button>
-              </div>
-            </>
-          ) : (
-            <div className={`veredito ${resp[1] ? 'ok' : 'erro'}`} role="status">{resp[1] ? '✓ Você marcou como certa.' : '✗ Você marcou como errada.'}</div>
-          )}
-        </div>
-      )}
     </div>
   );
 }

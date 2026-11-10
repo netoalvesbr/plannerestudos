@@ -155,6 +155,15 @@ export default function App() {
     await store.zerarRespostas(n, uids);
   }
 
+  // marcadores da questão (favorita, revisar, dúvida)
+  const marcarQuestao = (uid, k) => {
+    const atual = prefs.marcadores?.[uid] || [];
+    const novo = atual.includes(k) ? atual.filter((x) => x !== k) : [...atual, k];
+    const todos = { ...(prefs.marcadores || {}) };
+    if (novo.length) todos[uid] = novo;
+    else delete todos[uid];
+    setPrefs({ marcadores: todos });
+  };
   const anotar = (uid, texto) => {
     if ((prefs.notas?.[uid] || '') === texto) return;
     setPrefs({ notas: { ...(prefs.notas || {}), [uid]: texto } });
@@ -177,6 +186,9 @@ export default function App() {
     respostas,
     prefs,
     setPrefs,
+    responder,
+    anotar,
+    marcarQuestao,
     abrirSessao: (s) => {
       setUltimaAba(tela.aba || null);
       setTela({ nome: 'questao', sessao: s });
@@ -241,6 +253,8 @@ export default function App() {
         responder={responder}
         notas={prefs.notas}
         aoAnotar={anotar}
+        marcadores={prefs.marcadores}
+        aoMarcador={marcarQuestao}
         aoSair={() => setTela({ nome: 'questoes', aba: ultimaAba })}
         aoConcluir={(info) => setTela({ nome: 'conclusao', sessao: tela.sessao, info })}
       />
