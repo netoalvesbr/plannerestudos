@@ -22,6 +22,8 @@ import MenuDivulgar from './components/Divulgar.jsx';
 import Admin from './components/Admin.jsx';
 import Cronometro, { alternarCronometro } from './components/Cronometro.jsx';
 import { disciplinasDo } from './lib/dados.js';
+import { chaveSessao } from './lib/cronograma.js';
+import { sessoesDoCronograma } from './lib/cronogramaSalvo.js';
 
 // tira o concurso da lista do aluno e apaga os dados pessoais dele (cronograma, edital marcado, verticalizado)
 function semDadosDo(prefs, id, apagarTudo = true) {
@@ -119,17 +121,51 @@ export default function App() {
     });
   }, []);
   // registros salvos pelo botão "Salvar registro" do cronômetro: { 'AAAA-MM-DD': [{ materia, tema, seg, hora }] } (guarda 90 dias)
+  // se o registro informa de qual cronograma é (r.cronogramaK), dá baixa automática no bloco daquela
+  // matéria: hoje, se houver; senão no bloco futuro mais próximo dessa matéria nesse cronograma.
   const registrarSessao = useCallback((r) => {
+    // O "achou"/baixa é calculado aqui, a partir do estado atual (prefs),
+    // e não dentro do updater do setPrefsState: o updater pode rodar depois
+    // deste ponto (setState é assíncrono), então ler um resultado atribuído
+    // lá dentro, de forma síncrona logo após a chamada, pode pegar o valor
+    // velho/nulo mesmo que a atualização em si seja aplicada corretamente.
+    let resultadoBaixa = null;
+    let cronogramasAtualizados = null;
+    if (r.cronogramaK) {
+      const d = new Date().toLocaleDateString('sv-SE');
+      const entrada = prefs.cronogramas?.[r.cronogramaK];
+      let reconstruido = null;
+      try {
+        reconstruido = entrada && sessoesDoCronograma(r.cronogramaK, entrada, prefs);
+      } catch {
+        reconstruido = null;
+      }
+      if (reconstruido) {
+        const feitosAtuais = entrada.feitos || {};
+        const pendente = (s) => s.tipo === 'estudo' && s.disciplina === r.materia && !feitosAtuais[chaveSessao(s)];
+        const deHoje = reconstruido.sessoes.filter((s) => s.data === d && pendente(s)).sort((a, b) => a.ini.localeCompare(b.ini))[0];
+        const futura = !deHoje && reconstruido.sessoes.filter((s) => s.data > d && pendente(s)).sort((a, b) => a.data.localeCompare(b.data) || a.ini.localeCompare(b.ini))[0];
+        const escolhida = deHoje || futura;
+        if (escolhida) {
+          const novosFeitos = { ...feitosAtuais, [chaveSessao(escolhida)]: 1 };
+          cronogramasAtualizados = { ...(prefs.cronogramas || {}), [r.cronogramaK]: { ...entrada, feitos: novosFeitos } };
+          resultadoBaixa = { achou: true, titulo: reconstruido.titulo, data: escolhida.data, hoje: escolhida.data === d };
+        } else {
+          resultadoBaixa = { achou: false, titulo: reconstruido.titulo };
+        }
+      }
+    }
     setPrefsState((p) => {
       const d = new Date().toLocaleDateString('sv-SE');
       const limite = new Date(Date.now() - 90 * 86400000).toLocaleDateString('sv-SE');
       const todos = Object.fromEntries(Object.entries(p.sessoesEstudo || {}).filter(([dia]) => dia >= limite));
       todos[d] = [...(todos[d] || []), r];
-      const n = { ...p, sessoesEstudo: todos };
+      const n = { ...p, sessoesEstudo: todos, ...(cronogramasAtualizados ? { cronogramas: cronogramasAtualizados } : {}) };
       store.salvarPrefs(n);
       return n;
     });
-  }, []);
+    return resultadoBaixa;
+  }, [prefs]);
   const setPrefConc = (cid, parcial) =>
     setPrefs({ concursos: { ...(prefs.concursos || {}), [cid]: { ...(prefs.concursos?.[cid] || {}), ...parcial } } });
 
@@ -148,6 +184,27 @@ export default function App() {
   const questoes = useMemo(() => (concurso ? questoesDo(concurso.id, cargo, fase, { area }) : []), [concurso, cargo, fase, area, bancoVersao]);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const questoesUnificado = useMemo(() => (concurso ? questoesDo(concurso.id, cargo, fase, { unificado: true, area }) : []), [concurso, cargo, fase, area, bancoVersao]);
+  // cronogramas salvos, com as matérias previstas para hoje em cada um — pro seletor do cronômetro
+  const cronogramasParaCrono = useMemo(() => {
+    const hoje = new Date().toLocaleDateString('sv-SE');
+    return Object.entries(prefs.cronogramas || {})
+      .map(([k, v]) => {
+        try {
+          const r = sessoesDoCronograma(k, v, prefs);
+          if (!r) return null;
+          const hojeMap = new Map();
+          for (const s of r.sessoes) {
+            if (s.tipo !== 'estudo' || s.data !== hoje) continue;
+            if (!hojeMap.has(s.disciplina)) hojeMap.set(s.disciplina, { disciplina: s.disciplina, tema: s.tema, feito: !!r.feitos[chaveSessao(s)] });
+          }
+          return { k, titulo: r.titulo, hoje: [...hojeMap.values()] };
+        } catch {
+          return null;
+        }
+      })
+      .filter(Boolean);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [prefs.cronogramas, bancoVersao]);
 
   function responder(uid, letra, segundos) {
     const q = POR_UID[uid];
@@ -441,7 +498,7 @@ export default function App() {
       {avisoBanco && !semTopo && <p className="aviso">{avisoBanco}</p>}
       {tela.nome === 'questoes' && tela.msg && <p className="aviso" role="status" style={{ background: 'var(--ok-bg)', color: 'var(--ok)' }}>{tela.msg}</p>}
       <main><ErroTela chave={tela.nome} aoSair={() => setTela({ nome: 'concursos' })}>{conteudo}</ErroTela></main>
-      {!semTopo && <Cronometro materias={materiasCrono} hojeSeg={hojeSeg} registrosHoje={prefs.tempos?.[new Date().toLocaleDateString('sv-SE')] || {}} sessoesHoje={prefs.sessoesEstudo?.[new Date().toLocaleDateString('sv-SE')] || []} aoRegistrar={registrarTempo} aoSalvarSessao={registrarSessao} />}
+      {!semTopo && <Cronometro materias={materiasCrono} cronogramas={cronogramasParaCrono} hojeSeg={hojeSeg} registrosHoje={prefs.tempos?.[new Date().toLocaleDateString('sv-SE')] || {}} sessoesHoje={prefs.sessoesEstudo?.[new Date().toLocaleDateString('sv-SE')] || []} aoRegistrar={registrarTempo} aoSalvarSessao={registrarSessao} />}
       {concurso && !precisaCargo && !precisaFase && <MenuDesempenho questoes={questoes} respostas={respostas} aoAbrirPainel={() => ir('painel')} />}
     </div>
   );

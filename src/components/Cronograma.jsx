@@ -382,7 +382,7 @@ export default function Cronograma({ ctx, voltar, combinado = null }) {
           <div className="peq">{s.tema}</div>
         </div>
         <div className="acoes-sessao">
-          <button className="praticar peq" onClick={() => cronometrar(s.disciplina, s.tema)} title="Abre o cronômetro já com esta matéria">⏱ cronometrar</button>
+          <button className="praticar peq" onClick={() => cronometrar(s.disciplina, s.tema, chave)} title="Abre o cronômetro já com esta matéria e este cronograma selecionado, pra dar baixa automática ao salvar">⏱ cronometrar</button>
           <button className="praticar peq" onClick={() => abrirAvulsas({ materia: s.disciplina, mostrar: 'nao' })}>✎ questões</button>
         </div>
       </li>

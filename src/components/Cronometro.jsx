@@ -8,7 +8,7 @@ import { createPortal } from 'react-dom';
 
 const CHAVE = 'estudaai.cronometro';
 const EVENTO = 'estudaai:cronometro';
-const PADRAO = { aberto: false, modo: 'livre', rodando: false, desde: 0, acumulado: 0, registrado: 0, x: null, y: null, mini: false, foco: 25, pausa: 5, etapa: 'foco', ciclos: 0, disciplina: '', tema: '' };
+const PADRAO = { aberto: false, modo: 'livre', rodando: false, desde: 0, acumulado: 0, registrado: 0, x: null, y: null, mini: false, foco: 25, pausa: 5, etapa: 'foco', ciclos: 0, disciplina: '', tema: '', cronogramaK: '' };
 
 function ler() {
   try {
@@ -25,9 +25,10 @@ function gravar(e) {
   }
 }
 
-// Abre o cronômetro já com uma matéria (usado no cronograma)
-export function cronometrar(disciplina, tema = '') {
-  window.dispatchEvent(new CustomEvent(EVENTO, { detail: { disciplina, tema } }));
+// Abre o cronômetro já com uma matéria (usado no cronograma); cronogramaK, se informado,
+// já seleciona o cronograma correspondente, pra dar baixa automática ao salvar o registro.
+export function cronometrar(disciplina, tema = '', cronogramaK = undefined) {
+  window.dispatchEvent(new CustomEvent(EVENTO, { detail: { disciplina, tema, cronogramaK } }));
 }
 export function alternarCronometro() {
   window.dispatchEvent(new CustomEvent(EVENTO, { detail: { alternar: true } }));
@@ -41,6 +42,7 @@ const fmtCurto = (seg) => {
   const m = Math.round(seg / 60);
   return m >= 60 ? `${Math.floor(m / 60)}h${String(m % 60).padStart(2, '0')}` : `${m} min`;
 };
+const fmtDataCurta = (iso) => { const [, m, d] = (iso || '').split('-'); return m && d ? `${d}/${m}` : iso; };
 
 function bipe() {
   try {
@@ -60,7 +62,7 @@ function bipe() {
   }
 }
 
-export default function Cronometro({ materias = [], hojeSeg = 0, registrosHoje = {}, sessoesHoje = [], aoRegistrar, aoSalvarSessao }) {
+export default function Cronometro({ materias = [], cronogramas = [], hojeSeg = 0, registrosHoje = {}, sessoesHoje = [], aoRegistrar, aoSalvarSessao }) {
   const [e, setE] = useState(ler);
   const [, tique] = useState(0);
   const [pip, setPip] = useState(null);
@@ -102,11 +104,12 @@ export default function Cronometro({ materias = [], hojeSeg = 0, registrosHoje =
       const d = ev.detail || {};
       if (d.alternar) return mudar((v) => ({ aberto: !v.aberto }));
       const v = atual.current;
+      const cronoP = d.cronogramaK !== undefined ? { cronogramaK: d.cronogramaK || '' } : {};
       if (v.rodando && v.disciplina && v.disciplina !== d.disciplina) {
         // troca de matéria: salva o tempo da anterior e começa do zero
         registrarPendente(v);
-        mudar({ aberto: true, disciplina: d.disciplina, tema: d.tema, acumulado: 0, registrado: 0, desde: Date.now(), etapa: 'foco' });
-      } else mudar({ aberto: true, disciplina: d.disciplina, tema: d.tema });
+        mudar({ aberto: true, disciplina: d.disciplina, tema: d.tema, ...cronoP, acumulado: 0, registrado: 0, desde: Date.now(), etapa: 'foco' });
+      } else mudar({ aberto: true, disciplina: d.disciplina, tema: d.tema, ...cronoP });
     };
     window.addEventListener(EVENTO, ouvir);
     return () => window.removeEventListener(EVENTO, ouvir);
@@ -166,7 +169,9 @@ export default function Cronometro({ materias = [], hojeSeg = 0, registrosHoje =
     setAviso(null);
     mudar({ rodando: false, acumulado: 0, registrado: 0, desde: 0, etapa: 'foco' });
   };
-  // salva o tempo contado na matéria escolhida e zera o mostrador
+  // salva o tempo contado na matéria escolhida e zera o mostrador; se houver um cronograma
+  // selecionado, pede pro App dar baixa automática no bloco dessa matéria (de hoje, ou no mais
+  // próximo no futuro, se essa matéria não estava prevista para hoje nesse cronograma)
   const salvarRegistro = () => {
     const v = atual.current;
     if (!v.disciplina) return setAviso({ ok: false, texto: 'Escolha a matéria para salvar este tempo.' });
@@ -174,9 +179,16 @@ export default function Cronometro({ materias = [], hojeSeg = 0, registrosHoje =
     const seg = emFoco ? Math.round(decorrido(v) / 1000) : 0;
     if (seg < 1 && !v.registrado) return setAviso({ ok: false, texto: 'Ainda não há tempo contado para salvar.' });
     registrarPendente(v);
-    if (seg >= 1) aoSalvarSessao?.({ materia: v.disciplina, tema: v.tema || '', seg, hora: new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) });
+    let resultadoBaixa = null;
+    if (seg >= 1) resultadoBaixa = aoSalvarSessao?.({ materia: v.disciplina, tema: v.tema || '', seg, hora: new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }), cronogramaK: v.cronogramaK || null });
     mudar({ rodando: false, acumulado: 0, registrado: 0, desde: 0, etapa: 'foco' });
-    setAviso({ ok: true, texto: `✓ Registro salvo: ${seg >= 60 ? fmtCurto(seg) : `${seg} s`} em ${v.disciplina}${v.tema ? ` (${v.tema})` : ''}.` });
+    let texto = `✓ Registro salvo: ${seg >= 60 ? fmtCurto(seg) : `${seg} s`} em ${v.disciplina}${v.tema ? ` (${v.tema})` : ''}.`;
+    if (v.cronogramaK) {
+      if (resultadoBaixa?.achou && resultadoBaixa.hoje) texto += ' Baixa dada no cronograma de hoje.';
+      else if (resultadoBaixa?.achou) texto += ` Essa matéria não estava prevista para hoje nesse cronograma — dei baixa no bloco mais próximo, de ${fmtDataCurta(resultadoBaixa.data)}.`;
+      else texto += ` Não encontrei "${v.disciplina}" no cronograma selecionado — o registro foi salvo, mas sem dar baixa.`;
+    }
+    setAviso({ ok: true, texto });
     setVerRegistros(true);
   };
   const trocarModo = (modo) => {
@@ -267,7 +279,8 @@ export default function Cronometro({ materias = [], hojeSeg = 0, registrosHoje =
   const mostrar = pomodoro ? duracao(e) - ms : ms;
   const pendente = !pomodoro || e.etapa === 'foco' ? Math.max(0, ms - e.registrado) / 1000 : 0;
   const totalHoje = hojeSeg + pendente;
-  const opcoes = [...new Set([...materias, ...(e.disciplina ? [e.disciplina] : [])])];
+  const cronogramaSel = cronogramas.find((c) => c.k === e.cronogramaK) || null;
+  const opcoes = [...new Set([...(cronogramaSel?.hoje.map((m) => m.disciplina) || []), ...materias, ...(e.disciplina ? [e.disciplina] : [])])];
   const estado = e.rodando ? 'contando' : ms > 0 ? 'pausado' : 'parado';
 
   const corpo = (
@@ -308,6 +321,31 @@ export default function Cronometro({ materias = [], hojeSeg = 0, registrosHoje =
               <label>Foco <input type="number" min="5" max="120" value={e.foco} disabled={e.rodando} onChange={(ev) => mudar({ foco: Math.max(1, +ev.target.value || 25) })} /> min</label>
               <label>Pausa <input type="number" min="1" max="60" value={e.pausa} disabled={e.rodando} onChange={(ev) => mudar({ pausa: Math.max(1, +ev.target.value || 5) })} /> min</label>
               <span className="sub">🍅 {e.ciclos}</span>
+            </div>
+          )}
+          {cronogramas.length > 0 && (
+            <label className="crono-linha peq">
+              <span>Cronograma</span>
+              <select value={e.cronogramaK} onChange={(ev) => mudar({ cronogramaK: ev.target.value })} style={{ flex: 1, minWidth: 0 }}>
+                <option value="">— nenhum (registro livre) —</option>
+                {cronogramas.map((c) => <option key={c.k} value={c.k}>{c.titulo}</option>)}
+              </select>
+            </label>
+          )}
+          {cronogramaSel && (
+            <div className="crono-linha peq crono-sugestoes">
+              <span>Hoje:</span>
+              {cronogramaSel.hoje.length ? (
+                <span style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+                  {cronogramaSel.hoje.map((m) => (
+                    <button key={m.disciplina} type="button" className="btn peq" style={{ opacity: m.feito ? 0.55 : 1 }} onClick={() => { cronometrar(m.disciplina, m.tema); setAviso(null); }} title={m.feito ? 'Já marcada como feita neste cronograma' : 'Escolher esta matéria'}>
+                      {m.feito ? '✓ ' : ''}{m.disciplina}
+                    </button>
+                  ))}
+                </span>
+              ) : (
+                <span className="sub">nenhum bloco de estudo previsto para hoje nesse cronograma</span>
+              )}
             </div>
           )}
           <label className="crono-linha peq">

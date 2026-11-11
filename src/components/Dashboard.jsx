@@ -1,12 +1,11 @@
 import { useMemo } from 'react';
 import { getConcurso } from '../data/concursos.js';
-import { disciplinasDo, QUESTOES, questoesDo } from '../lib/dados.js';
-import { chaveRevisao, chaveSessao, gerarCronograma, gerarRevisoes } from '../lib/cronograma.js';
+import { QUESTOES, questoesDo } from '../lib/dados.js';
+import { chaveRevisao, chaveSessao } from '../lib/cronograma.js';
+import { sessoesDoCronograma } from '../lib/cronogramaSalvo.js';
 import { diasAte, fmtData, fmtPct, porCampo, porDia, resumo } from '../lib/stats.js';
 import { anteriorDe, eventosDoAluno, proximaDoAnterior } from '../lib/exameAnterior.js';
 import { tipoEvento } from './CalendarioGeral.jsx';
-import { mesclarConcursos } from './Cronograma.jsx';
-import { verticalizadoDe } from './EditalVerticalizado.jsx';
 import { situacao } from './Flashcards.jsx';
 import { BarrasAcerto, ColunasPorDia } from './Graficos.jsx';
 
@@ -19,35 +18,6 @@ const nomeCargos = (c, cargo) => {
   const ids = cargo === 'ambos' || !cargo ? c.cargos.map((x) => x.id) : Array.isArray(cargo) ? cargo : [cargo];
   return c.cargos.filter((x) => ids.includes(x.id)).map((x) => x.nome).join(' · ');
 };
-
-// refaz as sessões de um cronograma salvo (mesma regra da tela do cronograma)
-function sessoesDe(k, v, prefs) {
-  const cfg = v?.cfg;
-  if (!cfg?.inicio || !cfg.janelas) return null;
-  let discs;
-  let titulo;
-  let discursiva = false;
-  let abrir;
-  if (k.startsWith('mix|')) {
-    discs = mesclarConcursos(v.mix || []);
-    titulo = '🔀 ' + (v.nome || 'Combinado');
-    abrir = { mix: k };
-  } else {
-    const [cid, fase, area] = k.split('|');
-    const c = getConcurso(cid);
-    if (!c) return null;
-    const f = c.fases?.find((x) => x.id === fase);
-    const a = f?.areas?.find((x) => x.id === area);
-    const vert = verticalizadoDe(prefs, cid, fase, area);
-    const cargo = cfg.cargos?.length ? cfg.cargos : prefs.concursos?.[cid]?.cargo || 'ambos';
-    discs = vert ? vert.disciplinas : disciplinasDo(cid, cargo, fase, area);
-    discursiva = (f?.formato || c.formato) === 'discursiva';
-    titulo = c.sigla + (f ? ` – ${f.nome}` : '') + (a ? ` – ${a.nome}` : '');
-    abrir = { cid, fase, area };
-  }
-  const sessoes = gerarCronograma(cfg, discs, { discursiva });
-  return { k, titulo, abrir, sessoes, revisoes: gerarRevisoes(sessoes, cfg), feitos: v.feitos || {} };
-}
 
 export default function Dashboard({ ctx, ir, abrirCrono, estudarConcurso }) {
   const { prefs, setPrefs, respostas, usuario, abrirFicha, abrirAvulsas } = ctx;
@@ -98,7 +68,7 @@ export default function Dashboard({ ctx, ir, abrirCrono, estudarConcurso }) {
 
   // cronogramas: o que há para hoje, atrasos e revisões
   const cronos = useMemo(
-    () => Object.entries(prefs.cronogramas || {}).map(([k, v]) => { try { return sessoesDe(k, v, prefs); } catch { return null; } }).filter(Boolean),
+    () => Object.entries(prefs.cronogramas || {}).map(([k, v]) => { try { return sessoesDoCronograma(k, v, prefs); } catch { return null; } }).filter(Boolean),
     [prefs.cronogramas, ctx.bancoVersao], // eslint-disable-line react-hooks/exhaustive-deps
   );
   const marcar = (k, chave) => {
