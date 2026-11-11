@@ -38,7 +38,7 @@ export default function App() {
   const [respostas, setRespostas] = useState({});
   const [prefs, setPrefsState] = useState({});
   const [somenteLocal, setSomenteLocal] = useState(false);
-  const [tela, setTela] = useState({ nome: 'inicio' });
+  const [tela, setTela] = useState({ nome: 'dashboard' });
   const [recuperando, setRecuperando] = useState(false);
   const [bancoVersao, setBancoVersao] = useState(0);
   const [ultimaAba, setUltimaAba] = useState(null);
@@ -209,7 +209,7 @@ export default function App() {
     abrirMapa: (d) => setTela({ nome: 'mapa', disciplina: d }),
     irAvulsas: () => setTela({ nome: 'questoes', aba: 'praticar' }),
     abrirFicha: (id) => setTela({ nome: 'ficha', id }),
-    irInicio: () => setTela({ nome: 'inicio' }),
+    irInicio: () => setTela({ nome: 'dashboard' }),
     abrirNovoConcurso: () => setTela({ nome: 'novo-concurso' }),
     abrirEditarConcurso: (id) => setTela({ nome: 'editar-concurso', id }),
     abrirImportarProva: (cid, f, a, material = null) => setTela({ nome: 'questoes', aba: 'importar', importar: { cid: cid || concurso?.id, fase: f || fase, area: a || area, material } }),
@@ -340,15 +340,6 @@ export default function App() {
         <MeusConcursos ctx={ctx} />
       </>
     );
-  } else if (tela.nome === 'dashboard') {
-    conteudo = (
-      <Dashboard
-        ctx={ctx}
-        ir={(nome) => setTela({ nome })}
-        abrirCrono={(ab) => setTela({ nome: 'cronograma', abrir: ab })}
-        estudarConcurso={(id) => { setPrefs({ ativo: id }); setTela({ nome: 'questoes' }); }}
-      />
-    );
   } else if (tela.nome === 'calendario') {
     conteudo = <CalendarioGeral ctx={ctx} />;
   } else if (tela.nome === 'questoes' && tela.aba === 'importar') {
@@ -377,6 +368,15 @@ export default function App() {
         }}
       />
     );
+  } else if (tela.nome === 'dashboard') {
+    conteudo = (
+      <Dashboard
+        ctx={ctx}
+        ir={(nome) => setTela({ nome })}
+        abrirCrono={(ab) => setTela({ nome: 'cronograma', abrir: ab })}
+        estudarConcurso={(id) => { setPrefs({ ativo: id }); setTela({ nome: 'questoes' }); }}
+      />
+    );
   } else if (tela.nome === 'cronograma') {
     conteudo = <Cronograma key={[concurso.id, fase, area].join('|')} ctx={ctx} voltar={() => setTela({ nome: 'cronograma' })} />;
   } else if (tela.nome === 'painel') {
@@ -398,8 +398,8 @@ export default function App() {
   } catch {
     materiasCrono = [];
   }
-  const naInicio = tela.nome === 'inicio' || tela.nome === 'questoes';
-  const naQuestoes = naInicio;
+  const naInicio = tela.nome === 'dashboard' || tela.nome === 'questoes';
+  const naQuestoes = tela.nome === 'questoes';
   const seguindo = prefs.seguindo || [];
 
   return (
@@ -407,12 +407,12 @@ export default function App() {
       {!semTopo && (
         <header className="topo">
           <div className="topo-linha" style={{ paddingRight: concurso ? 56 : 0 }}>
-            <button className="logo" onClick={() => ir('inicio')}>EstudaAí</button>
+            <button className="logo" onClick={() => ir('dashboard')}>EstudaAí</button>
             <span className="sub">Olá, {usuario.nome.split(' ')[0]}</span>
             {usuario.admin && <button className="btn peq" aria-current={tela.nome === 'admin'} onClick={() => setTela({ nome: 'admin' })} title="Painel do administrador: pessoas e acessos" aria-label="Painel do administrador">👑<span className="so-largo"> Admin</span></button>}
             <MenuDivulgar compacto nome={usuario.nome} />
             {seguindo.length > 1 && (
-              <select aria-label="Concurso ativo" value={prefs.ativo || ''} onChange={(e) => { setPrefs({ ativo: e.target.value }); ir('inicio'); }} style={{ width: 'auto' }}>
+              <select aria-label="Concurso ativo" value={prefs.ativo || ''} onChange={(e) => { setPrefs({ ativo: e.target.value }); ir('dashboard'); }} style={{ width: 'auto' }}>
                 {seguindo.map((id) => <option key={id} value={id}>{getConcurso(id)?.sigla}</option>)}
               </select>
             )}

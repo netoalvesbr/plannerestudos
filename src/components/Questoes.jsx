@@ -54,6 +54,7 @@ export default function Questoes({ ctx, aba: abaPedida, filtro, aoTrocarAba, aoI
         ))}
       {aba === 'praticar' && <Praticar key={JSON.stringify(filtro || {})} ctx={ctx} filtroInicial={filtro} aoImportar={() => aoTrocarAba('importar')} />}
       {aba === 'importar' && <MinhasImportacoes ctx={ctx} aoExcluido={aoImportado} />}
+      {aba === 'importar' && <QuestoesRepetidas ctx={ctx} aoExcluido={aoImportado} />}
       {aba === 'importar' && (
         <ImportarProva
           concursos={todosConcursos()}
@@ -129,6 +130,196 @@ function MinhasImportacoes({ ctx, aoExcluido }) {
         </tbody>
       </table>
       <p className="peq sub" style={{ marginBottom: 0 }}>Excluir um lote tira essas questões do banco para todos. As suas respostas a outras questões não mudam.</p>
+    </details>
+  );
+}
+
+// ---------- questões repetidas no banco ----------
+// O banco já impede duas questões com o texto idêntico (o "uid" é um hash do enunciado normalizado).
+// Esta busca é para o caso mais comum na prática: a MESMA questão aparece em duas provas diferentes
+// com pequenas variações de redação (ortografia, "assinale a alternativa correta" vs "é correto afirmar
+// que", etc.) — texto diferente, então o uid não pega, mas é a mesma questão.
+function assinaturaQ(enunciado) {
+  const limpo = norm(enunciado).replace(/[^a-z0-9\s]/g, ' ').replace(/\s+/g, ' ').trim();
+  const palavras = limpo.split(' ').filter((p) => p.length > 2);
+  const shingles = new Set();
+  for (let i = 0; i < palavras.length - 1; i++) shingles.add(palavras[i] + ' ' + palavras[i + 1]);
+  return { shingles, chave: palavras.slice(0, 4).join(' '), tam: palavras.length };
+}
+
+// Quanto do MENOR conjunto de expressões está contido no maior — mais tolerante que o Jaccard puro
+// com perguntas que têm redação de abertura diferente ("assinale a alternativa correta sobre..." vs
+// "é correto afirmar que...") mas o mesmo conteúdo no meio/fim, que é o padrão mais comum de duplicata.
+function contencao(a, b) {
+  if (!a.size || !b.size) return 0;
+  let inter = 0;
+  const [menor, maior] = a.size <= b.size ? [a, b] : [b, a];
+  for (const x of menor) if (maior.has(x)) inter++;
+  return inter / menor.size;
+}
+
+const LIMIAR_REPETIDA = 0.55;
+
+// Agrupa questões parecidas comparando dentro de "baldes" (mesmo início de frase, ou mesma matéria)
+// em vez de comparar todas com todas, pra não travar o navegador com um banco grande.
+function encontrarRepetidas(lista) {
+  const validas = lista.filter((q) => q.enunciado && q.enunciado.trim().length > 30 && !q.anulada);
+  const assinadas = validas.map((q) => ({ q, ...assinaturaQ(q.enunciado) }));
+  const vistos = new Set();
+  const pares = [];
+  function comparar(grupo) {
+    for (let i = 0; i < grupo.length; i++) {
+      for (let j = i + 1; j < grupo.length; j++) {
+        const a = grupo[i];
+        const b = grupo[j];
+        if (a.q.uid === b.q.uid) continue;
+        const chavePar = a.q.uid < b.q.uid ? a.q.uid + '|' + b.q.uid : b.q.uid + '|' + a.q.uid;
+        if (vistos.has(chavePar)) continue;
+        if (Math.abs(a.tam - b.tam) > Math.max(6, Math.max(a.tam, b.tam) * 0.35)) continue;
+        vistos.add(chavePar);
+        const sim = contencao(a.shingles, b.shingles);
+        if (sim >= LIMIAR_REPETIDA) pares.push({ a: a.q, b: b.q, sim });
+      }
+    }
+  }
+  const porInicio = new Map();
+  for (const a of assinadas) {
+    const k = a.chave || '·';
+    (porInicio.get(k) || porInicio.set(k, []).get(k)).push(a);
+  }
+  for (const g of porInicio.values()) if (g.length > 1) comparar(g);
+  const porMateria = new Map();
+  for (const a of assinadas) {
+    const k = a.q.materia || '·';
+    (porMateria.get(k) || porMateria.set(k, []).get(k)).push(a);
+  }
+  for (const g of porMateria.values()) if (g.length > 1 && g.length <= 400) comparar(g);
+
+  // junta os pares em grupos (union-find simples)
+  const pai = new Map();
+  const achar = (x) => {
+    while (pai.get(x) !== x) x = pai.get(x);
+    return x;
+  };
+  const unir = (x, y) => {
+    const rx = achar(x);
+    const ry = achar(y);
+    if (rx !== ry) pai.set(rx, ry);
+  };
+  const simPorUid = new Map();
+  for (const p of pares) {
+    if (!pai.has(p.a.uid)) pai.set(p.a.uid, p.a.uid);
+    if (!pai.has(p.b.uid)) pai.set(p.b.uid, p.b.uid);
+    unir(p.a.uid, p.b.uid);
+    simPorUid.set(p.a.uid, Math.max(simPorUid.get(p.a.uid) || 0, p.sim));
+    simPorUid.set(p.b.uid, Math.max(simPorUid.get(p.b.uid) || 0, p.sim));
+  }
+  const grupos = new Map();
+  for (const uid of pai.keys()) {
+    const raiz = achar(uid);
+    (grupos.get(raiz) || grupos.set(raiz, []).get(raiz)).push(uid);
+  }
+  const porUid = new Map(validas.map((q) => [q.uid, q]));
+  const completude = (q) => (q.gabarito ? 1 : 0) + (q.comentario ? 1 : 0) + (q.espelho ? 1 : 0);
+  return [...grupos.values()]
+    .filter((us) => us.length > 1)
+    .map((us) => ({
+      sim: Math.max(...us.map((u) => simPorUid.get(u) || 0)),
+      itens: us.map((u) => porUid.get(u)).filter(Boolean).sort((x, y) => completude(y) - completude(x)),
+    }))
+    .sort((a, b) => b.sim - a.sim);
+}
+
+function QuestoesRepetidas({ ctx, aoExcluido }) {
+  const [grupos, setGrupos] = useState(null);
+  const [buscando, setBuscando] = useState(false);
+  const [selecionadas, setSelecionadas] = useState({});
+  const [status, setStatus] = useState(null);
+
+  function buscar() {
+    setBuscando(true);
+    setTimeout(() => {
+      const r = encontrarRepetidas(QUESTOES);
+      // pré-marca pra exclusão todas menos a mais completa de cada grupo
+      const sel = {};
+      for (const g of r) for (const q of g.itens.slice(1)) sel[q.uid] = true;
+      setGrupos(r);
+      setSelecionadas(sel);
+      setBuscando(false);
+    }, 10);
+  }
+
+  async function excluirSelecionadas() {
+    const uids = Object.keys(selecionadas).filter((u) => selecionadas[u]);
+    if (!uids.length) return;
+    setStatus('Excluindo…');
+    try {
+      const n = await excluirQuestoes(uids);
+      setGrupos((gs) => gs.map((g) => ({ ...g, itens: g.itens.filter((q) => !uids.includes(q.uid)) })).filter((g) => g.itens.length > 1));
+      setSelecionadas({});
+      setStatus(null);
+      aoExcluido({ novas: 0, repetidas: 0, excluidas: n });
+    } catch (e) {
+      setStatus('✗ ' + e.message);
+    }
+  }
+
+  const marcar = (uid, v) => setSelecionadas((s) => ({ ...s, [uid]: v }));
+  const nMarcadas = Object.values(selecionadas).filter(Boolean).length;
+
+  return (
+    <details className="card" style={{ marginTop: 8 }}>
+      <summary><b>🔁 Questões repetidas no banco</b> <span className="sub peq">(a mesma questão vinda de provas diferentes, com redação parecida)</span></summary>
+      {grupos === null ? (
+        <p className="sub peq">
+          Duas questões com o texto idêntico já não entram duas vezes no banco. Esta busca é para a mesma questão com uma redação{' '}
+          <b>parecida</b> — por exemplo, a mesma pergunta em duas provas diferentes, com uma palavra ou outra trocada.{' '}
+          <button className="btn peq" onClick={buscar} disabled={buscando}>
+            {buscando ? 'Buscando…' : '🔍 Buscar agora'}
+          </button>
+        </p>
+      ) : grupos.length === 0 ? (
+        <p className="sub peq">
+          ✓ Nenhuma questão parecida foi encontrada entre as {QUESTOES.length.toLocaleString('pt-BR')} do banco.{' '}
+          <button className="btn peq" onClick={buscar}>Buscar de novo</button>
+        </p>
+      ) : (
+        <>
+          <p className="sub peq">
+            {grupos.length} grupo(s) de questões parecidas, {grupos.reduce((t, g) => t + g.itens.length, 0)} questões no total. As marcadas abaixo
+            já estão sugeridas para exclusão (mantendo a versão com gabarito e comentário mais completos) — revise antes de excluir.
+          </p>
+          {status && <p className="aviso peq" role="status">{status}</p>}
+          {grupos.map((g, i) => (
+            <div key={i} className="card" style={{ marginTop: 8 }}>
+              <p className="sub peq" style={{ marginBottom: 4 }}>
+                <b>Grupo {i + 1}</b> · parecidas em {Math.round(g.sim * 100)}%
+              </p>
+              {g.itens.map((q) => (
+                <label key={q.uid} className="linha" style={{ gap: 8, alignItems: 'flex-start', marginBottom: 6 }}>
+                  <input type="checkbox" checked={!!selecionadas[q.uid]} onChange={(e) => marcar(q.uid, e.target.checked)} style={{ marginTop: 4 }} />
+                  <span>
+                    <span className="sub peq">
+                      {codigoDa(q)} · {q.materia}
+                      {q.assunto && q.assunto !== 'Geral' ? ` › ${q.assunto}` : ''} · {q.fonte || q.banca || '—'}
+                      {!q.gabarito && q.formato !== 'discursiva' ? ' · ✗ sem gabarito' : ''}
+                    </span>
+                    <br />
+                    {q.enunciado.slice(0, 180)}
+                    {q.enunciado.length > 180 ? '…' : ''}
+                  </span>
+                </label>
+              ))}
+            </div>
+          ))}
+          <div className="linha" style={{ gap: 8, marginTop: 8 }}>
+            <button className="btn pri" onClick={excluirSelecionadas} disabled={!nMarcadas}>
+              🗑️ Excluir as marcadas ({nMarcadas})
+            </button>
+            <button className="btn peq" onClick={buscar}>Buscar de novo</button>
+          </div>
+        </>
+      )}
     </details>
   );
 }
