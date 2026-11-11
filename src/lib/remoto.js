@@ -96,6 +96,7 @@ export const questaoDoBanco = (r) => ({
   comentario: r.comentario || '',
   fonte: r.fonte || '',
   criadoPor: r.criado_por,
+  criadoEm: r.criado_em || null,
   remoto: true,
 });
 
