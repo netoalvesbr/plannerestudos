@@ -118,6 +118,18 @@ export default function App() {
       return n;
     });
   }, []);
+  // registros salvos pelo botão "Salvar registro" do cronômetro: { 'AAAA-MM-DD': [{ materia, tema, seg, hora }] } (guarda 90 dias)
+  const registrarSessao = useCallback((r) => {
+    setPrefsState((p) => {
+      const d = new Date().toLocaleDateString('sv-SE');
+      const limite = new Date(Date.now() - 90 * 86400000).toLocaleDateString('sv-SE');
+      const todos = Object.fromEntries(Object.entries(p.sessoesEstudo || {}).filter(([dia]) => dia >= limite));
+      todos[d] = [...(todos[d] || []), r];
+      const n = { ...p, sessoesEstudo: todos };
+      store.salvarPrefs(n);
+      return n;
+    });
+  }, []);
   const setPrefConc = (cid, parcial) =>
     setPrefs({ concursos: { ...(prefs.concursos || {}), [cid]: { ...(prefs.concursos?.[cid] || {}), ...parcial } } });
 
@@ -235,7 +247,7 @@ export default function App() {
       aoTrocarAba={(a) => setTela({ nome: 'questoes', aba: a })}
       aoImportado={async (r) => {
         await recarregarBanco();
-        setTela({ nome: 'questoes', aba: 'praticar', msg: `✓ Importação concluída: ${r.novas} questões novas no banco${r.repetidas ? ` (${r.repetidas} já existiam e não foram duplicadas)` : ''}.` });
+        setTela({ nome: 'questoes', aba: 'praticar', msg: `✓ Importação concluída: ${r.novas} questões novas no banco${r.repetidas ? ` (${r.repetidas} já existiam e não foram duplicadas)` : ''}. Confira o total no contador abaixo.` });
       }}
     />
   );
@@ -429,7 +441,7 @@ export default function App() {
       {avisoBanco && !semTopo && <p className="aviso">{avisoBanco}</p>}
       {tela.nome === 'questoes' && tela.msg && <p className="aviso" role="status" style={{ background: 'var(--ok-bg)', color: 'var(--ok)' }}>{tela.msg}</p>}
       <main><ErroTela chave={tela.nome} aoSair={() => setTela({ nome: 'concursos' })}>{conteudo}</ErroTela></main>
-      {!semTopo && <Cronometro materias={materiasCrono} hojeSeg={hojeSeg} aoRegistrar={registrarTempo} />}
+      {!semTopo && <Cronometro materias={materiasCrono} hojeSeg={hojeSeg} registrosHoje={prefs.tempos?.[new Date().toLocaleDateString('sv-SE')] || {}} sessoesHoje={prefs.sessoesEstudo?.[new Date().toLocaleDateString('sv-SE')] || []} aoRegistrar={registrarTempo} aoSalvarSessao={registrarSessao} />}
       {concurso && !precisaCargo && !precisaFase && <MenuDesempenho questoes={questoes} respostas={respostas} aoAbrirPainel={() => ir('painel')} />}
     </div>
   );

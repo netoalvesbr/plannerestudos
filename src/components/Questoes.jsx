@@ -29,6 +29,12 @@ export default function Questoes({ ctx, aba: abaPedida, filtro, aoTrocarAba, aoI
           <button className="praticar peq" onClick={ctx.abrirPainel}>ver Painel</button>
         </span>
       </div>
+      <div className="contador-q" role="status" aria-label="Contador de questões">
+        <span>📚 Banco de questões: <b>{QUESTOES.length.toLocaleString('pt-BR')}</b></span>
+        <span>🎯 Do meu concurso ({concurso.sigla}): <b>{ctx.questoes.length.toLocaleString('pt-BR')}</b></span>
+        <span>✓ Resolvidas por mim: <b>{Object.keys(ctx.respostas).filter((u) => POR_UID[u]).length.toLocaleString('pt-BR')}</b></span>
+        <span>⬜ Ainda não resolvidas: <b>{QUESTOES.filter((q) => !q.anulada && !ctx.respostas[q.uid]).length.toLocaleString('pt-BR')}</b></span>
+      </div>
       <div className="abas" role="tablist" style={{ marginBottom: 12 }}>
         {ABAS.map(([id, rot]) => (
           <button key={id} role="tab" aria-selected={aba === id} onClick={() => aoTrocarAba(id)}>

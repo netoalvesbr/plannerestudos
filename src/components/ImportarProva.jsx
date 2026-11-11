@@ -1,6 +1,7 @@
 import { textoDoPdf } from '../lib/leitorPdf.js';
 import { useEffect, useMemo, useState } from 'react';
-import { lerGabarito, lerProva } from '../lib/leitura.js';
+import { analisarProva, identificarMateria, lerGabarito, lerGabaritoPartes } from '../lib/leitura.js';
+import { POR_UID, QUESTOES } from '../lib/dados.js';
 import { salvarQuestoes, uidDe } from '../lib/remoto.js';
 
 const campo = { width: '100%', minHeight: 38, padding: '6px 9px', borderRadius: 9, border: '1px solid var(--borda)', background: 'var(--card)', color: 'var(--txt)', font: 'inherit' };
@@ -31,13 +32,6 @@ export function limparOrigem(linhas, marcas = []) {
   }
   return out;
 }
-// separa a lista de questões do gabarito que vem no fim do mesmo PDF
-function separarGabarito(linhas) {
-  let i = -1;
-  for (let k = linhas.length - 1; k >= Math.floor(linhas.length * 0.4); k--) if (/^\s*(GABARITO|RESPOSTAS?)\b/i.test(linhas[k])) { i = k; break; }
-  return i < 0 ? { prova: linhas, gabarito: '' } : { prova: linhas.slice(0, i), gabarito: linhas.slice(i).join('\n') };
-}
-
 export default function ImportarProva({ concursos, concursoInicial, faseInicial, areaInicial, aoConcluir, aoCancelar, material = null }) {
   const [cid, setCid] = useState(concursoInicial || concursos[0]?.id || '');
   const concurso = concursos.find((c) => c.id === cid);
@@ -48,6 +42,8 @@ export default function ImportarProva({ concursos, concursoInicial, faseInicial,
   const [meta, setMeta] = useState({ banca: concurso?.banca || '', ano: new Date().getFullYear() - 1, orgao: '' });
   const [questoes, setQuestoes] = useState([]);
   const [materiaPadrao, setMateriaPadrao] = useState('');
+  const [assuntoPadrao, setAssuntoPadrao] = useState('');
+  const [achado, setAchado] = useState(null); // matéria identificada no arquivo
   const [status, setStatus] = useState(null);
   const [erro, setErro] = useState(null);
   const [colarProva, setColarProva] = useState('');
@@ -55,6 +51,9 @@ export default function ImportarProva({ concursos, concursoInicial, faseInicial,
   const [salvando, setSalvando] = useState(false);
   const [semOrigem, setSemOrigem] = useState(!!material);
   const [marcas, setMarcas] = useState('');
+  const [rel, setRel] = useState(null); // relatório de conferência da leitura
+  const [confirmo, setConfirmo] = useState(false);
+  const [soPendencias, setSoPendencias] = useState(false);
   // material da Biblioteca: lê o PDF, tira as referências de origem e separa o gabarito do fim
   useEffect(() => {
     if (!material?.arquivo) return;
@@ -62,17 +61,9 @@ export default function ImportarProva({ concursos, concursoInicial, faseInicial,
       setStatus('Lendo o material da Biblioteca…');
       try {
         const linhas = await textoDeArquivo(material.arquivo, (p, n) => setStatus(`Lendo página ${p} de ${n}…`));
-        const limpas = limparOrigem(linhas);
-        const { prova, gabarito } = separarGabarito(limpas);
         if (material.materia) setMateriaPadrao(material.materia);
         setMeta((m) => ({ ...m, banca: '', orgao: '', ano: '' }));
-        let qs = lerProva(prova, formato).map((q) => ({ ...q, incluir: true }));
-        if (!qs.length) throw new Error('Não consegui separar as questões deste PDF. Verifique se as questões são numeradas (1, 2, 3… ou "QUESTÃO 1") e se o PDF tem texto (não é imagem escaneada).');
-        const mapa = gabarito ? lerGabarito(gabarito, formato) : {};
-        qs = qs.map((q) => (mapa[q.numero] ? (mapa[q.numero] === 'ANULADA' ? { ...q, anulada: true, gabarito: '' } : { ...q, gabarito: mapa[q.numero] }) : q));
-        setQuestoes(qs);
-        const comGab = qs.filter((q) => q.gabarito).length;
-        setStatus(`${qs.length} questões encontradas${gabarito ? ` · gabarito do fim do PDF aplicado em ${comGab}` : ' · gabarito não encontrado no PDF: importe abaixo'}. Confira cada questão antes de salvar.`);
+        await aplicarProva(limparOrigem(linhas));
       } catch (e) {
         setErro(e.message);
         setStatus(null);
@@ -97,14 +88,37 @@ export default function ImportarProva({ concursos, concursoInicial, faseInicial,
     if (fo) setFormato(fo);
   }
 
-  function aplicarProva(linhas) {
-    const qs = lerProva(linhas, formato).map((q) => ({ ...q, incluir: true }));
-    if (!qs.length) {
+  // Separa as questões e monta o relatório de conferência: o que o arquivo parece ter x o que foi lido
+  async function aplicarProva(linhas, nomeArquivo = '') {
+    const { questoes: lidas, relatorio } = analisarProva(linhas, formato);
+    if (!lidas.length) {
       setErro('Não consegui separar as questões automaticamente. Verifique se o PDF tem texto (não é imagem escaneada) e se as questões são numeradas (1, 2, 3… ou "QUESTÃO 1").');
+      setStatus(null);
       return;
     }
+    // questões que já estão no banco (mesmo enunciado) e repetidas dentro do próprio arquivo
+    const vistos = new Set();
+    const qs = [];
+    for (const q of lidas) {
+      const uid = await uidDe(q.enunciado);
+      const repetida = vistos.has(uid);
+      vistos.add(uid);
+      qs.push({ ...q, uid, jaExiste: !!POR_UID[uid], repetida, incluir: !POR_UID[uid] && !repetida });
+    }
     setQuestoes(qs);
-    setStatus(`${qs.length} questões encontradas. Agora importe o gabarito e confira cada questão abaixo.`);
+    setRel(relatorio);
+    setConfirmo(false);
+    // matéria do arquivo: usada nas questões que vieram sem disciplina
+    const id = identificarMateria(linhas, (concurso?.disciplinas || []).filter((d) => (!fase || !d.fase || d.fase === fase) && (!area || !d.area || d.area === area)), nomeArquivo);
+    setAchado(id.materia ? id : null);
+    if (id.materia && !material?.materia) setMateriaPadrao(id.materia);
+    if (id.assunto) setAssuntoPadrao(id.assunto);
+    // arquivo com gabarito comentado em cada questão: é material de estudo, não o caderno oficial de uma prova
+    const material_ = lidas.filter((q) => q.comentario).length >= lidas.length / 2;
+    if (material_) setMeta((m) => ({ ...m, banca: '', ano: '' }));
+    setErro(null);
+    const comGab = qs.filter((q) => q.gabarito || q.anulada).length;
+    setStatus(`${qs.length} questões lidas do arquivo${relatorio.gabaritoNoArquivo ? ` · gabarito encontrado no próprio arquivo em ${comGab}` : formato === 'discursiva' ? '' : ' · gabarito não encontrado no arquivo: importe no passo 3'}${material_ ? ' · comentários lidos junto com as questões (tratei como material de estudo: banca e ano ficaram em branco; preencha se for prova oficial)' : ''}. Veja a conferência abaixo antes de salvar.`);
   }
 
   async function lerArquivoProva(arquivo) {
@@ -114,7 +128,7 @@ export default function ImportarProva({ concursos, concursoInicial, faseInicial,
     try {
       const linhas = await textoDeArquivo(arquivo, (p, n) => setStatus(`Lendo página ${p} de ${n}…`));
       if (linhas.filter(Boolean).length < 5) throw new Error('Não encontrei texto neste PDF (pode ser imagem escaneada). Tente colar o texto da prova no campo abaixo.');
-      aplicarProva(linhas);
+      await aplicarProva(linhas, arquivo.name);
     } catch (e) {
       setErro(e.message);
       setStatus(null);
@@ -122,19 +136,24 @@ export default function ImportarProva({ concursos, concursoInicial, faseInicial,
   }
 
   function aplicarGabarito(texto) {
-    const mapa = lerGabarito(texto, formato);
-    const n = Object.keys(mapa).length;
+    // arquivo com várias listas (numeração recomeça): o gabarito também vem em listas, na mesma ordem
+    const varias = (rel?.partes || 1) > 1;
+    const partes = varias ? lerGabaritoPartes(texto, formato) : [lerGabarito(texto, formato)];
+    const n = partes.reduce((t, p) => t + Object.keys(p).length, 0);
     if (!n) return setErro('Não encontrei respostas no gabarito. Formatos aceitos: "1-A 2-C…", "01 A 02 C…" ou tabela de números e letras.');
+    if (varias && partes.length !== rel.partes) return setErro(`O arquivo de questões tem ${rel.partes} listas (a numeração recomeça do 1), mas o gabarito tem ${partes.length}. Confira se é o gabarito certo ou preencha o gabarito questão por questão.`);
     setErro(null);
-    const casadas = questoes.filter((q) => mapa[q.numero]).length;
+    const de = (q) => partes[(q.parte || 1) - 1]?.[q.numero];
+    const casadas = questoes.filter((q) => de(q)).length;
     setQuestoes((qs) =>
       qs.map((q) => {
-        const g = mapa[q.numero];
+        const g = de(q);
         if (!g) return q;
         return g === 'ANULADA' ? { ...q, anulada: true, gabarito: '' } : { ...q, gabarito: g, anulada: false };
       }),
     );
-    setStatus(`Gabarito aplicado: ${casadas} de ${questoes.length} questões receberam resposta.`);
+    const faltam = questoes.length - casadas;
+    setStatus(`Gabarito aplicado: ${casadas} de ${questoes.length} questões receberam resposta.${faltam ? ` ✗ ${faltam} ficaram sem gabarito: elas não podem ser importadas enquanto não tiverem resposta.` : ' ✓ Todas com gabarito.'}`);
   }
 
   async function lerArquivoGabarito(arquivo) {
@@ -162,12 +181,20 @@ export default function ImportarProva({ concursos, concursoInicial, faseInicial,
   };
   const incluidas = questoes.filter((q) => q.incluir);
   const comProblema = incluidas.filter((q) => problemas(q).length).length;
+  // conferência: o que o arquivo parece ter x o que foi lido
+  const semGab = questoes.filter((q) => formato !== 'discursiva' && !q.anulada && !q.gabarito).length;
+  const anuladas = questoes.filter((q) => q.anulada).length;
+  const jaNoBanco = questoes.filter((q) => q.jaExiste).length;
+  const repetidas = questoes.filter((q) => q.repetida && !q.jaExiste).length;
+  const contagemDiverge = rel?.marcadoresA != null && rel.marcadoresA !== questoes.length;
+  const diverge = !!rel && (contagemDiverge || rel.faltando.length > 0 || rel.suspeitas.length > 0);
 
   async function salvar() {
     setErro(null);
     if (!cid) return setErro('Escolha o concurso.');
     if (faseObj?.areas?.length && !area) return setErro('Escolha a área da prova (ex.: Direito Civil).');
-    if (comProblema) return setErro(`Há ${comProblema} questão(ões) com pendências (marcadas em vermelho). Corrija ou desmarque "incluir".`);
+    if (comProblema) return setErro(`Há ${comProblema} questão(ões) com pendências (marcadas em vermelho). Corrija ou desmarque "incluir". Nenhuma questão é importada sem gabarito.`);
+    if (diverge && !confirmo) return setErro('A leitura não bate com o arquivo (veja a conferência). Confira e marque “Conferi o arquivo” para importar mesmo assim.');
     setSalvando(true);
     try {
       const lista = [];
@@ -175,7 +202,8 @@ export default function ImportarProva({ concursos, concursoInicial, faseInicial,
         lista.push({
           ...q,
           materia: (q.materia || materiaPadrao).trim(),
-          uid: await uidDe(q.enunciado),
+          assunto: (q.assunto || assuntoPadrao || '').trim(),
+          uid: await uidDe(semOrigem ? limparQuestao(q, marcas).enunciado : q.enunciado),
           concursoId: cid,
           fase: fase || null,
           area: area || null,
@@ -186,7 +214,7 @@ export default function ImportarProva({ concursos, concursoInicial, faseInicial,
           orgao: meta.orgao,
           ...(semOrigem ? limparQuestao(q, marcas) : {}),
           origem: material ? 'material_biblioteca' : q.origem,
-          fonte: semOrigem ? 'Banco de questões EstudaAí' : [meta.banca, meta.ano, meta.orgao].filter(Boolean).join(' · ') + ` – questão ${q.numero}`,
+          fonte: semOrigem ? 'Banco de questões EstudaAí' : ([meta.banca, meta.ano, meta.orgao].filter(Boolean).join(' · ') || 'Material importado') + ` – questão ${q.numero}`,
         });
       }
       const r = await salvarQuestoes(lista);
@@ -290,25 +318,78 @@ export default function ImportarProva({ concursos, concursoInicial, faseInicial,
         <>
           <section className="card">
             <h2>{formato === 'discursiva' ? '3' : '4'}. Conferir questões</h2>
+            {rel && (
+              <div className="q-painel" style={{ borderColor: diverge || semGab ? 'var(--erro)' : 'var(--ok)' }}>
+                <h3 style={{ marginTop: 0 }}>🔎 Conferência do arquivo</h3>
+                <table>
+                  <tbody>
+                    <tr><td>Questões lidas do arquivo</td><td><b>{questoes.length}</b>{rel.partes > 1 ? ` (em ${rel.partes} listas – a numeração recomeça do 1)` : ''}</td></tr>
+                    {rel.marcadoresA != null && (
+                      <tr><td>Alternativas “A” contadas no arquivo</td><td><b>{rel.marcadoresA}</b> {contagemDiverge ? <b className="desce">✗ não bate com as {questoes.length} questões lidas</b> : <b className="sobe">✓ bate</b>}</td></tr>
+                    )}
+                    <tr><td>Maior número de questão visto</td><td><b>{rel.maiorNumero || '—'}</b></td></tr>
+                    {formato !== 'discursiva' && <tr><td>Com gabarito</td><td><b>{questoes.length - semGab - anuladas}</b>{anuladas ? ` · ${anuladas} anuladas` : ''} {semGab ? <b className="desce">· ✗ {semGab} sem gabarito</b> : <b className="sobe">· ✓ nenhuma sem gabarito</b>}</td></tr>}
+                    <tr><td>Já estão no banco (mesmo enunciado)</td><td><b>{jaNoBanco}</b>{jaNoBanco ? ' – não serão duplicadas (já vêm desmarcadas)' : ''}</td></tr>
+                    {repetidas > 0 && <tr><td>Repetidas dentro do próprio arquivo</td><td><b>{repetidas}</b> – já vêm desmarcadas</td></tr>}
+                    <tr><td>Questões novas marcadas para importar</td><td><b>{incluidas.length}</b></td></tr>
+                    <tr><td>Banco de questões hoje</td><td><b>{QUESTOES.length}</b> questões</td></tr>
+                  </tbody>
+                </table>
+                {rel.faltando.length > 0 && <p className="desce peq">✗ Números que não encontrei no arquivo: {rel.faltando.slice(0, 40).join(', ')}{rel.faltando.length > 40 ? '…' : ''}. Confira no PDF se essas questões existem.</p>}
+                {rel.suspeitas.length > 0 && <p className="desce peq">✗ Questões que podem ter “engolido” outra (texto longo demais ou mais de um grupo de alternativas): {rel.suspeitas.slice(0, 30).map((k) => `nº ${questoes[k - 1]?.numero}${rel.partes > 1 ? ` (lista ${questoes[k - 1]?.parte})` : ''}`).join(', ')}.</p>}
+                {contagemDiverge && <p className="desce peq">✗ O arquivo parece ter {rel.marcadoresA} questões, mas eu separei {questoes.length}. {rel.marcadoresA > questoes.length ? 'Algumas questões não foram separadas.' : 'Algumas questões podem estar sem alternativas no texto.'}</p>}
+                {semGab > 0 && formato !== 'discursiva' && (
+                  <p className="desce peq">
+                    ✗ {semGab} {semGab === 1 ? 'questão está' : 'questões estão'} sem gabarito. Importe o gabarito no passo 3, preencha à mão ou{' '}
+                    <button type="button" className="praticar peq" onClick={() => setQuestoes((qs) => qs.map((q) => (!q.anulada && !q.gabarito ? { ...q, incluir: false } : q)))}>desmarque as sem gabarito</button>.
+                  </p>
+                )}
+                {diverge ? (
+                  <label style={{ display: 'flex', gap: 8, alignItems: 'flex-start', marginTop: 8 }}>
+                    <input type="checkbox" checked={confirmo} onChange={() => setConfirmo(!confirmo)} style={{ width: 20, height: 20, marginTop: 2 }} />
+                    <span><b>Conferi o arquivo</b> e quero importar mesmo assim as questões marcadas.</span>
+                  </label>
+                ) : (
+                  !semGab && <p className="sobe peq" style={{ marginBottom: 0 }}>✓ A leitura bate com o arquivo.</p>
+                )}
+              </div>
+            )}
             <p className="sub">{incluidas.length} de {questoes.length} marcadas para importar · {comProblema ? <b className="desce">✗ {comProblema} com pendências</b> : <b className="sobe">✓ sem pendências</b>}</p>
-            <label className="campo" style={{ maxWidth: 420 }}>Disciplina para as questões sem disciplina
-              <input list="lista-disciplinas" style={campo} value={materiaPadrao} onChange={(e) => setMateriaPadrao(e.target.value)} placeholder="Ex.: Direito Civil" />
-            </label>
+            <label className="linha peq" style={{ gap: 6, marginBottom: 8 }}><input type="checkbox" checked={soPendencias} onChange={() => setSoPendencias(!soPendencias)} /> Mostrar só as questões com pendência</label>
+            {achado && (
+              <p className="aviso peq" role="status" style={{ background: 'var(--pri-claro)', color: 'var(--txt)' }}>
+                🏷️ Matéria identificada no arquivo: <b>{achado.materia}</b>{achado.assunto ? <> · assunto: <b>{achado.assunto}</b></> : null} ({achado.motivo}). Confira e troque abaixo se não for essa.
+              </p>
+            )}
+            <div className="filtros">
+              <label className="campo">Disciplina para as questões sem disciplina
+                <input list="lista-disciplinas" style={campo} value={materiaPadrao} onChange={(e) => setMateriaPadrao(e.target.value)} placeholder="Ex.: Direito Civil" />
+              </label>
+              <label className="campo">Assunto para as questões sem assunto (opcional)
+                <input style={campo} value={assuntoPadrao} onChange={(e) => setAssuntoPadrao(e.target.value)} placeholder="Ex.: Lei nº 2.250/2009" />
+              </label>
+            </div>
             <datalist id="lista-disciplinas">{disciplinas.map((d) => <option key={d} value={d} />)}</datalist>
           </section>
 
           {questoes.map((q, i) => {
             const pr = q.incluir ? problemas(q) : [];
+            if (soPendencias && !pr.length) return null;
             return (
               <article key={i} className="card" style={{ borderColor: pr.length ? 'var(--erro)' : undefined, opacity: q.incluir ? 1 : 0.55 }}>
                 <div className="linha entre">
-                  <b>Questão {q.numero}</b>
+                  <b>
+                    Questão {q.numero}
+                    {(rel?.partes || 1) > 1 ? ` · lista ${q.parte}` : ''}
+                    {q.jaExiste && <span className="selo" style={{ marginLeft: 8 }}>↺ já está no banco</span>}
+                    {q.repetida && !q.jaExiste && <span className="selo" style={{ marginLeft: 8 }}>↺ repetida neste arquivo</span>}
+                  </b>
                   <label className="linha" style={{ gap: 6 }}><input type="checkbox" checked={q.incluir} onChange={(e) => setQ(i, 'incluir', e.target.checked)} /> incluir</label>
                 </div>
                 {pr.length > 0 && <p className="desce peq">✗ {pr.join(' · ')}</p>}
                 <div className="filtros" style={{ margin: '8px 0' }}>
                   <label className="campo">Disciplina<input list="lista-disciplinas" style={campo} value={q.materia} onChange={(e) => setQ(i, 'materia', e.target.value)} placeholder={materiaPadrao || 'Disciplina'} /></label>
-                  <label className="campo">Assunto (opcional)<input style={campo} value={q.assunto || ''} onChange={(e) => setQ(i, 'assunto', e.target.value)} /></label>
+                  <label className="campo">Assunto (opcional)<input style={campo} value={q.assunto || ''} onChange={(e) => setQ(i, 'assunto', e.target.value)} placeholder={assuntoPadrao} /></label>
                   {formato !== 'discursiva' && (
                     <label className="campo">Gabarito
                       <select value={q.anulada ? 'ANULADA' : q.gabarito} onChange={(e) => (e.target.value === 'ANULADA' ? setQuestoes((qs) => qs.map((x, j) => (j === i ? { ...x, anulada: true, gabarito: '' } : x))) : setQuestoes((qs) => qs.map((x, j) => (j === i ? { ...x, anulada: false, gabarito: e.target.value } : x))))}>
@@ -328,6 +409,11 @@ export default function ImportarProva({ concursos, concursoInicial, faseInicial,
                       <input style={campo} value={q.alternativas?.[L] || ''} onChange={(e) => setAlt(i, L, e.target.value)} />
                     </label>
                   ))}
+                {(q.comentario || formato !== 'discursiva') && (
+                  <label className="campo" style={{ marginTop: 6 }}>Comentário / fundamentação {q.comentario ? '(lido do arquivo)' : '(opcional)'}
+                    <textarea rows={q.comentario ? Math.min(6, Math.max(2, Math.ceil(q.comentario.length / 110))) : 1} style={campo} value={q.comentario || ''} onChange={(e) => setQ(i, 'comentario', e.target.value)} />
+                  </label>
+                )}
                 {formato === 'discursiva' && (
                   <label className="campo" style={{ marginTop: 6 }}>Espelho / padrão de resposta (opcional)
                     <textarea rows={3} style={campo} value={q.espelho || ''} onChange={(e) => setQ(i, 'espelho', e.target.value)} />
@@ -338,7 +424,7 @@ export default function ImportarProva({ concursos, concursoInicial, faseInicial,
           })}
 
           <div className="linha" style={{ position: 'sticky', bottom: 0, background: 'var(--bg)', padding: '10px 0' }}>
-            <button className="btn pri" onClick={salvar} disabled={salvando || !incluidas.length}>{salvando ? 'Salvando…' : `Salvar ${incluidas.length} questões no banco`}</button>
+            <button className="btn pri" onClick={salvar} disabled={salvando || !incluidas.length}>{salvando ? 'Salvando…' : `Salvar ${incluidas.length} ${incluidas.length === 1 ? 'questão' : 'questões'} no banco`}</button>
             <button className="btn" onClick={aoCancelar}>Cancelar</button>
           </div>
         </>

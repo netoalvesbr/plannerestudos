@@ -508,53 +508,211 @@ export function dividirTopicos(txt) {
 }
 
 // ---------------- prova ----------------
-const RE_INICIO = /^(?:QUEST[ÃA]O|Quest[ãa]o)?\s*0*(\d{1,3})\s*(?:[.)\-–:]|\s+-|$)\s*(.*)$/;
+const RE_INICIO = /^(?:QUEST[ÃA]O|Quest[ãa]o)?\s*0*(\d{1,3})\s*(?:[.)\-–:](?![\d.,])|\s+-|$)\s*(.*)$/;
 const RUIDO = /^(P[ÁA]GINA|CADERNO|RASCUNHO|BOA PROVA|LEIA|INSTRU[ÇC]|ATEN[ÇC][ÃA]O|PROVA OBJETIVA|TIPO\s+\d|CARGO|\d+\s*\/\s*\d+$)/i;
 
 // formato: 'A-E' | 'A-D' | 'CE' | 'discursiva'
-export function lerProva(linhas, formato = 'A-E') {
-  const questoes = [];
+// Lê a prova e devolve também um relatório de conferência (quantas questões o arquivo parece ter,
+// números que faltaram, questões suspeitas), para o importador poder avisar quando a leitura não bate.
+// Trata: numeração que recomeça do 1 (arquivos com várias listas), números pulados, gabarito escrito
+// dentro da questão ("Gabarito: C") e bloco de gabarito no meio ou no fim do arquivo.
+const RE_ALT_A = /^(?:\(\s*[Aa]\s*\)\s*|[Aa]\s*\)\s+|A\s*[.\-–]\s+)[^\s.,;:)]/;
+const RE_GAB_LINHA = /^(?:GABARITO|GAB\.?|RESPOSTA(?:\s+CORRETA)?|ALTERNATIVA\s+CORRETA)\s*[:\-–]?\s*(?:LETRA\s*|ALTERNATIVA\s*)?\(?\s*(CERTO|ERRADO|CERTA|ERRADA|[A-E])\s*\)?\s*[.;]?$/i;
+const RE_GAB_TITULO = /^(?:GABARITOS?|RESPOSTAS?)(?:\s+(?:OFICIAL|PRELIMINAR|DEFINITIVO|COMENTADO|DAS QUEST[ÕO]ES))?\s*:?$/i;
+const RE_PAR_GAB = /0*\d{1,3}\s*[-–.:)]?\s*(?:CERTO|ERRADO|ANULADA|NULA|[A-EX*])(?![A-Za-zÀ-ÿ])/gi;
+const soGabarito = (l) => {
+  const resto = l.replace(RE_PAR_GAB, '').replace(/[\s|,;.\-–/]/g, '');
+  if (resto === '' && /\d/.test(l)) return true;
+  return /^(\d{1,3}\s+){2,}\d{1,3}$/.test(l) || /^([A-EX*]\s+){2,}[A-EX*]$/i.test(l); // tabela: linha só de números ou só de letras
+};
+const letraGab = (t) => (/^CERT/i.test(t) ? 'C' : /^ERRAD/i.test(t) ? 'E' : t.toUpperCase());
+
+// tira o cabeçalho e o rodapé que se repetem em cada página (ex.: "Material X ... 12"), que caem no meio das questões
+function semCabecalhoDePagina(linhas) {
+  const paginas = [[]];
+  for (const l of linhas) {
+    if (l === '') paginas.push([]);
+    else paginas[paginas.length - 1].push(l);
+  }
+  const cheias = paginas.filter((p) => p.length);
+  if (cheias.length < 4) return linhas.filter(Boolean);
+  const chave = (l) => l.replace(/\d+/g, '#').replace(/\s+/g, ' ').trim();
+  const freq = new Map();
+  for (const p of cheias) for (const l of new Set([p[0], p[1], p[p.length - 1], p[p.length - 2]].filter(Boolean).map(chave))) freq.set(l, (freq.get(l) || 0) + 1);
+  const minimo = Math.max(3, Math.round(cheias.length * 0.4));
+  const repetida = (l) => l.length < 140 && (freq.get(chave(l)) || 0) >= minimo && !RE_GAB_LINHA.test(l) && !/^(?:\(?[A-Ea-e]\)|[A-Ea-e]\))/.test(l);
+  const out = [];
+  for (const p of cheias) p.forEach((l, i) => { if (!((i < 2 || i >= p.length - 2) && repetida(l))) out.push(l); });
+  return out;
+}
+
+export function analisarProva(linhasOriginais, formato = 'A-E') {
+  const linhas = semCabecalhoDePagina(linhasOriginais.map((l) => (l || '').trim())).filter((l) => l && !RUIDO.test(l));
+  const multipla = formato === 'A-E' || formato === 'A-D';
+  const letras = formato === 'A-D' ? ['A', 'B', 'C', 'D'] : ['A', 'B', 'C', 'D', 'E'];
+  const ultima = letras[letras.length - 1];
+  const reUltima = new RegExp(`(?:^|\\s)(?:\\(\\s*[${ultima}${ultima.toLowerCase()}]\\s*\\)|[${ultima}${ultima.toLowerCase()}]\\s*\\)|${ultima}\\s*[.\\-–]\\s)`);
+  const marcas = linhas.map((l, i) => {
+    const m = l.match(RE_INICIO);
+    if (!m) return null;
+    const forte = /^QUEST/i.test(l) || (m[2] || '').trim().length >= 8;
+    return { i, n: +m[1], resto: m[2] || '', forte };
+  });
+  const lista = marcas.filter(Boolean);
+  const rel = { marcadoresA: multipla ? linhas.filter((l) => RE_ALT_A.test(l)).length : null, maiorNumero: 0, partes: 1, faltando: [], suspeitas: [], gabaritoNoArquivo: 0 };
+  if (!lista.length) return { questoes: [], relatorio: rel };
+  rel.maiorNumero = Math.max(...lista.filter((m) => m.forte).map((m) => m.n), 0);
+
+  let esperado = lista.some((m) => m.n === 1) ? 1 : lista[0].n;
+  let parte = 1;
   let materia = '';
   let bloco = '';
-  let esperado = null;
   let atual = null;
+  let modoGab = false;
+  const brutas = [];
+  const gabTexto = {}; // parte -> texto do bloco de gabarito
+  const completa = (q) => !q || (multipla ? reUltima.test(q.linhas.join('\n')) : q.linhas.length > 0);
+  // depois da linha k, o número n aparece (como início de questão) antes do número "antes"?
+  const vemDepois = (k, n, antes) => {
+    for (let j = k + 1, vistos = 0; j < marcas.length && vistos < 60; j++) {
+      const m = marcas[j];
+      if (!m) continue;
+      vistos++;
+      if (m.n === n) return true;
+      if (m.n === antes) return false;
+    }
+    return false;
+  };
+  const abrir = (m) => {
+    if (atual) brutas.push(atual);
+    atual = { numero: m.n, parte, materia, bloco, linhas: m.resto ? [m.resto] : [], gabarito: '', comentario: [] , emComentario: false };
+    esperado = m.n + 1;
+    modoGab = false;
+  };
 
-  // número inicial: o primeiro marcador "1" que aparece; se não houver, o primeiro número encontrado
-  const candidatos = linhas.map((l) => l.match(RE_INICIO)).filter(Boolean);
-  if (!candidatos.length) return [];
-  esperado = candidatos.some((m) => +m[1] === 1) ? 1 : +candidatos[0][1];
-
-  for (const l0 of linhas) {
-    const l = l0.trim();
-    if (!l || RUIDO.test(l)) continue;
-    const m = l.match(RE_INICIO);
-    if (m && +m[1] === esperado) {
-      if (atual) questoes.push(atual);
-      atual = { numero: esperado, materia, bloco, linhas: m[2] ? [m[2]] : [] };
-      esperado++;
+  for (let i = 0; i < linhas.length; i++) {
+    const l = linhas[i];
+    const m = marcas[i];
+    // bloco de gabarito no meio ou no fim do arquivo
+    if (RE_GAB_TITULO.test(l)) {
+      modoGab = true;
+      continue;
+    }
+    if (modoGab) {
+      if (soGabarito(l)) {
+        gabTexto[parte] = (gabTexto[parte] || '') + l + '\n';
+        continue;
+      }
+      if (!(m && (m.n === esperado || m.n === 1))) continue; // texto solto dentro do gabarito
+    }
+    if (m && m.n === esperado && !(modoGab && soGabarito(l))) {
+      // lista numerada dentro do enunciado ("1. ... 2. ..."): a questão atual ainda não tem as alternativas
+      // e o mesmo número volta a aparecer mais adiante; então este não é o início da próxima questão
+      if (multipla && atual && !completa(atual) && vemDepois(i, m.n, -1)) atual.linhas.push(l);
+      else abrir(m);
+      continue;
+    }
+    // a numeração recomeçou do 1: outra lista dentro do mesmo arquivo
+    if (m && m.n === 1 && esperado > 3 && (m.forte || modoGab) && completa(atual) && vemDepois(i, 2, esperado)) {
+      parte++;
+      abrir(m);
+      continue;
+    }
+    // número pulado (faltou uma questão no arquivo ou a leitura perdeu o marcador)
+    if (m && m.n > esperado && m.n <= esperado + 5 && m.forte && completa(atual) && vemDepois(i, m.n + 1, esperado)) {
+      for (let n = esperado; n < m.n; n++) rel.faltando.push(parte > 1 ? `${n} (lista ${parte})` : String(n));
+      abrir(m);
+      continue;
+    }
+    // gabarito escrito na própria questão
+    const g = atual && l.match(RE_GAB_LINHA);
+    if (g) {
+      atual.gabarito = letraGab(g[1]);
+      continue;
+    }
+    if (atual && /^(COMENT[ÁA]RIOS?|RESOLU[ÇC][ÃA]O|JUSTIFICATIVA)\s*[:\-–]/i.test(l)) {
+      atual.emComentario = true;
+      const t = l.replace(/^[^:\-–]+[:\-–]\s*/, '');
+      if (t) atual.comentario.push(t);
       continue;
     }
     // cabeçalho de disciplina (linha toda em maiúsculas)
-    if (MAIUSC.test(l) && temLetra(l) && l.length >= 4 && l.length <= 80 && !/^\(?[A-E]\)/.test(l) && !/^[A-E][.)\-–]\s/.test(l)) {
+    if (MAIUSC.test(l) && temLetra(l) && l.length >= 4 && l.length <= 80 && !/[\d/]/.test(l) && !/^\(?[A-E]\)/.test(l) && !/^[A-E][.)\-–]\s/.test(l) && completa(atual)) {
       if (/^CONHECIMENTOS?\b/i.test(l)) bloco = titulo(l);
       else materia = titulo(l.replace(/[:.]$/, ''));
       continue;
     }
-    if (atual) atual.linhas.push(l);
+    if (atual) (atual.emComentario ? atual.comentario : atual.linhas).push(l);
   }
-  if (atual) questoes.push(atual);
+  if (atual) brutas.push(atual);
+  rel.partes = parte;
 
-  const letras = formato === 'A-D' ? ['A', 'B', 'C', 'D'] : ['A', 'B', 'C', 'D', 'E'];
-  return questoes.map((q) => {
+  // gabarito encontrado dentro do arquivo (bloco "GABARITO"), por lista
+  const mapas = {};
+  for (const [pt, txt] of Object.entries(gabTexto)) mapas[pt] = lerGabarito(txt, formato);
+
+  const questoes = brutas.map((q, k) => {
     const corpo = q.linhas.join('\n');
-    const base = { numero: q.numero, materia: q.materia, bloco: q.bloco, formato, gabarito: '', anulada: false, espelho: '' };
-    if (formato === 'CE' || formato === 'discursiva') return { ...base, enunciado: limpar(corpo), alternativas: null };
+    let gabarito = q.gabarito;
+    let anulada = false;
+    const doBloco = mapas[q.parte]?.[q.numero];
+    if (!gabarito && doBloco) {
+      if (doBloco === 'ANULADA') anulada = true;
+      else gabarito = doBloco;
+    }
+    if (formato === 'CE' && gabarito && !'CE'.includes(gabarito)) gabarito = '';
+    if (gabarito || anulada) rel.gabaritoNoArquivo++;
+    const base = { seq: k + 1, numero: q.numero, parte: q.parte, materia: q.materia, bloco: q.bloco, formato, gabarito, anulada, espelho: '', comentario: desquebrar(q.comentario.join('\n')) };
+    if (formato === 'CE' || formato === 'discursiva') return { ...base, enunciado: desquebrar(corpo), alternativas: null };
     const alt = separarAlternativas(corpo, letras);
-    return { ...base, enunciado: limpar(alt ? alt.enunciado : corpo), alternativas: alt ? alt.alternativas : Object.fromEntries(letras.map((L) => [L, ''])) };
+    const nA = q.linhas.filter((x) => RE_ALT_A.test(x)).length;
+    if (nA > 1 || corpo.length > 4000) rel.suspeitas.push(k + 1);
+    return { ...base, enunciado: desquebrar(alt ? alt.enunciado : corpo), alternativas: alt ? Object.fromEntries(Object.entries(alt.alternativas).map(([k, v]) => [k, emUmaLinha(v)])) : Object.fromEntries(letras.map((L) => [L, ''])) };
   });
+  return { questoes, relatorio: rel };
+}
+
+export function lerProva(linhas, formato = 'A-E') {
+  return analisarProva(linhas, formato).questoes;
+}
+
+// gabarito de arquivo com várias listas (a numeração recomeça): um mapa por lista, na ordem
+export function lerGabaritoPartes(texto, formato = 'A-E') {
+  const valido = formato === 'CE' ? 'CE' : formato === 'A-D' ? 'ABCD' : 'ABCDE';
+  const re = new RegExp(`(?:^|[^\\d])0*(\\d{1,3})\\s*[-–.:)]?\\s*(CERTO|ERRADO|[${valido}]|\\*|X|ANULADA|NULA|ANULAD[AO])(?![A-Z])`, 'g');
+  const partes = [{}];
+  let m;
+  const norm = texto.replace(/\r/g, '').toUpperCase();
+  while ((m = re.exec(norm))) {
+    const n = +m[1];
+    if (n in partes[partes.length - 1]) partes.push({});
+    const v = letraGab(m[2]);
+    partes[partes.length - 1][n] = /^[A-E]$/.test(v) ? v : 'ANULADA';
+  }
+  return partes;
 }
 
 function separarAlternativas(corpo, letras) {
+  // as alternativas ficam no fim da questão, cada uma no começo de uma linha: procura da última para a primeira
+  const achadas = [];
+  let ate = corpo.length;
+  for (const L of [...letras].reverse()) {
+    const l = L.toLowerCase();
+    const re = new RegExp(`(?:^|\\n)[ \\t]*(?:\\(\\s*[${L}${l}]\\s*\\)\\s*|[${L}${l}]\\s*\\)\\s+|${L}\\s*[.\\-–]\\s+)(?=[^\\s.,;:)])`, 'g');
+    let ult = null;
+    let m;
+    while ((m = re.exec(corpo)) && m.index < ate) ult = m;
+    if (!ult) break;
+    achadas.unshift({ L, ini: ult.index, fim: ult.index + ult[0].length });
+    ate = ult.index;
+  }
+  if (achadas.length === letras.length) {
+    const alternativas = {};
+    achadas.forEach((p, i) => {
+      alternativas[p.L] = limpar(corpo.slice(p.fim, i + 1 < achadas.length ? achadas[i + 1].ini : undefined));
+    });
+    return { enunciado: corpo.slice(0, achadas[0].ini), alternativas };
+  }
   const pos = [];
   let desde = 0;
   for (const L of letras) {
@@ -575,6 +733,14 @@ function separarAlternativas(corpo, letras) {
   return { enunciado: corpo.slice(0, pos[0].ini), alternativas };
 }
 
+// junta as linhas que o PDF quebrou no meio da frase; mantém a quebra antes de itens (I., II –, a), •) e depois de ponto final
+const desquebrar = (s) =>
+  limpar(s).replace(/([^\n])\n(?!\n)([^\n])/g, (t, a, b, pos, todo) => {
+    const resto = todo.slice(pos + 2, pos + 12);
+    if (/^(?:[IVXLC]+\s*[.)\-–]|[a-e]\)|\d{1,2}\s*[.)\-–]|[•●▪\-–])\s/.test(resto)) return t;
+    return /[.:;?!]/.test(a) && /\p{Lu}/u.test(b) ? t : `${a} ${b}`;
+  });
+const emUmaLinha = (s) => limpar(s).replace(/\s*\n\s*/g, ' ');
 const limpar = (s) =>
   (s || '')
     .replace(/-\n(?=[a-zà-ý])/g, '') // palavra hifenizada na quebra de linha
@@ -588,11 +754,12 @@ export function lerGabarito(texto, formato = 'A-E') {
   const valido = formato === 'CE' ? 'CE' : formato === 'A-D' ? 'ABCD' : 'ABCDE';
   const res = {};
   const norm = texto.replace(/\r/g, '').toUpperCase();
-  const re = new RegExp(`(?:^|[^\\d])0*(\\d{1,3})\\s*[-–.:)]?\\s*([${valido}]|\\*|X|ANULADA|NULA|ANULAD[AO])(?![A-Z])`, 'g');
+  const re = new RegExp(`(?:^|[^\\d])0*(\\d{1,3})\\s*[-–.:)]?\\s*(CERTO|ERRADO|[${valido}]|\\*|X|ANULADA|NULA|ANULAD[AO])(?![A-Z])`, 'g');
   let m;
   while ((m = re.exec(norm))) {
     const n = +m[1];
-    if (!(n in res)) res[n] = /^[A-E]$/.test(m[2]) ? m[2] : 'ANULADA';
+    const v = /^CERT/.test(m[2]) ? 'C' : /^ERRAD/.test(m[2]) ? 'E' : m[2];
+    if (!(n in res)) res[n] = /^[A-E]$/.test(v) ? v : 'ANULADA';
   }
   // formato de tabela: linha de números seguida de linha de letras
   const linhas = norm.split('\n').map((l) => l.trim()).filter(Boolean);
@@ -644,4 +811,54 @@ export function lerVerticalizado(linhas) {
     if (atual && ultimo && atual.topicos.length) atual.topicos[atual.topicos.length - 1] += ' ' + l;
   }
   return discs.filter((d) => d.topicos.length);
+}
+
+// ---------------- matéria do arquivo de questões ----------------
+// Procura o tema no título do arquivo ("200 questões - Lei Estadual nº 2.250/2009", "Disciplina: X")
+// e liga com uma disciplina do concurso. Devolve { materia, assunto, motivo } (strings vazias se não achar).
+export function identificarMateria(linhas, disciplinas = [], nomeArquivo = '') {
+  const n = (t) => semAcento(t || '').toLowerCase();
+  const topo = linhas.filter(Boolean).slice(0, 25);
+  let tema = '';
+  for (const l of topo) {
+    const m = l.match(/^(?:disciplina|mat[ée]ria|tema|assunto|conte[úu]do)\s*:\s*(.{3,120})$/i) || l.match(/\bquest[õo]es\s*(?:comentadas\s*)?(?:[-–:]|de|sobre)\s+(.{3,120})$/i);
+    if (m && !/^\d+$/.test(m[1].trim()) && !/gabarito|comentad|bloco|lista\s*\d/i.test(m[1])) {
+      tema = m[1].trim().replace(/[.;]$/, '');
+      break;
+    }
+  }
+  const nomes = disciplinas.map((d) => (typeof d === 'string' ? { nome: d, topicos: [] } : d));
+  const texto = n(linhas.slice(0, 1500).join(' '));
+  const alvo = n(`${tema} ${nomeArquivo.replace(/[-_.]+/g, ' ')}`);
+  // 1) o nome da disciplina aparece no título ou no nome do arquivo
+  let d = nomes.find((x) => n(x.nome).length > 4 && alvo.includes(n(x.nome).replace(/^nocoes de /, '')));
+  let motivo = d ? 'o nome da disciplina aparece no título' : '';
+  // 2) o tema (ex.: o número da lei) está no conteúdo programático de uma disciplina
+  const numLei = tema.match(/\d{1,2}\.?\d{3}(?:\/\d{2,4})?/)?.[0];
+  if (!d && numLei) {
+    d = nomes.find((x) => (x.topicos || []).some((t) => n(t).includes(n(numLei)) || n(t).includes(n(numLei).replace('.', ''))));
+    if (d) motivo = `a ${tema} está no conteúdo programático dessa disciplina`;
+  }
+  // 3) material sobre uma lei/estatuto do órgão: disciplina de legislação institucional/específica
+  if (!d && /\blei\b|estatuto|regimento|decreto|lei org[âa]nica|pccr/i.test(tema)) {
+    const estadual = /estadual|org[âa]nica|estatuto|regimento|pccr/i.test(tema);
+    d = nomes.find((x) => (estadual ? /legisla[çc][ãa]o (institucional|estadual|espec[íi]fica|aplicada)|lei org[âa]nica/i : /legisla[çc][ãa]o (especial|penal|extravagante)/i).test(x.nome)) || nomes.find((x) => /legisla[çc][ãa]o/i.test(x.nome));
+    if (d) motivo = 'material sobre uma lei: disciplina de legislação do concurso';
+  }
+  // 4) disciplina mais citada no texto
+  if (!d) {
+    let max = 0;
+    for (const x of nomes) {
+      const chave = n(x.nome).replace(/\(.*?\)/g, '').replace(/^nocoes de /, '').trim();
+      if (chave.length < 5) continue;
+      const vezes = texto.split(chave).length - 1;
+      if (vezes > max) {
+        max = vezes;
+        d = x;
+      }
+    }
+    if (max < 3) d = null;
+    else motivo = 'disciplina mais citada no texto';
+  }
+  return { materia: d ? d.nome : tema, assunto: d && tema && n(d.nome) !== n(tema) ? tema : '', motivo: d ? motivo : tema ? 'título do arquivo' : '' };
 }

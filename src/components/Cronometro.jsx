@@ -60,11 +60,14 @@ function bipe() {
   }
 }
 
-export default function Cronometro({ materias = [], hojeSeg = 0, aoRegistrar }) {
+export default function Cronometro({ materias = [], hojeSeg = 0, registrosHoje = {}, sessoesHoje = [], aoRegistrar, aoSalvarSessao }) {
   const [e, setE] = useState(ler);
   const [, tique] = useState(0);
   const [pip, setPip] = useState(null);
   const [cheia, setCheia] = useState(false);
+  const [aviso, setAviso] = useState(null); // { ok, texto }
+  const [outra, setOutra] = useState(false); // digitando uma matéria que não está na lista
+  const [verRegistros, setVerRegistros] = useState(false);
   const caixa = useRef(null);
   const arrasto = useRef(null);
   const atual = useRef(e);
@@ -85,8 +88,9 @@ export default function Cronometro({ materias = [], hojeSeg = 0, aoRegistrar }) 
   const registrarPendente = useCallback(
     (v) => {
       if (v.modo === 'pomodoro' && v.etapa !== 'foco') return 0;
+      if (!v.disciplina) return 0; // sem matéria, o tempo fica guardado até a pessoa escolher e salvar
       const ms = decorrido(v) - v.registrado;
-      if (ms >= 1000) aoRegistrar?.(v.disciplina || 'Sem matéria definida', Math.round(ms / 1000));
+      if (ms >= 1000) aoRegistrar?.(v.disciplina, Math.round(ms / 1000));
       return Math.max(0, ms);
     },
     [aoRegistrar],
@@ -152,10 +156,32 @@ export default function Cronometro({ materias = [], hojeSeg = 0, aoRegistrar }) 
     mudar({ rodando: false, acumulado: ac, registrado: v.registrado + ms });
   };
   const zerar = () => {
-    registrarPendente(atual.current);
+    const v = atual.current;
+    const pend = (decorrido(v) - v.registrado) / 1000;
+    // tempo ainda não salvo e sem matéria: pede confirmação (segundo clique) antes de jogar fora
+    if (!v.disciplina && pend >= 60 && aviso?.tipo !== 'descartar') {
+      return setAviso({ ok: false, tipo: 'descartar', texto: `Há ${fmtCurto(pend)} sem salvar. Escolha a matéria e clique em “Salvar registro”, ou clique em Zerar de novo para descartar.` });
+    }
+    registrarPendente(v);
+    setAviso(null);
     mudar({ rodando: false, acumulado: 0, registrado: 0, desde: 0, etapa: 'foco' });
   };
+  // salva o tempo contado na matéria escolhida e zera o mostrador
+  const salvarRegistro = () => {
+    const v = atual.current;
+    if (!v.disciplina) return setAviso({ ok: false, texto: 'Escolha a matéria para salvar este tempo.' });
+    const emFoco = v.modo !== 'pomodoro' || v.etapa === 'foco';
+    const seg = emFoco ? Math.round(decorrido(v) / 1000) : 0;
+    if (seg < 1 && !v.registrado) return setAviso({ ok: false, texto: 'Ainda não há tempo contado para salvar.' });
+    registrarPendente(v);
+    if (seg >= 1) aoSalvarSessao?.({ materia: v.disciplina, tema: v.tema || '', seg, hora: new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) });
+    mudar({ rodando: false, acumulado: 0, registrado: 0, desde: 0, etapa: 'foco' });
+    setAviso({ ok: true, texto: `✓ Registro salvo: ${seg >= 60 ? fmtCurto(seg) : `${seg} s`} em ${v.disciplina}${v.tema ? ` (${v.tema})` : ''}.` });
+    setVerRegistros(true);
+  };
   const trocarModo = (modo) => {
+    const v = atual.current;
+    if (!v.disciplina && (decorrido(v) - v.registrado) / 1000 >= 60) return setAviso({ ok: false, texto: 'Há tempo sem salvar. Escolha a matéria e clique em “Salvar registro” antes de trocar o tipo de contagem.' });
     registrarPendente(atual.current);
     mudar({ modo, rodando: false, acumulado: 0, registrado: 0, etapa: 'foco', ciclos: 0 });
   };
@@ -266,7 +292,8 @@ export default function Cronometro({ materias = [], hojeSeg = 0, aoRegistrar }) 
             ) : (
               <button className="btn peq pri" onClick={iniciar}>▶ {ms > 0 ? 'Continuar' : 'Iniciar'}</button>
             )}
-            <button className="btn peq" onClick={zerar} disabled={!ms && !e.rodando} title="Salva o tempo e zera">⟲ Zerar</button>
+            <button className="btn peq" onClick={salvarRegistro} disabled={!ms && !e.rodando} title="Salva o tempo na matéria escolhida e zera o cronômetro">💾 Salvar registro</button>
+            <button className="btn peq" onClick={zerar} disabled={!ms && !e.rodando} title="Zera o cronômetro">⟲ Zerar</button>
             {!pip && temJanela && <button className="btn peq" onClick={abrirJanela} title="Abre o cronômetro numa janela que fica sempre visível, até fora do navegador">⧉ Janela</button>}
             {!pip && <button className="btn peq" onClick={telaCheia} aria-label={cheia ? 'Sair da tela cheia' : 'Tela cheia'}>{cheia ? '🗗' : '⛶'}</button>}
           </div>
@@ -284,14 +311,38 @@ export default function Cronometro({ materias = [], hojeSeg = 0, aoRegistrar }) 
             </div>
           )}
           <label className="crono-linha peq">
-            <span>Matéria</span>
-            <select value={e.disciplina} onChange={(ev) => cronometrar(ev.target.value)}>
-              <option value="">— escolha —</option>
-              {opcoes.map((m) => <option key={m} value={m}>{m}</option>)}
-            </select>
+            <span>Matéria{!e.disciplina && ms > 0 ? ' *' : ''}</span>
+            {outra ? (
+              <input type="text" autoFocus placeholder="Digite a matéria e tecle Enter" defaultValue="" onKeyDown={(ev) => { if (ev.key === 'Enter' && ev.target.value.trim()) { cronometrar(ev.target.value.trim(), e.tema); setOutra(false); setAviso(null); } if (ev.key === 'Escape') setOutra(false); }} onBlur={(ev) => { if (ev.target.value.trim()) cronometrar(ev.target.value.trim(), e.tema); setOutra(false); }} style={{ flex: 1, minWidth: 0 }} />
+            ) : (
+              <select value={e.disciplina} onChange={(ev) => { if (ev.target.value === '__outra') return setOutra(true); cronometrar(ev.target.value, e.tema); setAviso(null); }} style={!e.disciplina && ms > 0 ? { borderColor: 'var(--erro)' } : undefined}>
+                <option value="">— escolha —</option>
+                {opcoes.map((m) => <option key={m} value={m}>{m}</option>)}
+                <option value="__outra">✎ Outra matéria…</option>
+              </select>
+            )}
           </label>
-          {e.tema && <div className="peq sub crono-tema" title={e.tema}>{e.tema}</div>}
-          <div className="peq sub">Estudado hoje: <b>{fmtCurto(totalHoje)}</b></div>
+          <label className="crono-linha peq">
+            <span>Assunto</span>
+            <input type="text" value={e.tema || ''} onChange={(ev) => mudar({ tema: ev.target.value })} placeholder="O que você estudou (opcional)" style={{ flex: 1, minWidth: 0 }} />
+          </label>
+          {!e.disciplina && ms > 0 && !aviso && <div className="peq desce">* Escolha a matéria para poder salvar este tempo.</div>}
+          {aviso && <div className={`peq ${aviso.ok ? 'sobe' : 'desce'}`} role="status">{aviso.ok ? '' : '✗ '}{aviso.texto}</div>}
+          <div className="peq sub">
+            Estudado hoje: <b>{fmtCurto(totalHoje)}</b>{' '}
+            {(Object.keys(registrosHoje).length > 0 || sessoesHoje.length > 0) && <button className="praticar peq" aria-expanded={verRegistros} onClick={() => setVerRegistros(!verRegistros)}>{verRegistros ? 'esconder registros' : 'ver registros'}</button>}
+          </div>
+          {verRegistros && (
+            <ul className="crono-registros peq">
+              {Object.entries(registrosHoje).sort((a, b) => b[1] - a[1]).map(([m, seg]) => (
+                <li key={m}><span>{m}</span><b>{seg >= 60 ? fmtCurto(seg) : `${seg} s`}</b></li>
+              ))}
+              {sessoesHoje.length > 0 && <li className="sub"><span>Registros salvos hoje:</span></li>}
+              {sessoesHoje.map((r, i) => (
+                <li key={i}><span>{r.hora} · {r.materia}{r.tema ? ` – ${r.tema}` : ''}</span><span>{r.seg >= 60 ? fmtCurto(r.seg) : `${r.seg} s`}</span></li>
+              ))}
+            </ul>
+          )}
         </>
       ) : (
         <div className="crono-botoes">
