@@ -4,6 +4,7 @@ import { diasDo, POR_UID, QUESTOES } from '../lib/dados.js';
 import CartaoQuestao, { codigoDa, MARCADORES } from './CartaoQuestao.jsx';
 import { fmtPct, resumo } from '../lib/stats.js';
 import ImportarProva from './ImportarProva.jsx';
+import { excluirQuestoes } from '../lib/remoto.js';
 import { ProvasDiarias } from './Inicio.jsx';
 
 const norm = (t) => (t || '').toLowerCase().normalize('NFKD').replace(/[̀-ͯ]/g, '');
@@ -52,6 +53,7 @@ export default function Questoes({ ctx, aba: abaPedida, filtro, aoTrocarAba, aoI
           </div>
         ))}
       {aba === 'praticar' && <Praticar key={JSON.stringify(filtro || {})} ctx={ctx} filtroInicial={filtro} aoImportar={() => aoTrocarAba('importar')} />}
+      {aba === 'importar' && <MinhasImportacoes ctx={ctx} aoExcluido={aoImportado} />}
       {aba === 'importar' && (
         <ImportarProva
           concursos={todosConcursos()}
@@ -64,6 +66,70 @@ export default function Questoes({ ctx, aba: abaPedida, filtro, aoTrocarAba, aoI
         />
       )}
     </div>
+  );
+}
+
+// Lotes de questões que a pessoa importou (por dia e origem), com a opção de excluir um lote que entrou errado
+function MinhasImportacoes({ ctx, aoExcluido }) {
+  const { usuario, bancoVersao } = ctx;
+  const [pedir, setPedir] = useState(null);
+  const [status, setStatus] = useState(null);
+  const lotes = useMemo(() => {
+    const m = new Map();
+    for (const q of QUESTOES) {
+      if (!q.remoto || !(usuario.admin || q.criadoPor === usuario.id || q.criadoPor === 'local')) continue;
+      const dia = (q.criadoEm || '').slice(0, 10);
+      const k = [dia, q.concursoRef || getConcurso(q.concursos?.[0])?.sigla || '', q.materia, q.assunto].join('|');
+      if (!m.has(k)) m.set(k, { k, dia, ref: q.concursoRef || getConcurso(q.concursos?.[0])?.sigla || '', materia: q.materia, assunto: q.assunto, uids: [], semGab: 0 });
+      const l = m.get(k);
+      l.uids.push(q.uid);
+      if (!q.anulada && q.formato !== 'discursiva' && !q.gabarito) l.semGab++;
+    }
+    return [...m.values()].sort((a, b) => b.dia.localeCompare(a.dia));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [bancoVersao, usuario.id]);
+  if (!lotes.length) return null;
+  const total = lotes.reduce((t, l) => t + l.uids.length, 0);
+  async function excluir(l) {
+    setStatus('Excluindo…');
+    try {
+      const n = await excluirQuestoes(l.uids);
+      setPedir(null);
+      setStatus(null);
+      aoExcluido({ novas: 0, repetidas: 0, excluidas: n });
+    } catch (e) {
+      setStatus('✗ ' + e.message);
+    }
+  }
+  return (
+    <details className="card">
+      <summary><b>🗂️ Questões que você já importou: {total}</b> <span className="sub peq">(em {lotes.length} {lotes.length === 1 ? 'lote' : 'lotes'} – abra para ver ou excluir um lote que entrou errado)</span></summary>
+      {status && <p className="aviso peq" role="status">{status}</p>}
+      <table style={{ marginTop: 8 }}>
+        <thead><tr><th>Importado em</th><th>Origem</th><th>Disciplina · assunto</th><th>Questões</th><th></th></tr></thead>
+        <tbody>
+          {lotes.map((l) => (
+            <tr key={l.k}>
+              <td>{l.dia ? l.dia.split('-').reverse().join('/') : '—'}</td>
+              <td>{l.ref || '—'}</td>
+              <td>{l.materia}{l.assunto && l.assunto !== 'Geral' ? ` · ${l.assunto}` : ''}</td>
+              <td><b>{l.uids.length}</b>{l.semGab ? <span className="desce"> · ✗ {l.semGab} sem gabarito</span> : ''}</td>
+              <td>
+                {pedir === l.k ? (
+                  <span className="linha" style={{ gap: 4 }}>
+                    <button className="btn peq perigo" onClick={() => excluir(l)}>Sim, excluir {l.uids.length}</button>
+                    <button className="btn peq" onClick={() => setPedir(null)}>Cancelar</button>
+                  </span>
+                ) : (
+                  <button className="btn peq" onClick={() => setPedir(l.k)} aria-label={`Excluir o lote de ${l.uids.length} questões de ${l.materia}`}>🗑️ Excluir lote</button>
+                )}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      <p className="peq sub" style={{ marginBottom: 0 }}>Excluir um lote tira essas questões do banco para todos. As suas respostas a outras questões não mudam.</p>
+    </details>
   );
 }
 

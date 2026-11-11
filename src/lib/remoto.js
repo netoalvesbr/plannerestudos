@@ -51,6 +51,7 @@ const concursoDoBanco = (r) => ({
   modelo: r.prova?.modelo || null,
   repescagem: r.prova?.repescagem || null,
   criadoPor: r.criado_por,
+  criadoEm: r.criado_em || null,
   remoto: true,
 });
 
@@ -203,6 +204,24 @@ export async function salvarQuestoes(lista) {
     if (error) throw new Error(error.message);
   }
   return { novas: novas.length, repetidas: linhas.length - novas.length };
+}
+
+// exclui várias questões de uma vez (um lote importado). Só apaga as que a pessoa criou (ou todas, se for administrador).
+export async function excluirQuestoes(uids) {
+  if (!supabase) {
+    const b = lerLocal();
+    const fora = new Set(uids);
+    b.questoes = b.questoes.filter((q) => !fora.has(q.uid));
+    gravarLocal(b);
+    return uids.length;
+  }
+  let n = 0;
+  for (let i = 0; i < uids.length; i += 100) {
+    const { data, error } = await supabase.from('questoes').delete().in('uid', uids.slice(i, i + 100)).select('uid');
+    if (error) throw new Error(error.message);
+    n += data?.length || 0;
+  }
+  return n;
 }
 
 export async function excluirQuestao(uid) {

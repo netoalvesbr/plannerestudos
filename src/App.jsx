@@ -247,7 +247,7 @@ export default function App() {
       aoTrocarAba={(a) => setTela({ nome: 'questoes', aba: a })}
       aoImportado={async (r) => {
         await recarregarBanco();
-        setTela({ nome: 'questoes', aba: 'praticar', msg: `✓ Importação concluída: ${r.novas} questões novas no banco${r.repetidas ? ` (${r.repetidas} já existiam e não foram duplicadas)` : ''}. Confira o total no contador abaixo.` });
+        setTela(r.excluidas != null ? { nome: 'questoes', aba: 'importar', msg: `✓ ${r.excluidas} questões excluídas do banco.` } : { nome: 'questoes', aba: 'praticar', msg: `✓ Importação concluída: ${r.novas} questões novas no banco${r.repetidas ? ` (${r.repetidas} já existiam e não foram duplicadas)` : ''}. Confira o total no contador abaixo.` });
       }}
     />
   );
