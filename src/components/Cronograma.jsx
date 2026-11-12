@@ -1,7 +1,7 @@
 import { getConcurso } from '../data/concursos.js';
 import { useMemo, useState } from 'react';
 import { disciplinasDo } from '../lib/dados.js';
-import { chaveRevisao, chaveSessao, configPadrao, DIAS_SEMANA, gerarCronograma, gerarIcs, gerarRevisoes, INTERVALOS_REVISAO, materiasAtivas, NIVEIS, pesoDa } from '../lib/cronograma.js';
+import { chaveRevisao, chaveSessao, configPadrao, DIAS_SEMANA, gerarCronograma, gerarIcs, gerarRevisoes, INTERVALOS_REVISAO, materiasAtivas, NIVEIS, pesoDa, somarDias } from '../lib/cronograma.js';
 import { fmtData } from '../lib/stats.js';
 import { verticalizadoDe } from './EditalVerticalizado.jsx';
 import { ProximaData } from './Calendario.jsx';
@@ -59,6 +59,32 @@ export function dataDoItem(it) {
   const c = getConcurso(it.cid);
   return c?.fases?.find((f) => f.id === it.fase)?.data || c?.dataProva || '';
 }
+// chave estável de um item do combinado, pra guardar a ordem de prioridade escolhida pelo usuário
+export const chaveItem = (it) => `${it.cid}|${it.fase || ''}|${it.area || ''}`;
+export function itensNaOrdem(itens, ordem) {
+  if (!ordem?.length || !itens) return itens;
+  const resto = [...itens];
+  const out = [];
+  for (const k of ordem) {
+    const i = resto.findIndex((it) => chaveItem(it) === k);
+    if (i >= 0) out.push(resto.splice(i, 1)[0]);
+  }
+  return [...out, ...resto];
+}
+// modo sequencial do combinado: estuda a 1ª prova (pela prioridade) até "folgaDias" antes da sua data,
+// depois passa pra próxima, e assim por diante
+export function segmentosSequenciais(itensOrd, folgaDias, inicioIso) {
+  let cursor = inicioIso;
+  const out = [];
+  for (const it of itensOrd) {
+    const prova = dataDoItem(it);
+    const limite = prova ? somarDias(prova, -Math.max(0, folgaDias || 0)) : '';
+    const fim = limite && limite >= cursor ? limite : cursor;
+    out.push({ ...it, prova, inicio: cursor, fim });
+    cursor = somarDias(fim, 1);
+  }
+  return out;
+}
 
 export default function Cronograma({ ctx, voltar, combinado = null }) {
   const { cargo, fase, area, prefs, setPrefs, abrirAvulsas } = ctx;
@@ -90,11 +116,45 @@ export default function Cronograma({ ctx, voltar, combinado = null }) {
   const discsMix = useMemo(() => (combinado ? mesclarConcursos(combinado.itens) : null), [combinado?.chave]);
   const discs = discsMix || (vert ? vert.disciplinas : disciplinasDo(concurso.id, temCargos ? (cargosSel.length ? cargosSel : 'ambos') : cargo, fase, area));
   const discursiva = (faseObj?.formato || concurso.formato) === 'discursiva';
+
+  // combinado sequencial: uma prova inteira antes da próxima, pela ordem de prioridade escolhida
+  const itensPriorizados = useMemo(
+    () => (combinado ? itensNaOrdem(combinado.itens, usar.ordemItens) : null),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [combinado?.chave, (usar.ordemItens || []).join()],
+  );
+  const sequencial = !!(combinado && usar.sequencial);
+  const segmentos = useMemo(
+    () => (sequencial ? segmentosSequenciais(itensPriorizados, usar.folgaDias, usar.inicio) : null),
+    [sequencial, itensPriorizados, usar.folgaDias, usar.inicio],
+  );
+
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  const sessoes = useMemo(() => gerarCronograma(usar, discs, { discursiva }), [usar, discs.length, discursiva, concurso.id, fase, area, cargosSel.join()]);
-  const revisoes = useMemo(() => gerarRevisoes(sessoes, usar), [sessoes, usar]);
+  const sessoes = useMemo(() => {
+    if (segmentos) {
+      return segmentos.flatMap((seg) => {
+        const c = getConcurso(seg.cid);
+        const f = c?.fases?.find((x) => x.id === seg.fase);
+        const discSeg = disciplinasDo(seg.cid, seg.cargo || 'ambos', seg.fase || '', seg.area || '');
+        const cfgSeg = { ...usar, inicio: seg.inicio, fim: seg.fim };
+        const discursivaSeg = (f?.formato || c?.formato) === 'discursiva';
+        return gerarCronograma(cfgSeg, discSeg, { discursiva: discursivaSeg }).map((s) => ({ ...s, origemCid: seg.cid, origemSigla: c?.sigla }));
+      });
+    }
+    return gerarCronograma(usar, discs, { discursiva });
+  }, [usar, discs.length, discursiva, concurso.id, fase, area, cargosSel.join(), segmentos]);
+  const fimParaRevisoes = segmentos ? segmentos.at(-1)?.fim || usar.fim : usar.fim;
+  const revisoes = useMemo(() => gerarRevisoes(sessoes, { ...usar, fim: fimParaRevisoes }), [sessoes, usar, fimParaRevisoes]);
   const feitos = salvo?.feitos || {};
   const hoje = new Date().toLocaleDateString('sv-SE');
+
+  const reordenarItem = (i, delta) => {
+    const j = i + delta;
+    if (!itensPriorizados || j < 0 || j >= itensPriorizados.length) return;
+    const chaves = itensPriorizados.map(chaveItem);
+    [chaves[i], chaves[j]] = [chaves[j], chaves[i]];
+    set('ordemItens', chaves);
+  };
 
   const salvar = (novo) => setPrefs({ cronogramas: { ...(prefs.cronogramas || {}), [chave]: { ...novo, ...(combinado ? { mix: combinado.itens, nome: combinado.nome } : {}) } } });
   const marcar = (k) => {
@@ -123,7 +183,7 @@ export default function Cronograma({ ctx, voltar, combinado = null }) {
     setCfg({ ...usar, inicio: hoje, pular: [...pular] });
   }
 
-  const passos = PASSOS.filter((p) => p !== 'Cargos' || temCargos);
+  const passos = ['Modo', ...(combinado ? ['Prioridade'] : []), ...PASSOS.slice(1).filter((p) => p !== 'Cargos' || temCargos)];
   const nomePasso = passos[passo];
   if (editando) {
     const mat = (nome) => cfg.materias[nome] || {};
@@ -175,9 +235,62 @@ export default function Cronograma({ ctx, voltar, combinado = null }) {
             </div>
             <div className="filtros" style={{ marginTop: 12 }}>
               <label className="campo">Começar em<input type="date" style={campo} value={cfg.inicio} onChange={(e) => set('inicio', e.target.value)} /></label>
-              <label className="campo">Até (véspera da prova)<input type="date" style={campo} value={cfg.fim} onChange={(e) => set('fim', e.target.value)} /></label>
+              {!sequencial && (
+                <label className="campo">Até (véspera da prova)<input type="date" style={campo} value={cfg.fim} onChange={(e) => set('fim', e.target.value)} /></label>
+              )}
             </div>
-            {!dataProva && <p className="sub peq">A data da prova ainda não está cadastrada; escolha a data final acima.</p>}
+            {!dataProva && !sequencial && <p className="sub peq">A data da prova ainda não está cadastrada; escolha a data final acima.</p>}
+            {sequencial && <p className="sub peq">A data final de cada prova é calculada no passo "Prioridade", a partir da ordem escolhida.</p>}
+          </section>
+        )}
+
+        {nomePasso === 'Prioridade' && (
+          <section className="card">
+            <h2>Como combinar as provas?</h2>
+            <div className="opcoes-modo">
+              {[
+                [false, '🔀 Misturado', 'As matérias de todas as provas ficam juntas, intercaladas, do início ao fim do cronograma.'],
+                [true, '➡️ Sequencial (uma prova por vez)', 'Estuda uma prova inteira primeiro (pela ordem de prioridade abaixo) e só passa pra próxima depois.'],
+              ].map(([v, t, d]) => (
+                <label key={String(v)} className={`opcao${!!cfg.sequencial === v ? ' sel' : ''}`}>
+                  <input type="radio" name="sequencial" className="oculto" checked={!!cfg.sequencial === v} onChange={() => set('sequencial', v)} />
+                  <b>{!!cfg.sequencial === v ? '✓ ' : ''}{t}</b>
+                  <span className="peq sub">{d}</span>
+                </label>
+              ))}
+            </div>
+            {cfg.sequencial && (
+              <>
+                <p className="sub peq" style={{ marginTop: 12 }}>
+                  Defina qual prova é mais importante pra você: a primeira da lista é estudada até terminar (deixando a folga de dias abaixo antes dela), depois o cronograma passa pra próxima.
+                </p>
+                <ul className="lista-materias">
+                  {itensPriorizados.map((it, i) => {
+                    const c = getConcurso(it.cid);
+                    const seg = segmentos?.[i];
+                    return (
+                      <li key={chaveItem(it)} className="linha" style={{ alignItems: 'center' }}>
+                        <span style={{ flex: 1 }}>
+                          <b>{i + 1}º: {c?.sigla}</b>
+                          {seg && (
+                            <span className="peq sub" style={{ display: 'block' }}>
+                              {seg.prova ? `Prova em ${fmtData(seg.prova)} · estuda ` : 'Sem data de prova cadastrada · estuda '}
+                              de {fmtData(seg.inicio)} a {fmtData(seg.fim)}
+                            </span>
+                          )}
+                        </span>
+                        <button className="btn peq" aria-label={`Subir prioridade de ${c?.sigla}`} disabled={i === 0} onClick={() => reordenarItem(i, -1)}>↑</button>
+                        <button className="btn peq" aria-label={`Baixar prioridade de ${c?.sigla}`} disabled={i === itensPriorizados.length - 1} onClick={() => reordenarItem(i, 1)}>↓</button>
+                      </li>
+                    );
+                  })}
+                </ul>
+                <label className="campo" style={{ maxWidth: 320, marginTop: 8 }}>
+                  Parar de estudar cada prova quantos dias antes dela
+                  <input type="number" min="0" max="15" style={campo} value={cfg.folgaDias ?? 2} onChange={(e) => set('folgaDias', Math.max(0, +e.target.value || 0))} />
+                </label>
+              </>
+            )}
           </section>
         )}
 
@@ -338,6 +451,21 @@ export default function Cronograma({ ctx, voltar, combinado = null }) {
               <li>Revisões: {cfg.revisoes.length ? cfg.revisoes.map((i) => `${i} ${i === 1 ? 'dia' : 'dias'}`).join(', ') : 'não incluídas'}{cfg.diasRevisao ? ` · ${cfg.diasRevisao} dias finais de revisão geral` : ''}</li>
               <li>No total: <b>{sessoes.length} blocos</b>, <b>{horas} horas</b>{sessoes.length > 0 && <> · de {fmtData(sessoes[0].data)} a {fmtData(sessoes.at(-1).data)}</>}</li>
             </ul>
+            {segmentos && (
+              <>
+                <h3 style={{ marginBottom: 4 }}>Ordem das provas</h3>
+                <ul>
+                  {segmentos.map((seg) => {
+                    const c = getConcurso(seg.cid);
+                    return (
+                      <li key={chaveItem(seg)}>
+                        <b>{c?.sigla}</b>: {fmtData(seg.inicio)} a {fmtData(seg.fim)}{seg.prova ? ` (prova em ${fmtData(seg.prova)})` : ' (sem data de prova)'}
+                      </li>
+                    );
+                  })}
+                </ul>
+              </>
+            )}
             <h3 style={{ marginBottom: 4 }}>Distribuição inteligente</h3>
             <div className="hbar">
               {ativas.map((d) => (
@@ -377,7 +505,7 @@ export default function Cronograma({ ctx, voltar, combinado = null }) {
       <li className="sessao">
         <input type="checkbox" checked={ok} onChange={() => marcar(k)} aria-label={`Concluída: ${s.disciplina} às ${s.ini}`} />
         <div style={{ flex: 1, opacity: ok ? 0.6 : 1 }}>
-          <div className="peq sub">{s.ini}–{s.fim} {s.tipo !== 'estudo' && <span>· 🔁 revisão</span>} {ok && <b className="sobe">· ✓ feito</b>}</div>
+          <div className="peq sub">{s.ini}–{s.fim} {s.origemSigla && <span>· {s.origemSigla}</span>} {s.tipo !== 'estudo' && <span>· 🔁 revisão</span>} {ok && <b className="sobe">· ✓ feito</b>}</div>
           <b>{s.disciplina}</b>
           <div className="peq">{s.tema}</div>
         </div>

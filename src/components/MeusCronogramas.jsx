@@ -152,7 +152,7 @@ function NovoCombinado({ seguindo, prefs, abrir }) {
   return (
     <section className="card" style={{ borderColor: 'var(--pri)' }}>
       <h2 style={{ marginTop: 0 }}>🔀 Cronograma combinado</h2>
-      <p className="sub peq">Marque os concursos. As matérias de todos entram num cronograma só; as matérias iguais (ex.: Direito Constitucional) aparecem uma vez, com os tópicos somados. Depois você define as horas de cada dia, o peso e o nível de cada matéria.</p>
+      <p className="sub peq">Marque os concursos. Depois, no passo "Prioridade" do assistente, você escolhe se quer misturar as matérias de todos ou estudar uma prova inteira primeiro (pela ordem que você definir) antes de passar pra próxima.</p>
       <ul className="lista-materias">
         {seguindo.map((c) => {
           const s = sel[c.id];

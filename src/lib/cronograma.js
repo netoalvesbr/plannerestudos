@@ -14,6 +14,8 @@ const min = (hhmm) => {
 const hhmm = (m) => `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`;
 
 export const vespera = (iso) => (iso ? paraIso(new Date(paraData(iso).getTime() - DIA)) : '');
+// soma (ou subtrai, com n negativo) n dias a uma data iso
+export const somarDias = (iso, n) => (iso ? paraIso(new Date(paraData(iso).getTime() + n * DIA)) : '');
 
 export const INTERVALOS_REVISAO = [1, 7, 14, 30, 60, 90, 120];
 export const NIVEIS = ['Muito fraco', 'Fraco', 'Médio', 'Bom', 'Muito bom'];
@@ -34,6 +36,11 @@ export function configPadrao(dataProva) {
     revisoes: [1, 7, 14, 30],
     diasRevisao: 7,
     pular: [], // tópicos já estudados (replanejamento)
+    // só vale para cronograma combinado (várias provas): estudar uma prova inteira antes da próxima,
+    // em vez de misturar as matérias de todas o tempo todo
+    sequencial: false,
+    folgaDias: 2, // dias sem estudar essa prova antes dela (descanso/revisão final)
+    ordemItens: [], // ordem de prioridade das provas (chaves "cid|fase|area"), da primeira para a última
   };
 }
 

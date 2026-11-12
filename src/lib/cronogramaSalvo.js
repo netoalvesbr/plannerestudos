@@ -4,7 +4,7 @@
 import { getConcurso } from '../data/concursos.js';
 import { disciplinasDo } from './dados.js';
 import { gerarCronograma, gerarRevisoes } from './cronograma.js';
-import { mesclarConcursos } from '../components/Cronograma.jsx';
+import { itensNaOrdem, mesclarConcursos, segmentosSequenciais } from '../components/Cronograma.jsx';
 import { verticalizadoDe } from '../components/EditalVerticalizado.jsx';
 
 export function sessoesDoCronograma(k, v, prefs) {
@@ -15,9 +15,24 @@ export function sessoesDoCronograma(k, v, prefs) {
   let discursiva = false;
   let abrir;
   if (k.startsWith('mix|')) {
-    discs = mesclarConcursos(v.mix || []);
     titulo = '🔀 ' + (v.nome || 'Combinado');
     abrir = { mix: k };
+    if (cfg.sequencial) {
+      // mesma regra da tela do cronograma: uma prova inteira antes da próxima, pela prioridade escolhida
+      const itensOrd = itensNaOrdem(v.mix || [], cfg.ordemItens);
+      const segmentos = segmentosSequenciais(itensOrd, cfg.folgaDias, cfg.inicio);
+      const sessoes = segmentos.flatMap((seg) => {
+        const c = getConcurso(seg.cid);
+        const f = c?.fases?.find((x) => x.id === seg.fase);
+        const discSeg = disciplinasDo(seg.cid, seg.cargo || 'ambos', seg.fase || '', seg.area || '');
+        const cfgSeg = { ...cfg, inicio: seg.inicio, fim: seg.fim };
+        const discursivaSeg = (f?.formato || c?.formato) === 'discursiva';
+        return gerarCronograma(cfgSeg, discSeg, { discursiva: discursivaSeg }).map((s) => ({ ...s, origemCid: seg.cid, origemSigla: c?.sigla }));
+      });
+      const fim = segmentos.at(-1)?.fim || cfg.fim;
+      return { k, titulo, abrir, sessoes, revisoes: gerarRevisoes(sessoes, { ...cfg, fim }), feitos: v.feitos || {} };
+    }
+    discs = mesclarConcursos(v.mix || []);
   } else {
     const [cid, fase, area] = k.split('|');
     const c = getConcurso(cid);
