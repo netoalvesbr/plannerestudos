@@ -17,6 +17,22 @@ export const vespera = (iso) => (iso ? paraIso(new Date(paraData(iso).getTime() 
 // soma (ou subtrai, com n negativo) n dias a uma data iso
 export const somarDias = (iso, n) => (iso ? paraIso(new Date(paraData(iso).getTime() + n * DIA)) : '');
 
+// gera as sessões de um "reforço" (plano pronto, dia a dia, repetindo em ciclo) entre
+// duas datas, por cima de qualquer cronograma já existente (ver src/data/reforcos.js)
+export function gerarSessoesReforco(ciclo, inicioIso, fimIso, disciplina) {
+  if (!ciclo?.length || !inicioIso || !fimIso || fimIso < inicioIso) return [];
+  const out = [];
+  let data = inicioIso;
+  let i = 0;
+  while (data <= fimIso) {
+    const texto = ciclo[i % ciclo.length];
+    if (texto) out.push({ data, ini: '', fim: '', disciplina, tema: texto, tipo: 'estudo', reforco: true });
+    data = somarDias(data, 1);
+    i++;
+  }
+  return out;
+}
+
 export const INTERVALOS_REVISAO = [1, 7, 14, 30, 60, 90, 120];
 export const NIVEIS = ['Muito fraco', 'Fraco', 'Médio', 'Bom', 'Muito bom'];
 
@@ -41,6 +57,7 @@ export function configPadrao(dataProva) {
     sequencial: false,
     folgaDias: 2, // dias sem estudar essa prova antes dela (descanso/revisão final)
     ordemItens: [], // ordem de prioridade das provas (chaves "cid|fase|area"), da primeira para a última
+    reforco: null, // plano de reforço ativo: { id, inicio, fim } (ver src/data/reforcos.js)
   };
 }
 

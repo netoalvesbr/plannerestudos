@@ -1,7 +1,8 @@
 import { getConcurso } from '../data/concursos.js';
 import { useMemo, useState } from 'react';
 import { disciplinasDo } from '../lib/dados.js';
-import { chaveRevisao, chaveSessao, configPadrao, DIAS_SEMANA, gerarCronograma, gerarIcs, gerarRevisoes, INTERVALOS_REVISAO, materiasAtivas, NIVEIS, pesoDa, somarDias } from '../lib/cronograma.js';
+import { chaveRevisao, chaveSessao, configPadrao, DIAS_SEMANA, gerarCronograma, gerarIcs, gerarRevisoes, gerarSessoesReforco, INTERVALOS_REVISAO, materiasAtivas, NIVEIS, pesoDa, somarDias } from '../lib/cronograma.js';
+import { REFORCOS } from '../data/reforcos.js';
 import { fmtData } from '../lib/stats.js';
 import { verticalizadoDe } from './EditalVerticalizado.jsx';
 import { ProximaData } from './Calendario.jsx';
@@ -101,6 +102,10 @@ export default function Cronograma({ ctx, voltar, combinado = null }) {
   const [passo, setPasso] = useState(0);
   const [cfg, setCfg] = useState(() => normalizar(salvo?.cfg, dataProva));
   const [todos, setTodos] = useState(false);
+  const hojeIso = new Date().toLocaleDateString('sv-SE');
+  const [reforcoSel, setReforcoSel] = useState('');
+  const [reforcoInicio, setReforcoInicio] = useState(() => somarDias(hojeIso, 1));
+  const [reforcoFim, setReforcoFim] = useState('');
   const set = (k, v) => setCfg((c) => ({ ...c, [k]: v }));
 
   const vert = combinado ? null : verticalizadoDe(prefs, concurso.id, fase, area);
@@ -147,6 +152,23 @@ export default function Cronograma({ ctx, voltar, combinado = null }) {
   const revisoes = useMemo(() => gerarRevisoes(sessoes, { ...usar, fim: fimParaRevisoes }), [sessoes, usar, fimParaRevisoes]);
   const feitos = salvo?.feitos || {};
   const hoje = new Date().toLocaleDateString('sv-SE');
+
+  // reforço: plano pronto (dia a dia) ativado por cima deste cronograma, sem mexer nos blocos gerados
+  const planoReforco = usar.reforco?.id ? REFORCOS.find((r) => r.id === usar.reforco.id) : null;
+  const sessoesReforco = useMemo(
+    () => (planoReforco ? gerarSessoesReforco(planoReforco.ciclo, usar.reforco.inicio, usar.reforco.fim, planoReforco.titulo) : []),
+    [planoReforco, usar.reforco?.inicio, usar.reforco?.fim],
+  );
+  const fimSugeridoReforco = segmentos ? segmentos.at(-1)?.fim || usar.fim : usar.fim;
+  const ativarReforco = (fimEscolhido) => {
+    const fim = fimEscolhido || reforcoFim || fimSugeridoReforco;
+    if (!reforcoSel || !reforcoInicio || !fim) return;
+    salvar({ ...salvo, cfg: { ...usar, reforco: { id: reforcoSel, inicio: reforcoInicio, fim } } });
+  };
+  const desativarReforco = () => {
+    const { reforco, ...resto } = usar;
+    salvar({ ...salvo, cfg: resto });
+  };
 
   const reordenarItem = (i, delta) => {
     const j = i + delta;
@@ -490,11 +512,15 @@ export default function Cronograma({ ctx, voltar, combinado = null }) {
   const atrasadas = sessoes.filter((s) => s.data < hoje && !feitos[chaveSessao(s)]).length;
   const porDia = new Map();
   for (const s of sessoes) {
-    if (!porDia.has(s.data)) porDia.set(s.data, { s: [], r: [] });
+    if (!porDia.has(s.data)) porDia.set(s.data, { s: [], r: [], f: [] });
     porDia.get(s.data).s.push(s);
   }
   for (const r of revisoes) if (porDia.has(r.data)) porDia.get(r.data).r.push(r);
-  const dias = [...porDia.entries()];
+  for (const f of sessoesReforco) {
+    if (!porDia.has(f.data)) porDia.set(f.data, { s: [], r: [], f: [] });
+    porDia.get(f.data).f.push(f);
+  }
+  const dias = [...porDia.entries()].sort((a, b) => a[0].localeCompare(b[0]));
   const proximos = todos ? dias : dias.filter(([d]) => d >= hoje).slice(0, 14);
   const revPendentes = revisoes.filter((r) => r.data <= hoje && !feitos[chaveRevisao(r)]).length;
 
@@ -526,6 +552,19 @@ export default function Cronograma({ ctx, voltar, combinado = null }) {
           <div className="peq sub">🔁 revisão de {r.intervalo} {r.intervalo === 1 ? 'dia' : 'dias'} · estudado em {fmtData(r.origem)} {ok && <b className="sobe">· ✓ feita</b>}</div>
           <b>{r.disciplina}</b>
           <div className="peq">{r.tema}</div>
+        </div>
+      </li>
+    );
+  };
+  const ReforcoItem = ({ s }) => {
+    const k = chaveSessao(s);
+    const ok = !!feitos[k];
+    return (
+      <li className="sessao">
+        <input type="checkbox" checked={ok} onChange={() => marcar(k)} aria-label={`Reforço feito: ${s.tema}`} />
+        <div style={{ flex: 1, opacity: ok ? 0.6 : 1 }}>
+          <div className="peq sub">📋 reforço {ok && <b className="sobe">· ✓ feito</b>}</div>
+          <div className="peq">{s.tema}</div>
         </div>
       </li>
     );
@@ -563,9 +602,32 @@ export default function Cronograma({ ctx, voltar, combinado = null }) {
       )}
       <div className="resumos">
         <div className="card"><div className="sub">Blocos feitos</div><div className="numero">{feitas}/{sessoes.length}</div><div className="barra"><i style={{ width: `${(feitas / Math.max(1, sessoes.length)) * 100}%` }} /></div></div>
-        <div className="card"><div className="sub">Carga total</div><div className="numero">{horas} h</div><div className="peq sub">{dias.length} dias de estudo</div></div>
+        <div className="card"><div className="sub">Carga total</div><div className="numero">{horas} h</div><div className="peq sub">{dias.filter(([, ss]) => ss.s.length).length} dias de estudo</div></div>
         <div className="card"><div className="sub">Revisões pendentes</div><div className="numero">{revPendentes}</div><div className="peq sub">{usar.revisoes?.length ? `a cada ${usar.revisoes.join(', ')} dias` : 'revisões espaçadas desligadas'}</div></div>
         <div className="card"><div className="sub">Atrasadas</div><div className="numero" style={{ color: atrasadas ? 'var(--erro)' : 'var(--ok)' }}>{atrasadas}</div><div className="peq sub">{atrasadas ? 'sessões passadas não marcadas' : 'em dia ✓'}</div></div>
+      </div>
+      <div className="card">
+        {planoReforco ? (
+          <>
+            <h3 className="col-tit">📋 Reforço ativo: {planoReforco.titulo}</h3>
+            <p className="peq sub">De {fmtData(usar.reforco.inicio)} até {fmtData(usar.reforco.fim)}. Aparece como uma coluna extra em cada dia, só como lembrete — não entra nas contagens de blocos acima.</p>
+            <button className="btn peq" onClick={desativarReforco}>Desativar reforço</button>
+          </>
+        ) : (
+          <>
+            <h3 className="col-tit">📋 Reforço de um plano pronto</h3>
+            <p className="peq sub">Mostra, dia a dia, um plano de estudo externo (de um curso, por exemplo) como lembrete junto deste cronograma — sem mudar os blocos gerados.</p>
+            <div className="linha" style={{ flexWrap: 'wrap', gap: 8 }}>
+              <select className="campo" value={reforcoSel} onChange={(e) => setReforcoSel(e.target.value)}>
+                <option value="">Escolha um plano…</option>
+                {REFORCOS.map((r) => <option key={r.id} value={r.id}>{r.titulo}</option>)}
+              </select>
+              <label className="campo peq">Início<input type="date" value={reforcoInicio} onChange={(e) => setReforcoInicio(e.target.value)} /></label>
+              <label className="campo peq">Até<input type="date" value={reforcoFim || fimSugeridoReforco} onChange={(e) => setReforcoFim(e.target.value)} /></label>
+              <button className="btn pri peq" disabled={!reforcoSel || !reforcoInicio || !(reforcoFim || fimSugeridoReforco)} onClick={() => ativarReforco(reforcoFim || fimSugeridoReforco)}>Ativar</button>
+            </div>
+          </>
+        )}
       </div>
       {proximos.map(([d, ss]) => (
         <section key={d} className="card" style={{ borderColor: d === hoje ? 'var(--pri)' : undefined }}>
@@ -579,6 +641,12 @@ export default function Cronograma({ ctx, voltar, combinado = null }) {
               <h3 className="col-tit">🔁 Revisões <span className="sub peq">({ss.r.filter((r) => feitos[chaveRevisao(r)]).length}/{ss.r.length})</span></h3>
               {ss.r.length ? <ul className="lista-sessoes">{ss.r.map((r) => <Revisao key={chaveRevisao(r)} r={r} />)}</ul> : <p className="peq sub">Nenhuma revisão para este dia.</p>}
             </div>
+            {ss.f.length > 0 && (
+              <div>
+                <h3 className="col-tit">📋 Reforço <span className="sub peq">({ss.f.filter((f) => feitos[chaveSessao(f)]).length}/{ss.f.length})</span></h3>
+                <ul className="lista-sessoes">{ss.f.map((s) => <ReforcoItem key={chaveSessao(s)} s={s} />)}</ul>
+              </div>
+            )}
           </div>
         </section>
       ))}
