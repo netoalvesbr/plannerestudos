@@ -195,7 +195,8 @@ export default function App() {
           const hojeMap = new Map();
           for (const s of r.sessoes) {
             if (s.tipo !== 'estudo' || s.data !== hoje) continue;
-            if (!hojeMap.has(s.disciplina)) hojeMap.set(s.disciplina, { disciplina: s.disciplina, tema: s.tema, feito: !!r.feitos[chaveSessao(s)] });
+            const chaveMapa = `${s.disciplina}|${s.origemSigla || ''}`;
+            if (!hojeMap.has(chaveMapa)) hojeMap.set(chaveMapa, { disciplina: s.disciplina, tema: s.tema, origemSigla: s.origemSigla || '', feito: !!r.feitos[chaveSessao(s)] });
           }
           return { k, titulo: r.titulo, hoje: [...hojeMap.values()] };
         } catch {

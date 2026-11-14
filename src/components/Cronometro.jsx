@@ -382,8 +382,8 @@ export default function Cronometro({ materias = [], cronogramas = [], hojeSeg = 
               {cronogramaSel.hoje.length ? (
                 <span style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
                   {cronogramaSel.hoje.map((m) => (
-                    <button key={m.disciplina} type="button" className="btn peq" style={{ opacity: m.feito ? 0.55 : 1 }} onClick={() => { cronometrar(m.disciplina, m.tema); setAviso(null); }} title={m.feito ? 'Já marcada como feita neste cronograma' : 'Escolher esta matéria'}>
-                      {m.feito ? '✓ ' : ''}{m.disciplina}
+                    <button key={`${m.disciplina}-${m.origemSigla || ''}`} type="button" className="btn peq" style={{ opacity: m.feito ? 0.55 : 1 }} onClick={() => { cronometrar(m.disciplina, m.tema); setAviso(null); }} title={m.feito ? 'Já marcada como feita neste cronograma' : 'Escolher esta matéria'}>
+                      {m.feito ? '✓ ' : ''}{m.disciplina}{m.origemSigla && ` · ${m.origemSigla}`}
                     </button>
                   ))}
                 </span>
