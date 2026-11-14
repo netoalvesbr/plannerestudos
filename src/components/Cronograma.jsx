@@ -46,9 +46,15 @@ export function mesclarConcursos(itens) {
   for (const it of itens) {
     const c = getConcurso(it.cid);
     if (!c) continue;
+    // matéria da área da 2ª fase da OAB: conteúdo exclusivo (peça prático-profissional),
+    // não é a mesma coisa que uma matéria de mesmo nome de outro concurso (ex.: "Direito
+    // Constitucional" da OAB 2ª fase ≠ "Direito Constitucional" da PC/AC) — nunca mescla,
+    // fica com um nome próprio pra aparecer separado no cronograma combinado.
+    const ehAreaOAB2 = it.fase === 'f2' && !!it.area;
     for (const d of disciplinasDo(it.cid, it.cargo || 'ambos', it.fase || '', it.area || '')) {
-      const k = normNome(d.nome);
-      const e = mapa.get(k) || { nome: d.nome, topicos: [], origens: [] };
+      const k = ehAreaOAB2 ? `${normNome(d.nome)}::${it.cid}::${it.area}` : normNome(d.nome);
+      const nomeExibido = ehAreaOAB2 ? `${d.nome} (${c.sigla})` : d.nome;
+      const e = mapa.get(k) || { nome: nomeExibido, topicos: [], origens: [] };
       for (const t of d.topicos || []) if (!e.topicos.some((x) => normNome(x) === normNome(t))) e.topicos.push(t);
       if (!e.origens.includes(c.sigla)) e.origens.push(c.sigla);
       mapa.set(k, e);

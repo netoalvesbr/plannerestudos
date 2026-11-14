@@ -50,7 +50,7 @@ const DISCIPLINAS_OAB_1 = Object.keys(SUGESTOES_OAB);
 const SEGUNDA_FASE = {
   'Direito Administrativo': { base: ['Direito Administrativo'], pecas: ['Mandado de segurança', 'Ação popular', 'Ação de procedimento comum contra a Fazenda', 'Contestação', 'Apelação e agravo de instrumento'] },
   'Direito Civil': { base: ['Direito Civil', 'Direito Processual Civil'], pecas: ['Petição inicial', 'Contestação', 'Apelação', 'Agravo de instrumento', 'Embargos de declaração'] },
-  'Direito Constitucional': { base: ['Direito Constitucional'], pecas: ['Mandado de segurança', 'Habeas data e mandado de injunção', 'Ação popular', 'ADI, ADC e ADPF', 'Recurso extraordinário e recurso ordinário constitucional'] },
+  'Direito Constitucional': { base: ['Direito Constitucional'], pecas: ['Mandado de segurança', 'Habeas data e mandado de injunção', 'Ação popular', 'ADI, ADC e ADPF', 'Recurso ordinário constitucional', 'Recurso extraordinário', 'Recurso especial'] },
   'Direito Empresarial': { base: ['Direito Empresarial', 'Direito Processual Civil'], pecas: ['Petição inicial', 'Contestação', 'Pedido de recuperação judicial e de falência', 'Habilitação e impugnação de crédito', 'Apelação e agravo de instrumento'] },
   'Direito Penal': { base: ['Direito Penal', 'Direito Processual Penal'], pecas: ['Resposta à acusação', 'Memoriais', 'Apelação', 'Recurso em sentido estrito', 'Habeas corpus', 'Revisão criminal'] },
   'Direito do Trabalho': { base: ['Direito do Trabalho', 'Direito Processual do Trabalho'], pecas: ['Reclamação trabalhista', 'Contestação', 'Recurso ordinário', 'Recurso de revista', 'Embargos à execução'] },
