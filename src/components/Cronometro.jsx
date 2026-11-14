@@ -8,7 +8,8 @@ import { createPortal } from 'react-dom';
 
 const CHAVE = 'estudaai.cronometro';
 const EVENTO = 'estudaai:cronometro';
-const PADRAO = { aberto: false, modo: 'livre', rodando: false, desde: 0, acumulado: 0, registrado: 0, x: null, y: null, mini: false, foco: 25, pausa: 5, etapa: 'foco', ciclos: 0, disciplina: '', tema: '', cronogramaK: '' };
+const PADRAO = { aberto: false, modo: 'livre', rodando: false, desde: 0, acumulado: 0, registrado: 0, x: null, y: null, mini: false, foco: 25, pausa: 5, etapa: 'foco', ciclos: 0, disciplina: '', tema: '', paginas: '', cronogramaK: '', timerMin: 20, terminou: false };
+const PRESETS_TIMER = [5, 10, 15, 20, 30, 45, 60];
 
 function ler() {
   try {
@@ -84,7 +85,7 @@ export default function Cronometro({ materias = [], cronogramas = [], hojeSeg = 
   }, []);
 
   const decorrido = (v = atual.current) => v.acumulado + (v.rodando ? Date.now() - v.desde : 0);
-  const duracao = (v) => (v.etapa === 'foco' ? v.foco : v.pausa) * 60000;
+  const duracao = (v) => (v.modo === 'timer' ? v.timerMin : v.etapa === 'foco' ? v.foco : v.pausa) * 60000;
 
   // registra o tempo estudado (só o tempo de foco) que ainda não foi salvo
   const registrarPendente = useCallback(
@@ -129,6 +130,15 @@ export default function Cronometro({ materias = [], cronogramas = [], hojeSeg = 
           /* sem notificação */
         }
         mudar({ etapa: v.etapa === 'foco' ? 'pausa' : 'foco', ciclos: v.etapa === 'foco' ? v.ciclos + 1 : v.ciclos, acumulado: 0, registrado: 0, desde: Date.now() });
+      } else if (v.modo === 'timer' && !v.terminou && decorrido(v) >= duracao(v)) {
+        if (v.disciplina) aoRegistrar?.(v.disciplina, Math.round((duracao(v) - v.registrado) / 1000));
+        bipe();
+        try {
+          if (window.Notification?.permission === 'granted') new Notification('⏰ Tempo esgotado!');
+        } catch {
+          /* sem notificação */
+        }
+        mudar({ rodando: false, terminou: true, acumulado: duracao(v), registrado: duracao(v) });
       }
       tique((t) => t + 1);
     }, 500);
@@ -149,7 +159,7 @@ export default function Cronometro({ materias = [], cronogramas = [], hojeSeg = 
   }, []);
 
   const iniciar = () => {
-    if (window.Notification?.permission === 'default' && e.modo === 'pomodoro') Notification.requestPermission().catch(() => {});
+    if (window.Notification?.permission === 'default' && (e.modo === 'pomodoro' || e.modo === 'timer')) Notification.requestPermission().catch(() => {});
     mudar({ rodando: true, desde: Date.now() });
   };
   const pausar = () => {
@@ -167,7 +177,7 @@ export default function Cronometro({ materias = [], cronogramas = [], hojeSeg = 
     }
     registrarPendente(v);
     setAviso(null);
-    mudar({ rodando: false, acumulado: 0, registrado: 0, desde: 0, etapa: 'foco' });
+    mudar({ rodando: false, acumulado: 0, registrado: 0, desde: 0, etapa: 'foco', terminou: false });
   };
   // salva o tempo contado na matéria escolhida e zera o mostrador; se houver um cronograma
   // selecionado, pede pro App dar baixa automática no bloco dessa matéria (de hoje, ou no mais
@@ -180,9 +190,9 @@ export default function Cronometro({ materias = [], cronogramas = [], hojeSeg = 
     if (seg < 1 && !v.registrado) return setAviso({ ok: false, texto: 'Ainda não há tempo contado para salvar.' });
     registrarPendente(v);
     let resultadoBaixa = null;
-    if (seg >= 1) resultadoBaixa = aoSalvarSessao?.({ materia: v.disciplina, tema: v.tema || '', seg, hora: new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }), cronogramaK: v.cronogramaK || null });
-    mudar({ rodando: false, acumulado: 0, registrado: 0, desde: 0, etapa: 'foco' });
-    let texto = `✓ Registro salvo: ${seg >= 60 ? fmtCurto(seg) : `${seg} s`} em ${v.disciplina}${v.tema ? ` (${v.tema})` : ''}.`;
+    if (seg >= 1) resultadoBaixa = aoSalvarSessao?.({ materia: v.disciplina, tema: v.tema || '', paginas: v.paginas || '', seg, hora: new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }), cronogramaK: v.cronogramaK || null });
+    mudar({ rodando: false, acumulado: 0, registrado: 0, desde: 0, etapa: 'foco', terminou: false, paginas: '' });
+    let texto = `✓ Registro salvo: ${seg >= 60 ? fmtCurto(seg) : `${seg} s`} em ${v.disciplina}${v.tema ? ` (${v.tema})` : ''}${v.paginas ? ` · ${v.paginas} págs` : ''}.`;
     if (v.cronogramaK) {
       if (resultadoBaixa?.achou && resultadoBaixa.hoje) texto += ' Baixa dada no cronograma de hoje.';
       else if (resultadoBaixa?.achou) texto += ` Essa matéria não estava prevista para hoje nesse cronograma — dei baixa no bloco mais próximo, de ${fmtDataCurta(resultadoBaixa.data)}.`;
@@ -195,8 +205,11 @@ export default function Cronometro({ materias = [], cronogramas = [], hojeSeg = 
     const v = atual.current;
     if (!v.disciplina && (decorrido(v) - v.registrado) / 1000 >= 60) return setAviso({ ok: false, texto: 'Há tempo sem salvar. Escolha a matéria e clique em “Salvar registro” antes de trocar o tipo de contagem.' });
     registrarPendente(atual.current);
-    mudar({ modo, rodando: false, acumulado: 0, registrado: 0, etapa: 'foco', ciclos: 0 });
+    mudar({ modo, rodando: false, acumulado: 0, registrado: 0, etapa: 'foco', ciclos: 0, terminou: false });
   };
+  // ao fim do timer: continuar com mais o mesmo tempo, ou voltar pra escolha de um novo tempo
+  const continuarTimer = () => mudar({ terminou: false, acumulado: 0, registrado: 0, desde: Date.now(), rodando: true });
+  const novoTimer = () => mudar({ terminou: false, acumulado: 0, registrado: 0, desde: 0, rodando: false });
 
   // arrastar com mouse ou dedo
   const aoApertar = (ev) => {
@@ -276,7 +289,9 @@ export default function Cronometro({ materias = [], cronogramas = [], hojeSeg = 
 
   const ms = decorrido(e);
   const pomodoro = e.modo === 'pomodoro';
-  const mostrar = pomodoro ? duracao(e) - ms : ms;
+  const timer = e.modo === 'timer';
+  const regressiva = pomodoro || (timer && !e.terminou);
+  const mostrar = regressiva ? Math.max(0, duracao(e) - ms) : ms;
   const pendente = !pomodoro || e.etapa === 'foco' ? Math.max(0, ms - e.registrado) / 1000 : 0;
   const totalHoje = hojeSeg + pendente;
   const cronogramaSel = cronogramas.find((c) => c.k === e.cronogramaK) || null;
@@ -286,7 +301,7 @@ export default function Cronometro({ materias = [], cronogramas = [], hojeSeg = 
   const corpo = (
     <>
       <div className="crono-cab">
-        <span className="crono-tit">⏱ {pomodoro ? (e.etapa === 'foco' ? 'Foco' : 'Pausa ☕') : 'Cronômetro'}</span>
+        <span className="crono-tit">⏱ {pomodoro ? (e.etapa === 'foco' ? 'Foco' : 'Pausa ☕') : timer ? (e.terminou ? 'Tempo esgotado ⏰' : 'Timer') : 'Cronômetro'}</span>
         {!pip && <span className="crono-alca" aria-hidden="true" title="Arraste para mover">⠿</span>}
         <span style={{ flex: 1 }} />
         {!pip && <button className="crono-ic" onClick={() => mudar({ mini: !e.mini })} aria-label={e.mini ? 'Expandir cronômetro' : 'Minimizar cronômetro'} title={e.mini ? 'Expandir' : 'Minimizar'}>{e.mini ? '▢' : '–'}</button>}
@@ -312,7 +327,8 @@ export default function Cronometro({ materias = [], cronogramas = [], hojeSeg = 
           </div>
           <div className="crono-linha">
             <div className="abas crono-modos" role="tablist" aria-label="Tipo de contagem">
-              <button role="tab" aria-selected={!pomodoro} onClick={() => trocarModo('livre')}>Livre</button>
+              <button role="tab" aria-selected={!pomodoro && !timer} onClick={() => trocarModo('livre')}>Livre</button>
+              <button role="tab" aria-selected={timer} onClick={() => trocarModo('timer')}>⏰ Timer</button>
               <button role="tab" aria-selected={pomodoro} onClick={() => trocarModo('pomodoro')}>🍅 Pomodoro</button>
             </div>
           </div>
@@ -321,6 +337,26 @@ export default function Cronometro({ materias = [], cronogramas = [], hojeSeg = 
               <label>Foco <input type="number" min="5" max="120" value={e.foco} disabled={e.rodando} onChange={(ev) => mudar({ foco: Math.max(1, +ev.target.value || 25) })} /> min</label>
               <label>Pausa <input type="number" min="1" max="60" value={e.pausa} disabled={e.rodando} onChange={(ev) => mudar({ pausa: Math.max(1, +ev.target.value || 5) })} /> min</label>
               <span className="sub">🍅 {e.ciclos}</span>
+            </div>
+          )}
+          {timer && e.terminou && !e.rodando && (
+            <div className="aviso" role="alert">
+              ⏰ Tempo esgotado! Quer continuar estudando ou fazer outro timer?
+              <div className="crono-botoes" style={{ marginTop: 6 }}>
+                <button className="btn peq pri" onClick={continuarTimer}>▶ Mais {e.timerMin} min</button>
+                <button className="btn peq" onClick={novoTimer}>⏰ Novo tempo</button>
+              </div>
+            </div>
+          )}
+          {timer && !e.terminou && (
+            <div className="crono-linha peq">
+              <span>Tempo</span>
+              <span style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+                {PRESETS_TIMER.map((min) => (
+                  <button key={min} type="button" className={`btn peq${e.timerMin === min ? ' pri' : ''}`} disabled={e.rodando} onClick={() => mudar({ timerMin: min })}>{min} min</button>
+                ))}
+              </span>
+              <label>Outro <input type="number" min="1" max="240" value={e.timerMin} disabled={e.rodando} onChange={(ev) => mudar({ timerMin: Math.max(1, +ev.target.value || 20) })} /> min</label>
             </div>
           )}
           {cronogramas.length > 0 && (
@@ -364,6 +400,10 @@ export default function Cronometro({ materias = [], cronogramas = [], hojeSeg = 
             <span>Assunto</span>
             <input type="text" value={e.tema || ''} onChange={(ev) => mudar({ tema: ev.target.value })} placeholder="O que você estudou (opcional)" style={{ flex: 1, minWidth: 0 }} />
           </label>
+          <label className="crono-linha peq">
+            <span>Páginas</span>
+            <input type="number" min="0" value={e.paginas || ''} onChange={(ev) => mudar({ paginas: ev.target.value })} placeholder="Quantas páginas leu (opcional)" style={{ flex: 1, minWidth: 0 }} />
+          </label>
           {!e.disciplina && ms > 0 && !aviso && <div className="peq desce">* Escolha a matéria para poder salvar este tempo.</div>}
           {aviso && <div className={`peq ${aviso.ok ? 'sobe' : 'desce'}`} role="status">{aviso.ok ? '' : '✗ '}{aviso.texto}</div>}
           <div className="peq sub">
@@ -377,7 +417,7 @@ export default function Cronometro({ materias = [], cronogramas = [], hojeSeg = 
               ))}
               {sessoesHoje.length > 0 && <li className="sub"><span>Registros salvos hoje:</span></li>}
               {sessoesHoje.map((r, i) => (
-                <li key={i}><span>{r.hora} · {r.materia}{r.tema ? ` – ${r.tema}` : ''}</span><span>{r.seg >= 60 ? fmtCurto(r.seg) : `${r.seg} s`}</span></li>
+                <li key={i}><span>{r.hora} · {r.materia}{r.tema ? ` – ${r.tema}` : ''}{r.paginas ? ` · ${r.paginas} págs` : ''}</span><span>{r.seg >= 60 ? fmtCurto(r.seg) : `${r.seg} s`}</span></li>
               ))}
             </ul>
           )}
