@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
+import { descreverRegistro } from '../lib/stats.js';
 
 // Cronômetro flutuante: fica por cima de qualquer tela, pode ser arrastado e
 // (no Chrome/Edge do computador) aberto numa janela própria que fica sempre visível,
@@ -8,7 +9,8 @@ import { createPortal } from 'react-dom';
 
 const CHAVE = 'estudaai.cronometro';
 const EVENTO = 'estudaai:cronometro';
-const PADRAO = { aberto: false, modo: 'livre', rodando: false, desde: 0, acumulado: 0, registrado: 0, x: null, y: null, mini: false, foco: 25, pausa: 5, etapa: 'foco', ciclos: 0, disciplina: '', tema: '', paginas: '', cronogramaK: '', timerMin: 20, terminou: false };
+const PADRAO = { aberto: false, modo: 'livre', rodando: false, desde: 0, acumulado: 0, registrado: 0, x: null, y: null, mini: false, foco: 25, pausa: 5, etapa: 'foco', ciclos: 0, disciplina: '', tema: '', paginaIni: '', paginaFim: '', cronogramaK: '', timerMin: 20, terminou: false, inicioRegistro: 0 };
+const fmtHora = (ms) => new Date(ms).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
 const PRESETS_TIMER = [5, 10, 15, 20, 30, 45, 60];
 
 function ler() {
@@ -160,7 +162,9 @@ export default function Cronometro({ materias = [], cronogramas = [], hojeSeg = 
 
   const iniciar = () => {
     if (window.Notification?.permission === 'default' && (e.modo === 'pomodoro' || e.modo === 'timer')) Notification.requestPermission().catch(() => {});
-    mudar({ rodando: true, desde: Date.now() });
+    const v = atual.current;
+    // marca o horário em que essa contagem realmente começou (só na primeira vez, não a cada retomada após pausa)
+    mudar({ rodando: true, desde: Date.now(), inicioRegistro: v.inicioRegistro || Date.now() });
   };
   const pausar = () => {
     const v = atual.current;
@@ -177,7 +181,7 @@ export default function Cronometro({ materias = [], cronogramas = [], hojeSeg = 
     }
     registrarPendente(v);
     setAviso(null);
-    mudar({ rodando: false, acumulado: 0, registrado: 0, desde: 0, etapa: 'foco', terminou: false });
+    mudar({ rodando: false, acumulado: 0, registrado: 0, desde: 0, etapa: 'foco', terminou: false, inicioRegistro: 0 });
   };
   // salva o tempo contado na matéria escolhida e zera o mostrador; se houver um cronograma
   // selecionado, pede pro App dar baixa automática no bloco dessa matéria (de hoje, ou no mais
@@ -189,15 +193,19 @@ export default function Cronometro({ materias = [], cronogramas = [], hojeSeg = 
     const seg = emFoco ? Math.round(decorrido(v) / 1000) : 0;
     if (seg < 1 && !v.registrado) return setAviso({ ok: false, texto: 'Ainda não há tempo contado para salvar.' });
     registrarPendente(v);
+    const horaFim = fmtHora(Date.now());
+    const horaInicio = v.inicioRegistro ? fmtHora(v.inicioRegistro) : '';
+    const registro = { materia: v.disciplina, tema: v.tema || '', paginaIni: v.paginaIni || '', paginaFim: v.paginaFim || '', seg, hora: horaFim, horaInicio, cronogramaK: v.cronogramaK || null };
     let resultadoBaixa = null;
-    if (seg >= 1) resultadoBaixa = aoSalvarSessao?.({ materia: v.disciplina, tema: v.tema || '', paginas: v.paginas || '', seg, hora: new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }), cronogramaK: v.cronogramaK || null });
-    mudar({ rodando: false, acumulado: 0, registrado: 0, desde: 0, etapa: 'foco', terminou: false, paginas: '' });
-    let texto = `✓ Registro salvo: ${seg >= 60 ? fmtCurto(seg) : `${seg} s`} em ${v.disciplina}${v.tema ? ` (${v.tema})` : ''}${v.paginas ? ` · ${v.paginas} págs` : ''}.`;
+    if (seg >= 1) resultadoBaixa = aoSalvarSessao?.(registro);
+    mudar({ rodando: false, acumulado: 0, registrado: 0, desde: 0, etapa: 'foco', terminou: false, paginaIni: '', paginaFim: '', inicioRegistro: 0 });
+    let texto = `✓ Registro salvo com sucesso: ${seg >= 60 ? fmtCurto(seg) : `${seg} s`} · ${descreverRegistro(registro)}.`;
     if (v.cronogramaK) {
       if (resultadoBaixa?.achou && resultadoBaixa.hoje) texto += ' Baixa dada no cronograma de hoje.';
       else if (resultadoBaixa?.achou) texto += ` Essa matéria não estava prevista para hoje nesse cronograma — dei baixa no bloco mais próximo, de ${fmtDataCurta(resultadoBaixa.data)}.`;
       else texto += ` Não encontrei "${v.disciplina}" no cronograma selecionado — o registro foi salvo, mas sem dar baixa.`;
     }
+    texto += ' Você pode ver esse registro em Painel completo → Registro de estudos, ou aqui mesmo em "ver registros".';
     setAviso({ ok: true, texto });
     setVerRegistros(true);
   };
@@ -205,11 +213,11 @@ export default function Cronometro({ materias = [], cronogramas = [], hojeSeg = 
     const v = atual.current;
     if (!v.disciplina && (decorrido(v) - v.registrado) / 1000 >= 60) return setAviso({ ok: false, texto: 'Há tempo sem salvar. Escolha a matéria e clique em “Salvar registro” antes de trocar o tipo de contagem.' });
     registrarPendente(atual.current);
-    mudar({ modo, rodando: false, acumulado: 0, registrado: 0, etapa: 'foco', ciclos: 0, terminou: false });
+    mudar({ modo, rodando: false, acumulado: 0, registrado: 0, etapa: 'foco', ciclos: 0, terminou: false, inicioRegistro: 0 });
   };
   // ao fim do timer: continuar com mais o mesmo tempo, ou voltar pra escolha de um novo tempo
-  const continuarTimer = () => mudar({ terminou: false, acumulado: 0, registrado: 0, desde: Date.now(), rodando: true });
-  const novoTimer = () => mudar({ terminou: false, acumulado: 0, registrado: 0, desde: 0, rodando: false });
+  const continuarTimer = () => mudar({ terminou: false, acumulado: 0, registrado: 0, desde: Date.now(), inicioRegistro: Date.now(), rodando: true });
+  const novoTimer = () => mudar({ terminou: false, acumulado: 0, registrado: 0, desde: 0, rodando: false, inicioRegistro: 0 });
 
   // arrastar com mouse ou dedo
   const aoApertar = (ev) => {
@@ -400,10 +408,11 @@ export default function Cronometro({ materias = [], cronogramas = [], hojeSeg = 
             <span>Assunto</span>
             <input type="text" value={e.tema || ''} onChange={(ev) => mudar({ tema: ev.target.value })} placeholder="O que você estudou (opcional)" style={{ flex: 1, minWidth: 0 }} />
           </label>
-          <label className="crono-linha peq">
-            <span>Páginas</span>
-            <input type="number" min="0" value={e.paginas || ''} onChange={(ev) => mudar({ paginas: ev.target.value })} placeholder="Quantas páginas leu (opcional)" style={{ flex: 1, minWidth: 0 }} />
-          </label>
+          <div className="crono-linha peq">
+            <label>Pág. inicial <input type="number" min="0" value={e.paginaIni || ''} onChange={(ev) => mudar({ paginaIni: ev.target.value })} placeholder="ex.: 154" style={{ width: 70 }} /></label>
+            <label>Pág. final <input type="number" min="0" value={e.paginaFim || ''} onChange={(ev) => mudar({ paginaFim: ev.target.value })} placeholder="ex.: 167" style={{ width: 70 }} /></label>
+            <span className="sub">(opcional — só pra leitura de livro)</span>
+          </div>
           {!e.disciplina && ms > 0 && !aviso && <div className="peq desce">* Escolha a matéria para poder salvar este tempo.</div>}
           {aviso && <div className={`peq ${aviso.ok ? 'sobe' : 'desce'}`} role="status">{aviso.ok ? '' : '✗ '}{aviso.texto}</div>}
           <div className="peq sub">
@@ -417,7 +426,7 @@ export default function Cronometro({ materias = [], cronogramas = [], hojeSeg = 
               ))}
               {sessoesHoje.length > 0 && <li className="sub"><span>Registros salvos hoje:</span></li>}
               {sessoesHoje.map((r, i) => (
-                <li key={i}><span>{r.hora} · {r.materia}{r.tema ? ` – ${r.tema}` : ''}{r.paginas ? ` · ${r.paginas} págs` : ''}</span><span>{r.seg >= 60 ? fmtCurto(r.seg) : `${r.seg} s`}</span></li>
+                <li key={i}><span>{descreverRegistro(r)}</span><span>{r.seg >= 60 ? fmtCurto(r.seg) : `${r.seg} s`}</span></li>
               ))}
             </ul>
           )}

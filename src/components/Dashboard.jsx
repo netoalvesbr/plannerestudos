@@ -3,7 +3,7 @@ import { getConcurso } from '../data/concursos.js';
 import { QUESTOES, questoesDo } from '../lib/dados.js';
 import { chaveRevisao, chaveSessao } from '../lib/cronograma.js';
 import { sessoesDoCronograma } from '../lib/cronogramaSalvo.js';
-import { diasAte, fmtData, fmtPct, porCampo, porDia, resumo } from '../lib/stats.js';
+import { descreverRegistro, diasAte, fmtData, fmtPct, porCampo, porDia, resumo } from '../lib/stats.js';
 import { anteriorDe, eventosDoAluno, proximaDoAnterior } from '../lib/exameAnterior.js';
 import { tipoEvento } from './CalendarioGeral.jsx';
 import { situacao } from './Flashcards.jsx';
@@ -81,6 +81,9 @@ export default function Dashboard({ ctx, ir, abrirCrono, estudarConcurso }) {
   const fc = prefs.flashcards?.cartoes || [];
   const fcRevisar = fc.filter((c) => situacao(c) === 'revisar').length;
 
+  // o que foi registrado hoje no cronômetro (matéria, assunto, páginas, horário)
+  const registrosHoje = [...(prefs.sessoesEstudo?.[hoje] || [])].sort((a, b) => (a.hora || '').localeCompare(b.hora || ''));
+
   return (
     <div className="dash">
       <h1 style={{ marginBottom: 2 }}>🏠 Início</h1>
@@ -112,6 +115,24 @@ export default function Dashboard({ ctx, ir, abrirCrono, estudarConcurso }) {
           <div className="peq sub">dias seguidos com questões ou cronômetro</div>
         </div>
       </div>
+
+      <section className="card">
+        <div className="linha entre" style={{ alignItems: 'center' }}>
+          <h2 style={{ margin: 0 }}>📚 O que você estudou hoje</h2>
+          <button className="btn peq" onClick={() => ir('painel')}>Ver registro de estudos</button>
+        </div>
+        {!registrosHoje.length ? (
+          <p className="sub">Ainda não há nenhum registro salvo hoje pelo cronômetro.</p>
+        ) : (
+          <ul className="lista-limpa">
+            {registrosHoje.map((r, i) => (
+              <li key={i} style={{ padding: '6px 0', borderBottom: '1px solid var(--borda)' }}>
+                <b>{descreverRegistro(r)}</b> <span className="peq sub">· {r.seg >= 60 ? `${Math.round(r.seg / 60)} min` : `${r.seg} s`}</span>
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
 
       <section>
         <div className="linha entre" style={{ alignItems: 'center' }}>

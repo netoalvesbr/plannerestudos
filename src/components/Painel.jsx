@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { assuntosParaRevisar, estimarNota, fmtPct, porCampo, porDia, resumo } from '../lib/stats.js';
+import { assuntosParaRevisar, descreverRegistro, estimarNota, fmtData, fmtPct, porCampo, porDia, resumo } from '../lib/stats.js';
 import { BarrasAcerto, ColunasPorDia, TabelaRendimento } from './Graficos.jsx';
 
 const nf = (v) => (v == null ? '—' : v.toLocaleString('pt-BR', { maximumFractionDigits: 1 }));
@@ -8,6 +8,7 @@ export default function Painel({ ctx }) {
   const { concurso, questoes, respostas, abrirAvulsas, zerar, historicoTexto, prefs } = ctx;
   const [confirmar, setConfirmar] = useState(false);
   const [copiado, setCopiado] = useState(null);
+  const [verTudoRegistro, setVerTudoRegistro] = useState(false);
   const meta = concurso.meta ?? 0.75;
   const geral = resumo(questoes, respostas);
   const u7 = resumo(questoes, respostas, 'ult7');
@@ -24,6 +25,11 @@ export default function Painel({ ctx }) {
   }
   const total7 = Object.values(tempo7).reduce((a, b) => a + b, 0);
   const fmtT = (s) => { const m = Math.round(s / 60); return m >= 60 ? `${Math.floor(m / 60)}h${String(m % 60).padStart(2, '0')}` : `${m} min`; };
+  // registro de estudos: todas as sessões já salvas pelo cronômetro, dia a dia (mais recente primeiro)
+  const diasRegistro = Object.entries(prefs?.sessoesEstudo || {})
+    .filter(([, arr]) => arr?.length)
+    .sort((a, b) => b[0].localeCompare(a[0]));
+  const diasMostrados = verTudoRegistro ? diasRegistro : diasRegistro.slice(0, 10);
 
   return (
     <div>
@@ -119,6 +125,32 @@ export default function Painel({ ctx }) {
               </button>
             ))}
           </div>
+        )}
+      </section>
+
+      <section className="card">
+        <h2>📚 Registro de estudos</h2>
+        <p className="sub peq" style={{ marginTop: 0 }}>Tudo o que você já salvou pelo cronômetro: matéria, assunto, páginas e horário de cada sessão (últimos 90 dias).</p>
+        {!diasRegistro.length ? (
+          <p className="sub">Nenhum registro salvo ainda. Use o cronômetro (⏱ no topo) e clique em “Salvar registro” depois de estudar.</p>
+        ) : (
+          <>
+            {diasMostrados.map(([dia, lista]) => (
+              <div key={dia} style={{ marginTop: 10 }}>
+                <b className="peq sub">{fmtData(dia)}</b>
+                <ul className="lista-limpa">
+                  {[...lista].sort((a, b) => (a.hora || '').localeCompare(b.hora || '')).map((r, i) => (
+                    <li key={i} style={{ padding: '4px 0', borderBottom: '1px solid var(--borda)' }}>
+                      {descreverRegistro(r)} <span className="peq sub">· {r.seg >= 60 ? `${Math.round(r.seg / 60)} min` : `${r.seg} s`}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ))}
+            {diasRegistro.length > diasMostrados.length && (
+              <button className="btn peq" style={{ marginTop: 8 }} onClick={() => setVerTudoRegistro(true)}>Mostrar todos os {diasRegistro.length} dias</button>
+            )}
+          </>
         )}
       </section>
 

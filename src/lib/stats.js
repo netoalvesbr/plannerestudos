@@ -89,3 +89,18 @@ export const fmtData = (iso) => {
   return `${d}/${m}/${y}`;
 };
 export const fmtDiaMes = (iso) => iso.slice(8, 10) + '/' + iso.slice(5, 7);
+
+// descreve um registro de estudo salvo pelo cronômetro: matéria, assunto, páginas e horário
+export function descreverRegistro(r) {
+  const pIni = r.paginaIni === '' || r.paginaIni == null ? null : Number(r.paginaIni);
+  const pFim = r.paginaFim === '' || r.paginaFim == null ? null : Number(r.paginaFim);
+  const txtPaginas = pIni != null && pFim != null && pFim >= pIni
+    ? ` · págs. ${pIni}–${pFim} (${pFim - pIni + 1} págs.)`
+    : pIni != null || pFim != null
+      ? ` · pág. ${pIni ?? pFim}`
+      : r.paginas // formato antigo (campo único), mantido por compatibilidade com registros já salvos
+        ? ` · ${r.paginas} págs.`
+        : '';
+  const txtHoras = r.horaInicio && r.horaInicio !== r.hora ? ` · ${r.horaInicio}–${r.hora}` : r.hora ? ` · ${r.hora}` : '';
+  return `${r.materia}${r.tema ? ` – ${r.tema}` : ''}${txtPaginas}${txtHoras}`;
+}
