@@ -646,7 +646,22 @@ export default function Cronograma({ ctx, voltar, combinado = null }) {
                 <FragmentoBarra key={d.nome} nome={d.nome} n={contagem[d.nome] || 0} pct={(pesoDa(cfg.materias[d.nome]) / somaPesos) * 100} />
               ))}
             </div>
-            {semAparecer.length > 0 && <p className="aviso">Sem blocos para: {semAparecer.join(', ')}. Aumente os dias/horários ou o limite de matérias por dia.</p>}
+            {semAparecer.length > 0 && (
+              <p className="aviso">
+                Sem blocos para: {semAparecer.join(', ')}.
+                {cfg.simultaneas > 0 && (() => {
+                  const diasAtivos = cfg.dias.length;
+                  const vagasPrio = combinado && ativas.some((d) => d.prioritaria) ? diasAtivos : 0;
+                  const cabem = diasAtivos * cfg.simultaneas - vagasPrio;
+                  const faltam = Math.max(1, Math.ceil((ativas.length + (vagasPrio ? diasAtivos : 0)) / diasAtivos) - cfg.simultaneas);
+                  return (
+                    <> No modo fixo a mesma semana se repete até a prova: com <b>{cfg.simultaneas} matérias por dia</b> em <b>{diasAtivos} {diasAtivos === 1 ? 'dia' : 'dias'}</b>
+                      {vagasPrio ? <> (e uma vaga por dia reservada ao concurso prioritário)</> : null}, cabem <b>{cabem}</b> matérias diferentes na semana — e você tem <b>{ativas.length}</b>.
+                      {' '}Na etapa <b>Blocos</b>, suba "matérias diferentes por dia" para <b>{cfg.simultaneas + faltam}</b>, ou inclua mais um dia de estudo.</>
+                  );
+                })()}
+              </p>
+            )}
           </section>
         )}
 
