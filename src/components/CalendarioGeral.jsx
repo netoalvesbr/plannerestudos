@@ -14,8 +14,10 @@ const hojeIso = () => isoDe(new Date());
 // Quando dois concursos têm a mesma sigla (ex.: dois editais da Câmara, um por cargo),
 // o rótulo ganha o cargo pra dar pra saber de qual calendário se trata: "CMRB / Procurador"
 const abreviarCargo = (nome) => {
-  const base = (nome || '').split(/\s[–—-]\s/)[0].trim();
-  return base.length > 26 ? `${base.slice(0, 25)}…` : base;
+  const txt = (nome || '').trim();
+  if (txt.length <= 32) return txt; // cabe inteiro: não corta a especialidade, que é o que distingue
+  const base = txt.split(/\s[–—-]\s/)[0].trim();
+  return base.length > 32 ? `${base.slice(0, 31)}…` : base;
 };
 export function rotuloDoConcurso(c, todos, prefs) {
   if (todos.filter((x) => x.sigla === c.sigla).length < 2) return c.sigla;
