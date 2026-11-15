@@ -20,6 +20,7 @@ const blocosNoDia = (cfg, dow) => {
   return t >= cfg.bloco ? Math.floor((t + (cfg.pausa || 0)) / (cfg.bloco + (cfg.pausa || 0))) : 0;
 };
 const fmtHoras = (m) => (m % 60 ? `${Math.floor(m / 60)}h${String(m % 60).padStart(2, '0')}` : `${m / 60}h`);
+const paraHora = (m) => { const t = ((Math.round(m) % 1440) + 1440) % 1440; return `${String(Math.floor(t / 60)).padStart(2, '0')}:${String(t % 60).padStart(2, '0')}`; };
 
 // cronogramas salvos antes do novo assistente continuam iguais
 function normalizar(cfg, dataProva) {
@@ -404,8 +405,10 @@ export default function Cronograma({ ctx, voltar, combinado = null }) {
                 const [a, b] = cfg.janelas[d];
                 const n = blocosNoDia(cfg, d);
                 const setJ = (i, v) => set('janelas', { ...cfg.janelas, [d]: i === 0 ? [v, b] : [a, v] });
+                const horasAtuais = Math.max(0, minutos(b) - minutos(a)) / 60;
+                const setHoras = (h) => { const horas = Math.max(0, Math.min(16, h)); setJ(1, paraHora(minutos(a) + horas * 60)); };
                 return (
-                  <li key={d} className="linha" style={{ alignItems: 'center', opacity: on ? 1 : 0.55 }}>
+                  <li key={d} className="linha" style={{ alignItems: 'center', opacity: on ? 1 : 0.55, flexWrap: 'wrap' }}>
                     <label style={{ minWidth: 110, display: 'flex', gap: 8, alignItems: 'center' }}>
                       <input type="checkbox" checked={on} onChange={() => set('dias', on ? cfg.dias.filter((x) => x !== d) : [...cfg.dias, d].sort())} style={{ width: 20, height: 20 }} />
                       <b>{NOME_DIA[d]}</b>
@@ -415,6 +418,11 @@ export default function Cronograma({ ctx, voltar, combinado = null }) {
                         <input type="time" aria-label={`${NOME_DIA[d]}: início`} style={{ ...campo, width: 'auto' }} value={a} onChange={(e) => setJ(0, e.target.value)} />
                         <span>até</span>
                         <input type="time" aria-label={`${NOME_DIA[d]}: fim`} style={{ ...campo, width: 'auto' }} value={b} onChange={(e) => setJ(1, e.target.value)} />
+                        <label className="peq" style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
+                          ou
+                          <input type="number" min="0" max="16" step="0.5" aria-label={`${NOME_DIA[d]}: quantidade de horas de estudo`} style={{ ...campo, width: 64 }} value={horasAtuais} onChange={(e) => setHoras(+e.target.value || 0)} />
+                          horas
+                        </label>
                         <span className="peq sub">{n} {n === 1 ? 'bloco' : 'blocos'} · {fmtHoras(n * cfg.bloco)}</span>
                       </>
                     )}
