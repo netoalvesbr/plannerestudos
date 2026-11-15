@@ -193,6 +193,11 @@ export default function Cronograma({ ctx, voltar, combinado = null }) {
   };
 
   const titulo = combinado ? `🔀 ${combinado.nome}` : `${concurso.sigla}${faseObj ? ` – ${faseObj.nome}` : ''}${areaObj ? ` – ${areaObj.nome}` : ''}`;
+  // datas de prova de cada concurso combinado, na ordem de prioridade escolhida — pra nunca esconder
+  // que são provas em datas diferentes atrás de uma data única só
+  const datasPorItem = combinado
+    ? (itensPriorizados || combinado.itens).map((it) => ({ sigla: getConcurso(it.cid)?.sigla || '?', prova: dataDoItem(it) }))
+    : null;
   const horas = Math.round(sessoes.reduce((s, x) => s + minutos(x.fim) - minutos(x.ini), 0) / 60);
 
   function baixarIcs() {
@@ -240,7 +245,14 @@ export default function Cronograma({ ctx, voltar, combinado = null }) {
       <div>
         {voltar && <button className="btn peq" onClick={voltar} style={{ marginBottom: 8 }}>← Meus cronogramas</button>}
         <h1>📆 {salvo ? 'Ajustar cronograma' : 'Montar meu cronograma'}</h1>
-        <p className="sub">{titulo} · {discs.length} {discs.length === 1 ? 'matéria' : 'matérias'} · {discs.reduce((s, d) => s + (d.topicos?.length || 0), 0)} tópicos{dataProva ? ` · prova em ${fmtData(dataProva)}` : ''}</p>
+        <p className="sub">{titulo} · {discs.length} {discs.length === 1 ? 'matéria' : 'matérias'} · {discs.reduce((s, d) => s + (d.topicos?.length || 0), 0)} tópicos{!datasPorItem && dataProva ? ` · prova em ${fmtData(dataProva)}` : ''}</p>
+        {datasPorItem && (
+          <p className="sub peq">
+            {datasPorItem.map((d, i) => (
+              <span key={i}>{i > 0 && ' · '}<b>{d.sigla}</b>: {d.prova ? `prova em ${fmtData(d.prova)}` : 'sem data de prova cadastrada'}</span>
+            ))}
+          </p>
+        )}
         <ol className="passos" aria-label="Etapas">
           {passos.map((p, i) => (
             <li key={p}><button aria-current={i === passo ? 'step' : undefined} onClick={() => setPasso(i)}>{i < passo ? '✓' : i + 1}. {p}</button></li>
@@ -288,37 +300,42 @@ export default function Cronograma({ ctx, voltar, combinado = null }) {
                 </label>
               ))}
             </div>
-            {cfg.sequencial && (
-              <>
-                <p className="sub peq" style={{ marginTop: 12 }}>
-                  Defina qual prova é mais importante pra você: a primeira da lista é estudada até terminar (deixando a folga de dias abaixo antes dela), depois o cronograma passa pra próxima.
-                </p>
-                <ul className="lista-materias">
-                  {itensPriorizados.map((it, i) => {
-                    const c = getConcurso(it.cid);
-                    const seg = segmentos?.[i];
-                    return (
-                      <li key={chaveItem(it)} className="linha" style={{ alignItems: 'center' }}>
-                        <span style={{ flex: 1 }}>
-                          <b>{i + 1}º: {c?.sigla}</b>
-                          {seg && (
-                            <span className="peq sub" style={{ display: 'block' }}>
-                              {seg.prova ? `Prova em ${fmtData(seg.prova)} · estuda ` : 'Sem data de prova cadastrada · estuda '}
-                              de {fmtData(seg.inicio)} a {fmtData(seg.fim)}
-                            </span>
-                          )}
+            <p className="sub peq" style={{ marginTop: 12 }}>
+              {cfg.sequencial
+                ? 'Defina qual prova é mais importante pra você: a primeira da lista é estudada até terminar (deixando a folga de dias abaixo antes dela), depois o cronograma passa pra próxima.'
+                : 'Defina qual prova é mais prioritária pra você agora (1º lugar = mais prioritária). No modo Misturado isso é só uma anotação — as matérias de todas as provas continuam misturadas do mesmo jeito; pra estudar uma prova inteira antes da outra, escolha o modo Sequencial acima.'}
+            </p>
+            <ul className="lista-materias">
+              {itensPriorizados.map((it, i) => {
+                const c = getConcurso(it.cid);
+                const seg = segmentos?.[i];
+                const data = datasPorItem?.[i];
+                return (
+                  <li key={chaveItem(it)} className="linha" style={{ alignItems: 'center' }}>
+                    <span style={{ flex: 1 }}>
+                      <b>{i + 1}º: {c?.sigla}</b>
+                      {seg ? (
+                        <span className="peq sub" style={{ display: 'block' }}>
+                          {seg.prova ? `Prova em ${fmtData(seg.prova)} · estuda ` : 'Sem data de prova cadastrada · estuda '}
+                          de {fmtData(seg.inicio)} a {fmtData(seg.fim)}
                         </span>
-                        <button className="btn peq" aria-label={`Subir prioridade de ${c?.sigla}`} disabled={i === 0} onClick={() => reordenarItem(i, -1)}>↑</button>
-                        <button className="btn peq" aria-label={`Baixar prioridade de ${c?.sigla}`} disabled={i === itensPriorizados.length - 1} onClick={() => reordenarItem(i, 1)}>↓</button>
-                      </li>
-                    );
-                  })}
-                </ul>
-                <label className="campo" style={{ maxWidth: 320, marginTop: 8 }}>
-                  Parar de estudar cada prova quantos dias antes dela
-                  <input type="number" min="0" max="15" style={campo} value={cfg.folgaDias ?? 2} onChange={(e) => set('folgaDias', Math.max(0, +e.target.value || 0))} />
-                </label>
-              </>
+                      ) : (
+                        <span className="peq sub" style={{ display: 'block' }}>
+                          {data?.prova ? `Prova em ${fmtData(data.prova)}` : 'Sem data de prova cadastrada'}
+                        </span>
+                      )}
+                    </span>
+                    <button className="btn peq" aria-label={`Subir prioridade de ${c?.sigla}`} disabled={i === 0} onClick={() => reordenarItem(i, -1)}>↑</button>
+                    <button className="btn peq" aria-label={`Baixar prioridade de ${c?.sigla}`} disabled={i === itensPriorizados.length - 1} onClick={() => reordenarItem(i, 1)}>↓</button>
+                  </li>
+                );
+              })}
+            </ul>
+            {cfg.sequencial && (
+              <label className="campo" style={{ maxWidth: 320, marginTop: 8 }}>
+                Parar de estudar cada prova quantos dias antes dela
+                <input type="number" min="0" max="15" style={campo} value={cfg.folgaDias ?? 2} onChange={(e) => set('folgaDias', Math.max(0, +e.target.value || 0))} />
+              </label>
             )}
           </section>
         )}
