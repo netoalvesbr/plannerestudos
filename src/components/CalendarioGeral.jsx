@@ -22,8 +22,10 @@ export function rotuloDoConcurso(c, todos, prefs) {
   const escolhido = prefs?.concursos?.[c.id]?.cargo;
   const ids = Array.isArray(escolhido) ? escolhido : escolhido && escolhido !== 'ambos' ? [escolhido] : (c.cargos || []).map((k) => k.id);
   const nomes = ids.map((id) => (c.cargos || []).find((k) => k.id === id)?.nome).filter(Boolean);
-  if (!nomes.length) return c.sigla;
-  return `${c.sigla} / ${abreviarCargo(nomes[0])}${nomes.length > 1 ? ` +${nomes.length - 1}` : ''}`;
+  if (nomes.length) return `${c.sigla} / ${abreviarCargo(nomes[0])}${nomes.length > 1 ? ` +${nomes.length - 1}` : ''}`;
+  // sem cargo cadastrado, o número do edital já separa um concurso do outro
+  const n = /n[ºo°]?\s*(\d{1,3}\/\d{4})/i.exec(c.edital || '');
+  return n ? `${c.sigla} / Edital ${n[1]}` : c.sigla;
 }
 
 // Tipo do evento a partir do texto do edital

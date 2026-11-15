@@ -20,7 +20,7 @@ export const CONCURSOS = [
         remuneracao: 'R$ 6.342,07',
         requisitos: 'Nível superior em qualquer área + CNH AB',
         horario: 'Prova das 7h às 12h (portões das 6h às 7h)',
-        horarioProva: { ini: '07:00', fim: '12:00', fuso: 'America/Rio_Branco', rotulo: 'horário do Acre' },
+        horarioProva: { ini: '07:00', fim: '12:00', portoesAbrem: '06:00', portoesFecham: '07:00', fuso: 'America/Rio_Branco', rotulo: 'horário do Acre' },
       },
       {
         id: 'pap',
@@ -29,7 +29,7 @@ export const CONCURSOS = [
         remuneracao: 'R$ 6.342,07',
         requisitos: 'Nível superior em qualquer área + CNH AB',
         horario: 'Prova das 13h às 18h (portões das 12h às 13h)',
-        horarioProva: { ini: '13:00', fim: '18:00', fuso: 'America/Rio_Branco', rotulo: 'horário do Acre' },
+        horarioProva: { ini: '13:00', fim: '18:00', portoesAbrem: '12:00', portoesFecham: '13:00', fuso: 'America/Rio_Branco', rotulo: 'horário do Acre' },
       },
     ],
     prova: {

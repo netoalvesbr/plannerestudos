@@ -59,11 +59,17 @@ export function textoHorario(h, dataIso) {
   if (!h?.ini) return null;
   const ini = MIN(h.ini);
   const fim = MIN(h.fim);
-  const port = MIN(h.portoes);
+  const abrem = MIN(h.portoesAbrem);
+  const fecham = MIN(h.portoesFecham);
   if (ini == null) return null;
-  const trecho = (i, f, p) =>
-    `${HHMM(i)}${f != null ? ` às ${HHMM(f)}` : ''}${p != null ? ` · portões ${h.portoesFecham ? 'fecham ' : ''}${HHMM(p)}` : ''}`;
-  const doEdital = `${trecho(ini, fim, port)}${h.rotulo ? ` (${h.rotulo})` : ''}`;
+  const portoes = (a, f) => {
+    if (a != null && f != null) return ` · portões das ${HHMM(a)} às ${HHMM(f)}`;
+    if (f != null) return ` · portões fecham ${HHMM(f)}`;
+    if (a != null) return ` · portões abrem ${HHMM(a)}`;
+    return '';
+  };
+  const trecho = (d) => `${HHMM(ini + d)}${fim != null ? ` às ${HHMM(fim + d)}` : ''}${portoes(abrem != null ? abrem + d : null, fecham != null ? fecham + d : null)}`;
+  const doEdital = `${trecho(0)}${h.rotulo ? ` (${h.rotulo})` : ''}`;
 
   const tzEdital = h.fuso || 'America/Sao_Paulo';
   const tzLocal = fusoLocal();
@@ -71,8 +77,5 @@ export function textoHorario(h, dataIso) {
   const dif = offsetMin(tzLocal, dia) - offsetMin(tzEdital, dia);
   if (!dif) return { edital: doEdital, local: null };
   const cidade = tzLocal.split('/').pop().replace(/_/g, ' ');
-  return {
-    edital: doEdital,
-    local: `no seu horário (${cidade}): ${trecho(ini + dif, fim != null ? fim + dif : null, port != null ? port + dif : null)}`,
-  };
+  return { edital: doEdital, local: `no seu horário (${cidade}): ${trecho(dif)}` };
 }
