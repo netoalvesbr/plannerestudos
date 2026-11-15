@@ -44,6 +44,10 @@ export function configPadrao(dataProva) {
     dias: [1, 2, 3, 4, 5, 6], // seg a sáb
     // horário de cada dia da semana (0 = domingo)
     janelas: { 0: ['08:00', '12:00'], 1: ['19:00', '22:00'], 2: ['19:00', '22:00'], 3: ['19:00', '22:00'], 4: ['19:00', '22:00'], 5: ['19:00', '22:00'], 6: ['08:00', '12:00'] },
+    // cada dia pode ser definido pelo horário (janela acima) ou só pela quantidade de horas:
+    // modoDia[dia] = 'horas' + horasDia[dia] = 6  → 6 horas de estudo nesse dia, sem hora marcada
+    modoDia: {},
+    horasDia: {},
     bloco: 50,
     pausa: 10,
     simultaneas: 3, // matérias diferentes por dia (0 = sem limite)
@@ -57,6 +61,7 @@ export function configPadrao(dataProva) {
     sequencial: false,
     folgaDias: 2, // dias sem estudar essa prova antes dela (descanso/revisão final)
     ordemItens: [], // ordem de prioridade das provas (chaves "cid|fase|area"), da primeira para a última
+    fimPorItem: {}, // data final de cada prova do combinado ("cid|fase|area" -> iso): cada uma para na sua véspera
     reforco: null, // plano de reforço ativo: { id, inicio, fim } (ver src/data/reforcos.js)
   };
 }
@@ -68,24 +73,43 @@ function janelaDo(cfg, dow) {
   return [fds && cfg.horaIniFds ? cfg.horaIniFds : cfg.horaIni || '19:00', fds && cfg.horaFimFds ? cfg.horaFimFds : cfg.horaFim || '22:00'];
 }
 
-function horariosDo(cfg, dow) {
+// Blocos de um dia da semana. Cada item é [início, fim] em minutos; null = bloco sem hora marcada
+// (dia definido só pela quantidade de horas, pra quem estuda em horários soltos ao longo do dia).
+export function horariosDo(cfg, dow) {
+  const passo = cfg.bloco + (cfg.pausa || 0);
+  if (cfg.modoDia?.[dow] === 'horas') {
+    const totalMin = Math.round((Number(cfg.horasDia?.[dow]) || 0) * 60);
+    const n = totalMin >= cfg.bloco ? Math.floor((totalMin + (cfg.pausa || 0)) / passo) : 0;
+    return Array.from({ length: n }, () => null);
+  }
   const [a, b] = janelaDo(cfg, dow);
   const ini = min(a);
   const fim = min(b);
   const h = [];
-  for (let m = ini; m + cfg.bloco <= fim; m += cfg.bloco + (cfg.pausa || 0)) h.push([m, m + cfg.bloco]);
+  for (let m = ini; m + cfg.bloco <= fim; m += passo) h.push([m, m + cfg.bloco]);
   return h;
 }
+export const blocosNoDia = (cfg, dow) => horariosDo(cfg, dow).length;
+// minutos de estudo de um dia da semana (blocos × duração do bloco)
+export const minutosNoDia = (cfg, dow) => blocosNoDia(cfg, dow) * cfg.bloco;
 
 // Peso de cada matéria: quanto mais fraco o conhecimento e maior o peso, mais vezes ela aparece
 export const pesoDa = (m = {}) => (m.peso || 1) * (6 - (m.nivel || 3));
 
 export function materiasAtivas(cfg, disciplinas) {
   const ordem = cfg.ordem || [];
-  const pos = (n) => (ordem.includes(n) ? ordem.indexOf(n) : 1000 + disciplinas.findIndex((d) => d.nome === n));
-  return disciplinas
-    .filter((d) => cfg.materias?.[d.nome]?.ativa !== false)
-    .sort((a, b) => pos(a.nome) - pos(b.nome));
+  const ativas = disciplinas.filter((d) => cfg.materias?.[d.nome]?.ativa !== false);
+  if (ordem.length) {
+    const pos = (n) => (ordem.includes(n) ? ordem.indexOf(n) : 1000 + disciplinas.findIndex((d) => d.nome === n));
+    return [...ativas].sort((a, b) => pos(a.nome) - pos(b.nome));
+  }
+  // sem ordem definida à mão: primeiro o concurso marcado como prioridade, depois as matérias
+  // de maior peso no edital (as de peso 1 ficam mais pro fim da fila)
+  const peso = (n) => cfg.materias?.[n]?.peso || 1;
+  const orig = (d) => disciplinas.indexOf(d);
+  return [...ativas].sort(
+    (a, b) => (b.prioritaria ? 1 : 0) - (a.prioritaria ? 1 : 0) || peso(b.nome) - peso(a.nome) || orig(a) - orig(b),
+  );
 }
 
 // Rodízio ponderado suave: distribui as matérias de forma intercalada, respeitando o peso de cada uma
@@ -114,7 +138,8 @@ export function gerarCronograma(cfg, disciplinas, { discursiva = false } = {}) {
   for (let t = paraData(cfg.inicio).getTime(); t <= paraData(cfg.fim).getTime(); t += DIA) {
     const d = new Date(t);
     if (!cfg.dias.includes(d.getDay())) continue;
-    const horarios = horariosDo(cfg, d.getDay()).filter(([m]) => !(paraIso(d) === hojeIso && m < agora)); // não agenda horário que já passou
+    // não agenda horário que já passou (blocos sem hora marcada continuam valendo o dia todo)
+    const horarios = horariosDo(cfg, d.getDay()).filter((h) => !(h && paraIso(d) === hojeIso && h[0] < agora));
     if (horarios.length) diasEstudo.push({ data: paraIso(d), dow: d.getDay(), horarios });
   }
   if (!diasEstudo.length) return sessoes;
@@ -128,13 +153,21 @@ export function gerarCronograma(cfg, disciplinas, { discursiva = false } = {}) {
   const nomes = ativas.map((d) => d.nome);
   const pesos = Object.fromEntries(nomes.map((n) => [n, pesoDa(cfg.materias?.[n])]));
   const somaPesos = nomes.reduce((s, n) => s + pesos[n], 0);
-  const vagas = diasConteudo.reduce((s, d) => s + d.horarios.length, 0);
   const pular = new Set(cfg.pular || []);
+  // cada matéria pode ter a sua própria data final (a véspera da prova do concurso dela,
+  // no cronograma combinado): depois dessa data ela sai do rodízio e sobram as outras
+  const fimDe = Object.fromEntries(ativas.map((d) => [d.nome, d.fim || '']));
+  const valeNoDia = (n, data) => !fimDe[n] || data <= fimDe[n];
+  const disponiveisEm = (data) => nomes.filter((n) => valeNoDia(n, data));
+  // matérias do concurso marcado como prioridade (ganham o primeiro bloco de cada dia)
+  const prioritarias = new Set(ativas.filter((d) => d.prioritaria).map((d) => d.nome));
 
   // fila de tópicos de cada matéria; se houver mais tópicos que sessões previstas, agrupa
   const filas = {};
   for (const d of ativas) {
     const tops = (d.topicos?.length ? d.topicos : ['Visão geral da disciplina e questões']).filter((t) => !pular.has(`${d.nome}|${t}`));
+    // só contam as vagas dos dias em que essa matéria ainda vale (antes da prova dela)
+    const vagas = diasConteudo.reduce((s, x) => s + (valeNoDia(d.nome, x.data) ? x.horarios.length : 0), 0);
     const previstas = Math.max(1, Math.floor((vagas * pesos[d.nome]) / somaPesos));
     const porSessao = Math.max(1, Math.ceil(tops.length / previstas));
     const grupos = [];
@@ -153,45 +186,64 @@ export function gerarCronograma(cfg, disciplinas, { discursiva = false } = {}) {
 
   const lim = cfg.simultaneas > 0 ? cfg.simultaneas : Infinity;
   const escolher = rodizio(nomes, pesos);
-  // escolhe as matérias de um dia, respeitando o limite de matérias diferentes
-  const planoDoDia = (n) => {
+  // escolhe as matérias de um dia: respeita o limite de matérias diferentes, só usa as que ainda
+  // valem naquele dia e dá o primeiro bloco ao concurso prioritário
+  const planoDoDia = (n, base) => {
     const doDia = new Set();
     const lista = [];
     for (let j = 0; j < n; j++) {
-      const nome = escolher(doDia.size >= lim ? doDia : null);
+      let permitidas = base ? new Set(base) : null;
+      if (doDia.size >= lim) permitidas = new Set([...doDia].filter((x) => !base || base.has(x)));
+      if (j === 0 && prioritarias.size) {
+        const p = [...(permitidas || nomes)].filter((x) => prioritarias.has(x));
+        if (p.length) permitidas = new Set(p);
+      }
+      const nome = escolher(permitidas);
+      if (!nome) break;
       doDia.add(nome);
       lista.push(nome);
     }
     return lista;
   };
 
-  // modo fixo: monta uma semana-modelo e repete; modo ciclo: segue a sequência de onde parou
-  let semana = null;
-  if (cfg.modo !== 'ciclo') {
-    semana = {};
-    for (const dow of [1, 2, 3, 4, 5, 6, 0]) if (cfg.dias.includes(dow)) semana[dow] = planoDoDia(horariosDo(cfg, dow).length);
-  }
+  // modo fixo: monta uma semana-modelo e repete. Quando uma prova passa e as matérias dela saem,
+  // monta uma nova semana-modelo só com as que sobraram.
+  const semanas = new Map();
+  const semanaDe = (disp) => {
+    const chave = disp.join('|');
+    if (!semanas.has(chave)) {
+      const base = new Set(disp);
+      const s = {};
+      for (const dow of [1, 2, 3, 4, 5, 6, 0]) if (cfg.dias.includes(dow)) s[dow] = planoDoDia(horariosDo(cfg, dow).length, base);
+      semanas.set(chave, s);
+    }
+    return semanas.get(chave);
+  };
 
   for (const d of diasConteudo) {
+    const disp = disponiveisEm(d.data);
+    if (!disp.length) continue;
     let nomesDia;
-    if (semana) {
-      const modelo = semana[d.dow] || [];
+    if (cfg.modo !== 'ciclo') {
+      const modelo = semanaDe(disp)[d.dow] || [];
       // hoje pode ter menos horários (os que já passaram): usa os últimos do modelo
       nomesDia = modelo.slice(Math.max(0, modelo.length - d.horarios.length));
-    } else nomesDia = planoDoDia(d.horarios.length);
-    d.horarios.forEach(([ini, fim], j) => {
-      const nome = nomesDia[j] || nomes[j % nomes.length];
+    } else nomesDia = planoDoDia(d.horarios.length, new Set(disp));
+    d.horarios.forEach((h, j) => {
+      const nome = nomesDia[j] || disp[j % disp.length];
       const x = proximo(nome);
-      sessoes.push({ data: d.data, ini: hhmm(ini), fim: hhmm(fim), ...x });
+      sessoes.push({ data: d.data, ini: h ? hhmm(h[0]) : '', fim: h ? hhmm(h[1]) : '', idx: j, ...x });
     });
   }
   // revisão final: percorre as matérias em rodízio
   let r = 0;
   for (const d of diasRevisao) {
-    for (const [ini, fim] of d.horarios) {
-      const nome = nomes[r++ % nomes.length];
-      sessoes.push({ data: d.data, ini: hhmm(ini), fim: hhmm(fim), disciplina: nome, tema: discursiva ? 'Revisão final: modelos de peças, prazos e questões discursivas' : 'Revisão final: resumos, mapas mentais e questões', tipo: 'revisao-final' });
-    }
+    const disp = disponiveisEm(d.data);
+    if (!disp.length) continue;
+    d.horarios.forEach((h, j) => {
+      const nome = disp[r++ % disp.length];
+      sessoes.push({ data: d.data, ini: h ? hhmm(h[0]) : '', fim: h ? hhmm(h[1]) : '', idx: j, disciplina: nome, tema: discursiva ? 'Revisão final: modelos de peças, prazos e questões discursivas' : 'Revisão final: resumos, mapas mentais e questões', tipo: 'revisao-final' });
+    });
   }
   return sessoes;
 }
@@ -204,9 +256,11 @@ export function gerarRevisoes(sessoes, cfg) {
   const out = [];
   for (const s of sessoes) {
     if (s.tipo !== 'estudo') continue;
+    // no combinado, a revisão de uma matéria não passa da prova do concurso dela
+    const fimMateria = cfg.fimPorMateria?.[s.disciplina] || fim;
     for (const i of ints) {
       const data = paraIso(new Date(paraData(s.data).getTime() + i * DIA));
-      if (data > fim) break;
+      if (data > fim || data > fimMateria) break;
       out.push({ data, disciplina: s.disciplina, tema: s.tema, intervalo: i, origem: s.data });
     }
   }
@@ -214,7 +268,8 @@ export function gerarRevisoes(sessoes, cfg) {
 }
 export const chaveRevisao = (r) => `rev#${r.data}#${r.disciplina}#${r.tema}`;
 
-export const chaveSessao = (s) => `${s.data}#${s.ini}`;
+// blocos sem hora marcada (dia definido por quantidade de horas) usam o número do bloco como chave
+export const chaveSessao = (s) => `${s.data}#${s.ini || `b${s.idx ?? 0}`}`;
 
 // Arquivo .ics para importar no Google Agenda, Outlook ou Apple Calendar
 export function gerarIcs(sessoes, titulo) {
@@ -223,6 +278,7 @@ export function gerarIcs(sessoes, titulo) {
   const agora = new Date().toISOString().replace(/[-:]/g, '').replace(/\.\d+/, '');
   const linhas = ['BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//EstudaAi//Cronograma//PT', 'CALSCALE:GREGORIAN', `X-WR-CALNAME:${esc(titulo)}`];
   sessoes.forEach((s, i) => {
+    if (!s.ini || !s.fim) return; // bloco sem hora marcada não vira evento de agenda
     linhas.push(
       'BEGIN:VEVENT',
       `UID:estudaai-${s.data}-${s.ini.replace(':', '')}-${i}@estudaai`,

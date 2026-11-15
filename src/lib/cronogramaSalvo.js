@@ -4,11 +4,11 @@
 import { getConcurso } from '../data/concursos.js';
 import { disciplinasDo } from './dados.js';
 import { gerarCronograma, gerarRevisoes } from './cronograma.js';
-import { itensNaOrdem, mesclarConcursos, segmentosSequenciais } from '../components/Cronograma.jsx';
+import { discsDoCombinado, itensNaOrdem, segmentosSequenciais } from '../components/Cronograma.jsx';
 import { verticalizadoDe } from '../components/EditalVerticalizado.jsx';
 
 export function sessoesDoCronograma(k, v, prefs) {
-  const cfg = v?.cfg;
+  let cfg = v?.cfg;
   if (!cfg?.inicio || !cfg.janelas) return null;
   let discs;
   let titulo;
@@ -32,7 +32,11 @@ export function sessoesDoCronograma(k, v, prefs) {
       const fim = segmentos.at(-1)?.fim || cfg.fim;
       return { k, titulo, abrir, sessoes, revisoes: gerarRevisoes(sessoes, { ...cfg, fim }), feitos: v.feitos || {} };
     }
-    discs = mesclarConcursos(v.mix || []);
+    // mesma regra do assistente: cada matéria vale até a prova do concurso dela e o
+    // concurso marcado como prioridade entra primeiro no dia
+    const comb = discsDoCombinado(v.mix || [], cfg);
+    discs = comb.discs;
+    cfg = comb.cfg;
   } else {
     const [cid, fase, area] = k.split('|');
     const c = getConcurso(cid);

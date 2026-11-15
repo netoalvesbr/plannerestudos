@@ -216,9 +216,9 @@ export default function Dashboard({ ctx, ir, abrirCrono, estudarConcurso }) {
                     const ok = !!cr.feitos[ch];
                     return (
                       <li key={ch} className="sessao">
-                        <input type="checkbox" checked={ok} onChange={() => marcar(cr.k, ch)} aria-label={`Concluída: ${s.disciplina} às ${s.ini}`} />
+                        <input type="checkbox" checked={ok} onChange={() => marcar(cr.k, ch)} aria-label={`Concluída: ${s.disciplina} ${s.ini ? `às ${s.ini}` : `(bloco ${(s.idx ?? 0) + 1})`}`} />
                         <div style={{ flex: 1, opacity: ok ? 0.6 : 1 }}>
-                          <div className="peq sub">{s.ini}–{s.fim} {s.origemSigla && <span>· {s.origemSigla}</span>} {ok && <b className="sobe">· ✓ feito</b>}</div>
+                          <div className="peq sub">{s.ini ? `${s.ini}–${s.fim}` : `Bloco ${(s.idx ?? 0) + 1} · sem hora marcada`} {s.origemSigla && <span>· {s.origemSigla}</span>} {ok && <b className="sobe">· ✓ feito</b>}</div>
                           <b>{s.disciplina}</b>
                           <div className="peq">{s.tema}</div>
                         </div>

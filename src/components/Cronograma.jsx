@@ -1,7 +1,7 @@
 import { getConcurso } from '../data/concursos.js';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { disciplinasDo } from '../lib/dados.js';
-import { chaveRevisao, chaveSessao, configPadrao, DIAS_SEMANA, gerarCronograma, gerarIcs, gerarRevisoes, gerarSessoesReforco, INTERVALOS_REVISAO, materiasAtivas, NIVEIS, pesoDa, somarDias } from '../lib/cronograma.js';
+import { blocosNoDia, chaveRevisao, chaveSessao, configPadrao, DIAS_SEMANA, gerarCronograma, gerarIcs, gerarRevisoes, gerarSessoesReforco, INTERVALOS_REVISAO, materiasAtivas, NIVEIS, pesoDa, somarDias, vespera } from '../lib/cronograma.js';
 import { REFORCOS } from '../data/reforcos.js';
 import { fmtData } from '../lib/stats.js';
 import { verticalizadoDe } from './EditalVerticalizado.jsx';
@@ -14,11 +14,6 @@ const nomeDia = (iso) => DIAS_SEMANA[new Date(iso + 'T12:00:00').getDay()];
 const NOME_DIA = ['Domingo', 'Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado'];
 const ORDEM_DIAS = [1, 2, 3, 4, 5, 6, 0];
 const minutos = (h) => { const [a, b] = h.split(':').map(Number); return a * 60 + (b || 0); };
-const blocosNoDia = (cfg, dow) => {
-  const [a, b] = cfg.janelas[dow];
-  const t = minutos(b) - minutos(a);
-  return t >= cfg.bloco ? Math.floor((t + (cfg.pausa || 0)) / (cfg.bloco + (cfg.pausa || 0))) : 0;
-};
 const fmtHoras = (m) => (m % 60 ? `${Math.floor(m / 60)}h${String(m % 60).padStart(2, '0')}` : `${m / 60}h`);
 const paraHora = (m) => { const t = ((Math.round(m) % 1440) + 1440) % 1440; return `${String(Math.floor(t / 60)).padStart(2, '0')}:${String(t % 60).padStart(2, '0')}`; };
 
@@ -42,7 +37,18 @@ const PASSOS = ['Modo', 'Cargos', 'Matérias', 'Dias e horas', 'Blocos', 'Revis�
 
 // junta as matérias de vários concursos num cronograma só (matérias iguais aparecem uma vez, com os tópicos somados)
 const normNome = (s) => (s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/^nocoes de /, '').replace(/[^a-z0-9]+/g, ' ').trim();
-export function mesclarConcursos(itens) {
+// Peso da matéria segundo o edital: 2ª fase da OAB vale o máximo (é a prova inteira);
+// nos demais, usa a tabela de pesos do edital e, quando ela não veio na importação,
+// trata o bloco de "Conhecimentos Específicos" como peso 2 (é assim no edital da PC/AC).
+const semAcento = (s) => (s || '').normalize('NFD').replace(/[̀-ͯ]/g, '');
+export function pesoDoEdital(c, d, it = {}) {
+  if (it.fase === 'f2' && it.area) return 3;
+  const b = (c?.prova?.blocos || []).find((x) => normNome(x.nome) === normNome(d.bloco || ''));
+  if (b?.peso) return Math.min(3, Math.max(1, Math.round(b.peso)));
+  if (/especific/i.test(semAcento(d.bloco))) return 2;
+  return 1;
+}
+export function mesclarConcursos(itens, { fimPorItem = {}, prioritario = '' } = {}) {
   const mapa = new Map();
   for (const it of itens) {
     const c = getConcurso(it.cid);
@@ -52,16 +58,37 @@ export function mesclarConcursos(itens) {
     // Constitucional" da OAB 2ª fase ≠ "Direito Constitucional" da PC/AC) — nunca mescla,
     // fica com um nome próprio pra aparecer separado no cronograma combinado.
     const ehAreaOAB2 = it.fase === 'f2' && !!it.area;
+    const chave = chaveItem(it);
+    // cada matéria para na véspera da prova do concurso dela
+    const fimIt = fimPorItem[chave] || vespera(dataDoItem(it));
+    const ehPrioritario = !!prioritario && chave === prioritario;
     for (const d of disciplinasDo(it.cid, it.cargo || 'ambos', it.fase || '', it.area || '')) {
       const k = ehAreaOAB2 ? `${normNome(d.nome)}::${it.cid}::${it.area}` : normNome(d.nome);
       const nomeExibido = ehAreaOAB2 ? `${d.nome} (${c.sigla})` : d.nome;
-      const e = mapa.get(k) || { nome: nomeExibido, topicos: [], origens: [] };
+      const e = mapa.get(k) || { nome: nomeExibido, topicos: [], origens: [], fim: '', pesoEdital: 1, prioritaria: false };
       for (const t of d.topicos || []) if (!e.topicos.some((x) => normNome(x) === normNome(t))) e.topicos.push(t);
       if (!e.origens.includes(c.sigla)) e.origens.push(c.sigla);
+      // matéria que aparece em mais de um concurso vale até a última prova e herda o maior peso
+      if (fimIt && (!e.fim || fimIt > e.fim)) e.fim = fimIt;
+      e.pesoEdital = Math.max(e.pesoEdital, pesoDoEdital(c, d, it));
+      e.prioritaria = e.prioritaria || ehPrioritario;
       mapa.set(k, e);
     }
   }
   return [...mapa.values()];
+}
+// Matérias e configuração efetiva de um cronograma combinado (usado tanto pelo assistente
+// quanto por quem só tem a configuração salva — ver src/lib/cronogramaSalvo.js).
+export function discsDoCombinado(itens, cfg = {}) {
+  const ordenados = itensNaOrdem(itens || [], cfg.ordemItens);
+  const fimPorItem = {};
+  for (const it of ordenados) fimPorItem[chaveItem(it)] = cfg.fimPorItem?.[chaveItem(it)] || vespera(dataDoItem(it));
+  const prioritario = ordenados.length ? chaveItem(ordenados[0]) : '';
+  const discs = mesclarConcursos(ordenados, { fimPorItem, prioritario });
+  // o cronograma vai até a última das provas; cada matéria para na prova do concurso dela
+  const ultimo = Object.values(fimPorItem).filter(Boolean).sort().at(-1) || cfg.fim;
+  const fimPorMateria = Object.fromEntries(discs.filter((d) => d.fim).map((d) => [d.nome, d.fim]));
+  return { discs, ordenados, fimPorItem, cfg: { ...cfg, fim: cfg.sequencial ? cfg.fim : ultimo || cfg.fim, fimPorMateria } };
 }
 export function dataDoItem(it) {
   const c = getConcurso(it.cid);
@@ -117,24 +144,57 @@ export default function Cronograma({ ctx, voltar, combinado = null }) {
 
   const vert = combinado ? null : verticalizadoDe(prefs, concurso.id, fase, area);
   // usa o edital verticalizado do aluno (se houver); senão, as matérias do concurso
-  const usar = editando ? cfg : normalizar(salvo?.cfg, dataProva);
+  const usarBase = editando ? cfg : normalizar(salvo?.cfg, dataProva);
   // cargos: o cronograma pode juntar as matérias de um ou vários cargos
   const listaCargos = concurso.cargos || [];
   const temCargos = listaCargos.length > 1;
   const cargosPadrao = cargo === 'ambos' || !cargo ? listaCargos.map((c) => c.id) : Array.isArray(cargo) ? cargo : [cargo];
-  const cargosSel = (usar.cargos?.length ? usar.cargos : cargosPadrao).filter((id) => listaCargos.some((c) => c.id === id));
+  const cargosSel = (usarBase.cargos?.length ? usarBase.cargos : cargosPadrao).filter((id) => listaCargos.some((c) => c.id === id));
   const nomeCargo = (id) => listaCargos.find((c) => c.id === id)?.nome || id;
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  const discsMix = useMemo(() => (combinado ? mesclarConcursos(combinado.itens) : null), [combinado?.chave]);
-  const discs = discsMix || (vert ? vert.disciplinas : disciplinasDo(concurso.id, temCargos ? (cargosSel.length ? cargosSel : 'ambos') : cargo, fase, area));
-  const discursiva = (faseObj?.formato || concurso.formato) === 'discursiva';
 
   // combinado sequencial: uma prova inteira antes da próxima, pela ordem de prioridade escolhida
   const itensPriorizados = useMemo(
-    () => (combinado ? itensNaOrdem(combinado.itens, usar.ordemItens) : null),
+    () => (combinado ? itensNaOrdem(combinado.itens, usarBase.ordemItens) : null),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [combinado?.chave, (usar.ordemItens || []).join()],
+    [combinado?.chave, (usarBase.ordemItens || []).join()],
   );
+  // combinado: matérias mescladas + data final de cada prova + peso do edital, tudo junto
+  const doCombinado = useMemo(
+    () => (combinado ? discsDoCombinado(combinado.itens, usarBase) : null),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [combinado?.chave, usarBase],
+  );
+  const fimPorItem = doCombinado?.fimPorItem || null;
+  const discsMix = doCombinado?.discs || null;
+  const discsCru = discsMix || (vert ? vert.disciplinas : disciplinasDo(concurso.id, temCargos ? (cargosSel.length ? cargosSel : 'ambos') : cargo, fase, area));
+  // matérias com o peso que o edital dá a elas (no combinado o peso já vem da mescla)
+  const discs = useMemo(
+    () => (discsMix ? discsMix : discsCru.map((d) => ({ ...d, pesoEdital: pesoDoEdital(concurso, d, { fase, area }) }))),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [discsMix, discsCru.map((d) => d.nome).join('|'), concurso.id, fase, area],
+  );
+  const discursiva = (faseObj?.formato || concurso.formato) === 'discursiva';
+
+  // pesos do edital já preenchidos na etapa "Matérias" (sem mexer no que o usuário escolher depois)
+  const assinaturaPesos = discs.map((d) => `${d.nome}:${d.pesoEdital || 1}`).join('|');
+  useEffect(() => {
+    if (!editando) return;
+    setCfg((c) => {
+      const materias = { ...(c.materias || {}) };
+      let mudou = false;
+      for (const d of discs) {
+        if (!materias[d.nome]?.peso && (d.pesoEdital || 1) > 1) {
+          materias[d.nome] = { ...materias[d.nome], peso: d.pesoEdital };
+          mudou = true;
+        }
+      }
+      return mudou ? { ...c, materias } : c;
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [editando, assinaturaPesos]);
+
+  // no combinado, o cronograma vai até a última das provas (cada matéria para na prova dela)
+  const usar = doCombinado?.cfg || usarBase;
   const sequencial = !!(combinado && usar.sequencial);
   const segmentos = useMemo(
     () => (sequencial ? segmentosSequenciais(itensPriorizados, usar.folgaDias, usar.inicio) : null),
@@ -185,7 +245,17 @@ export default function Cronograma({ ctx, voltar, combinado = null }) {
     set('ordemItens', chaves);
   };
 
-  const salvar = (novo) => setPrefs({ cronogramas: { ...(prefs.cronogramas || {}), [chave]: { ...novo, ...(combinado ? { mix: combinado.itens, nome: combinado.nome } : {}) } } });
+  // cronogramas individuais dos concursos que entraram no combinado (somem quando o combinado é criado)
+  const individuaisSubstituidos = combinado
+    ? Object.keys(prefs.cronogramas || {}).filter((k) => !k.startsWith('mix|') && combinado.itens.some((it) => it.cid === k.split('|')[0]))
+    : [];
+  const salvar = (novo, { limparIndividuais = false } = {}) => {
+    const mapa = { ...(prefs.cronogramas || {}) };
+    // um cronograma combinado substitui os cronogramas individuais dos concursos dele:
+    // fica só o combinado na lista, em vez de três cronogramas concorrentes
+    if (limparIndividuais) for (const k of individuaisSubstituidos) delete mapa[k];
+    setPrefs({ cronogramas: { ...mapa, [chave]: { ...novo, ...(combinado ? { mix: combinado.itens, nome: combinado.nome } : {}) } } });
+  };
   const marcar = (k) => {
     const n = { ...feitos };
     n[k] ? delete n[k] : (n[k] = 1);
@@ -222,7 +292,9 @@ export default function Cronograma({ ctx, voltar, combinado = null }) {
   if (editando) {
     const mat = (nome) => cfg.materias[nome] || {};
     const setMat = (nome, v) => set('materias', { ...cfg.materias, [nome]: { ...mat(nome), ...v } });
-    const ordenadas = materiasAtivas({ ...cfg, materias: {} }, discs);
+    // lista todas (inclusive as desmarcadas), mas na mesma ordem que o cronograma vai usar
+    const todasAtivas = Object.fromEntries(Object.entries(cfg.materias || {}).map(([k, v]) => [k, { ...v, ativa: true }]));
+    const ordenadas = materiasAtivas({ ...cfg, materias: todasAtivas }, discs);
     const mover = (i, delta) => {
       const nomes = ordenadas.map((d) => d.nome);
       const j = i + delta;
@@ -239,7 +311,8 @@ export default function Cronograma({ ctx, voltar, combinado = null }) {
     const semAparecer = ativas.filter((d) => !contagem[d.nome]).map((d) => d.nome);
     const ultimo = passo === passos.length - 1;
 
-    const confirmar = () => { salvar({ cfg, feitos: salvo?.feitos || {} }); setEditando(false); };
+    // no combinado, guarda a data final real (a última das provas), pra lista e cards não mostrarem a primeira
+    const confirmar = () => { salvar({ cfg: combinado && !cfg.sequencial ? { ...cfg, fim: usar.fim } : cfg, feitos: salvo?.feitos || {} }, { limparIndividuais: true }); setEditando(false); };
 
     return (
       <div>
@@ -276,11 +349,24 @@ export default function Cronograma({ ctx, voltar, combinado = null }) {
             </div>
             <div className="filtros" style={{ marginTop: 12 }}>
               <label className="campo">Começar em<input type="date" style={campo} value={cfg.inicio} onChange={(e) => set('inicio', e.target.value)} /></label>
-              {!sequencial && (
+              {!sequencial && !fimPorItem && (
                 <label className="campo">Até (véspera da prova)<input type="date" style={campo} value={cfg.fim} onChange={(e) => set('fim', e.target.value)} /></label>
               )}
+              {!sequencial && fimPorItem && itensPriorizados.map((it) => {
+                const k = chaveItem(it);
+                const c = getConcurso(it.cid);
+                return (
+                  <label key={k} className="campo">
+                    Estudar {c?.sigla} até
+                    <input type="date" style={campo} value={fimPorItem[k] || ''} onChange={(e) => set('fimPorItem', { ...(cfg.fimPorItem || {}), [k]: e.target.value })} />
+                  </label>
+                );
+              })}
             </div>
-            {!dataProva && !sequencial && <p className="sub peq">A data da prova ainda não está cadastrada; escolha a data final acima.</p>}
+            {!sequencial && fimPorItem && (
+              <p className="sub peq">Cada prova tem a sua data: as matérias de cada concurso são agendadas só até a véspera da prova dele. Depois que uma prova passa, o cronograma continua com as matérias da outra.</p>
+            )}
+            {!dataProva && !sequencial && !fimPorItem && <p className="sub peq">A data da prova ainda não está cadastrada; escolha a data final acima.</p>}
             {sequencial && <p className="sub peq">A data final de cada prova é calculada no passo "Prioridade", a partir da ordem escolhida.</p>}
           </section>
         )}
@@ -403,6 +489,11 @@ export default function Cronograma({ ctx, voltar, combinado = null }) {
                           <select style={campo} value={m.peso || 1} onChange={(e) => setMat(d.nome, { peso: +e.target.value })}>
                             <option value="1">Normal</option><option value="2">Alto (2×)</option><option value="3">Muito alto (3×)</option>
                           </select>
+                          {(d.pesoEdital || 1) > 1 && (
+                            <span className="peq sub">
+                              {d.pesoEdital === 3 ? 'Pelo edital: prova prático-profissional (2ª fase) — sugerido Muito alto' : 'Pelo edital: matéria de peso 2 — sugerido Alto'}
+                            </span>
+                          )}
                         </label>
                       </div>
                     )}
@@ -416,14 +507,24 @@ export default function Cronograma({ ctx, voltar, combinado = null }) {
         {nomePasso === 'Dias e horas' && (
           <section className="card">
             <h2>Em quais dias e horários você vai estudar?</h2>
+            <p className="sub peq" style={{ marginTop: 0 }}>
+              Em cada dia você escolhe: <b>Por horário</b> (ex.: das 19h às 22h, com hora marcada) ou <b>Por horas</b> (ex.: 6 horas no domingo, você encaixa no horário que der — o cronograma mostra os blocos sem hora marcada).
+            </p>
             <ul className="lista-materias">
               {ORDEM_DIAS.map((d) => {
                 const on = cfg.dias.includes(d);
                 const [a, b] = cfg.janelas[d];
                 const n = blocosNoDia(cfg, d);
+                const porHoras = cfg.modoDia?.[d] === 'horas';
                 const setJ = (i, v) => set('janelas', { ...cfg.janelas, [d]: i === 0 ? [v, b] : [a, v] });
-                const horasAtuais = Math.max(0, minutos(b) - minutos(a)) / 60;
-                const setHoras = (h) => { const horas = Math.max(0, Math.min(16, h)); setJ(1, paraHora(minutos(a) + horas * 60)); };
+                const horasJanela = Math.max(0, minutos(b) - minutos(a)) / 60;
+                const setHorasJanela = (h) => { const horas = Math.max(0, Math.min(16, h)); setJ(1, paraHora(minutos(a) + horas * 60)); };
+                const horasSoltas = cfg.horasDia?.[d] ?? horasJanela;
+                const setHorasSoltas = (h) => set('horasDia', { ...(cfg.horasDia || {}), [d]: Math.max(0, Math.min(16, h)) });
+                const trocarModo = (m) => {
+                  set('modoDia', { ...(cfg.modoDia || {}), [d]: m });
+                  if (m === 'horas' && cfg.horasDia?.[d] == null) set('horasDia', { ...(cfg.horasDia || {}), [d]: horasJanela });
+                };
                 return (
                   <li key={d} className="linha" style={{ alignItems: 'center', opacity: on ? 1 : 0.55, flexWrap: 'wrap' }}>
                     <label style={{ minWidth: 110, display: 'flex', gap: 8, alignItems: 'center' }}>
@@ -432,14 +533,27 @@ export default function Cronograma({ ctx, voltar, combinado = null }) {
                     </label>
                     {on && (
                       <>
-                        <input type="time" aria-label={`${NOME_DIA[d]}: início`} style={{ ...campo, width: 'auto' }} value={a} onChange={(e) => setJ(0, e.target.value)} />
-                        <span>até</span>
-                        <input type="time" aria-label={`${NOME_DIA[d]}: fim`} style={{ ...campo, width: 'auto' }} value={b} onChange={(e) => setJ(1, e.target.value)} />
-                        <label className="peq" style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
-                          ou
-                          <input type="number" min="0" max="16" step="0.5" aria-label={`${NOME_DIA[d]}: quantidade de horas de estudo`} style={{ ...campo, width: 64 }} value={horasAtuais} onChange={(e) => setHoras(+e.target.value || 0)} />
-                          horas
-                        </label>
+                        <select aria-label={`${NOME_DIA[d]}: como definir o estudo`} style={{ ...campo, width: 'auto' }} value={porHoras ? 'horas' : 'horario'} onChange={(e) => trocarModo(e.target.value)}>
+                          <option value="horario">Por horário</option>
+                          <option value="horas">Por horas</option>
+                        </select>
+                        {porHoras ? (
+                          <label className="peq" style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
+                            <input type="number" min="0" max="16" step="0.5" aria-label={`${NOME_DIA[d]}: horas de estudo no dia`} style={{ ...campo, width: 70 }} value={horasSoltas} onChange={(e) => setHorasSoltas(+e.target.value || 0)} />
+                            horas no dia, sem hora marcada
+                          </label>
+                        ) : (
+                          <>
+                            <input type="time" aria-label={`${NOME_DIA[d]}: início`} style={{ ...campo, width: 'auto' }} value={a} onChange={(e) => setJ(0, e.target.value)} />
+                            <span>até</span>
+                            <input type="time" aria-label={`${NOME_DIA[d]}: fim`} style={{ ...campo, width: 'auto' }} value={b} onChange={(e) => setJ(1, e.target.value)} />
+                            <label className="peq" style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
+                              ou
+                              <input type="number" min="0" max="16" step="0.5" aria-label={`${NOME_DIA[d]}: quantidade de horas de estudo`} style={{ ...campo, width: 64 }} value={horasJanela} onChange={(e) => setHorasJanela(+e.target.value || 0)} />
+                              horas
+                            </label>
+                          </>
+                        )}
                         <span className="peq sub">{n} {n === 1 ? 'bloco' : 'blocos'} · {fmtHoras(n * cfg.bloco)}</span>
                       </>
                     )}
@@ -504,6 +618,13 @@ export default function Cronograma({ ctx, voltar, combinado = null }) {
               <li>Revisões: {cfg.revisoes.length ? cfg.revisoes.map((i) => `${i} ${i === 1 ? 'dia' : 'dias'}`).join(', ') : 'não incluídas'}{cfg.diasRevisao ? ` · ${cfg.diasRevisao} dias finais de revisão geral` : ''}</li>
               <li>No total: <b>{sessoes.length} blocos</b>, <b>{horas} horas</b>{sessoes.length > 0 && <> · de {fmtData(sessoes[0].data)} a {fmtData(sessoes.at(-1).data)}</>}</li>
             </ul>
+            {individuaisSubstituidos.length > 0 && (
+              <p className="aviso">
+                Ao salvar, {individuaisSubstituidos.length === 1 ? 'o cronograma individual' : 'os cronogramas individuais'} de{' '}
+                <b>{[...new Set(individuaisSubstituidos.map((k) => getConcurso(k.split('|')[0])?.sigla || '?'))].join(' e ')}</b>{' '}
+                {individuaisSubstituidos.length === 1 ? 'será excluído' : 'serão excluídos'} — fica só este combinado na sua lista.
+              </p>
+            )}
             {segmentos && (
               <>
                 <h3 style={{ marginBottom: 4 }}>Ordem das provas</h3>
@@ -560,9 +681,9 @@ export default function Cronograma({ ctx, voltar, combinado = null }) {
     const ok = !!feitos[k];
     return (
       <li className="sessao">
-        <input type="checkbox" checked={ok} onChange={() => marcar(k)} aria-label={`Concluída: ${s.disciplina} às ${s.ini}`} />
+        <input type="checkbox" checked={ok} onChange={() => marcar(k)} aria-label={`Concluída: ${s.disciplina} ${s.ini ? `às ${s.ini}` : `(bloco ${(s.idx ?? 0) + 1})`}`} />
         <div style={{ flex: 1, opacity: ok ? 0.6 : 1 }}>
-          <div className="peq sub">{s.ini}–{s.fim} {s.origemSigla && <span>· {s.origemSigla}</span>} {s.tipo !== 'estudo' && <span>· 🔁 revisão</span>} {ok && <b className="sobe">· ✓ feito</b>}</div>
+          <div className="peq sub">{s.ini ? `${s.ini}–${s.fim}` : `Bloco ${(s.idx ?? 0) + 1} · ${fmtHoras(usar.bloco)} (sem hora marcada)`} {s.origemSigla && <span>· {s.origemSigla}</span>} {s.tipo !== 'estudo' && <span>· 🔁 revisão</span>} {ok && <b className="sobe">· ✓ feito</b>}</div>
           <b>{s.disciplina}</b>
           <div className="peq">{s.tema}</div>
         </div>
