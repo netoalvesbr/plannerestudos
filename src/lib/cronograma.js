@@ -221,8 +221,9 @@ export function gerarCronograma(cfg, disciplinas, { discursiva = false } = {}) {
         for (let j = deJ; j < s[dow].length; j++) {
           const atual = s[dow][j];
           if ((conta[atual] || 0) <= 1) continue;
-          // trocar só pode aumentar as matérias do dia se ainda couber no limite
-          if (s[dow].filter((x) => x === atual).length === 1 && distintasNoDia >= lim) continue;
+          // se a matéria cedente aparece 2× no mesmo dia, ela continua lá e o dia ganha mais uma
+          // matéria diferente: só vale se ainda couber no limite (trocar 1× por 1× é neutro)
+          if (s[dow].filter((x) => x === atual).length > 1 && distintasNoDia >= lim) continue;
           if (!alvo || conta[atual] > conta[alvo.nome]) alvo = { dow, j, nome: atual };
         }
       }
