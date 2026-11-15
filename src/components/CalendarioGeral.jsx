@@ -32,8 +32,9 @@ export function rotuloDoConcurso(c, todos, prefs) {
 export function tipoEvento(e) {
   const t = (e.titulo || '').toLowerCase();
   if (e.prova) return { rot: 'Dia de prova', ico: '🔴' };
-  if (/pagamento|boleto|taxa/.test(t)) return { rot: 'Pagamento da inscrição', ico: '💳' };
+  // isenção vem antes: "isenção da taxa" também casa com /taxa/, mas não é pagamento
   if (/isen[çc]/.test(t)) return { rot: 'Isenção da taxa', ico: '🆓' };
+  if (/pagamento|boleto|taxa/.test(t)) return { rot: 'Pagamento da inscrição', ico: '💳' };
   if (/inscri[çc]/.test(t)) return { rot: 'Inscrições', ico: '📝' };
   if (/loca(l|is)/.test(t)) return { rot: 'Local de prova', ico: '📍' };
   if (/gabarito|padr[ãa]o de resposta/.test(t)) return { rot: 'Gabarito / padrão de resposta', ico: '✅' };
