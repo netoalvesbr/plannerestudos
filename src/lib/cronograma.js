@@ -206,6 +206,34 @@ export function gerarCronograma(cfg, disciplinas, { discursiva = false } = {}) {
     return lista;
   };
 
+  // No modo fixo a semana-modelo se repete igual até a prova: se uma matéria não entrar nela,
+  // ela nunca é estudada. Então, se sobrar matéria de fora, troca uma repetição de outra por ela.
+  const garantirTodas = (s, disp) => {
+    const dows = Object.keys(s);
+    const conta = {};
+    for (const dow of dows) for (const n of s[dow]) conta[n] = (conta[n] || 0) + 1;
+    for (const n of disp) {
+      if (conta[n]) continue;
+      let alvo = null;
+      for (const dow of dows) {
+        if (s[dow].includes(n)) continue; // não repete a mesma matéria duas vezes no mesmo dia
+        const distintasNoDia = new Set(s[dow]).size;
+        // o primeiro bloco do dia é do concurso prioritário: não mexe nele
+        for (let j = prioritarias.size ? 1 : 0; j < s[dow].length; j++) {
+          const atual = s[dow][j];
+          if ((conta[atual] || 0) <= 1) continue;
+          // trocar só pode aumentar as matérias do dia se ainda couber no limite
+          if (s[dow].filter((x) => x === atual).length === 1 && distintasNoDia >= lim) continue;
+          if (!alvo || conta[atual] > conta[alvo.nome]) alvo = { dow, j, nome: atual };
+        }
+      }
+      if (!alvo) continue;
+      conta[alvo.nome]--;
+      s[alvo.dow][alvo.j] = n;
+      conta[n] = 1;
+    }
+  };
+
   // modo fixo: monta uma semana-modelo e repete. Quando uma prova passa e as matérias dela saem,
   // monta uma nova semana-modelo só com as que sobraram.
   const semanas = new Map();
@@ -215,6 +243,7 @@ export function gerarCronograma(cfg, disciplinas, { discursiva = false } = {}) {
       const base = new Set(disp);
       const s = {};
       for (const dow of [1, 2, 3, 4, 5, 6, 0]) if (cfg.dias.includes(dow)) s[dow] = planoDoDia(horariosDo(cfg, dow).length, base);
+      garantirTodas(s, disp);
       semanas.set(chave, s);
     }
     return semanas.get(chave);
