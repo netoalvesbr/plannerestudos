@@ -649,15 +649,17 @@ export default function Cronograma({ ctx, voltar, combinado = null }) {
             {semAparecer.length > 0 && (
               <p className="aviso">
                 Sem blocos para: {semAparecer.join(', ')}.
-                {cfg.simultaneas > 0 && (() => {
-                  const diasAtivos = cfg.dias.length;
-                  const vagasPrio = combinado && ativas.some((d) => d.prioritaria) ? diasAtivos : 0;
-                  const cabem = diasAtivos * cfg.simultaneas - vagasPrio;
-                  const faltam = Math.max(1, Math.ceil((ativas.length + (vagasPrio ? diasAtivos : 0)) / diasAtivos) - cfg.simultaneas);
+                {cfg.modo !== 'ciclo' && (() => {
+                  const diasAtivos = ORDEM_DIAS.filter((d) => cfg.dias.includes(d) && blocosNoDia(cfg, d) > 0);
+                  // numa semana cabem, no máximo, uma matéria por bloco — respeitando o limite de matérias por dia
+                  const cabem = diasAtivos.reduce((s, d) => {
+                    const n = blocosNoDia(cfg, d);
+                    return s + (cfg.simultaneas > 0 ? Math.min(n, cfg.simultaneas) : n);
+                  }, 0);
+                  const limiteAperta = cfg.simultaneas > 0 && diasAtivos.some((d) => blocosNoDia(cfg, d) > cfg.simultaneas);
                   return (
-                    <> No modo fixo a mesma semana se repete até a prova: com <b>{cfg.simultaneas} matérias por dia</b> em <b>{diasAtivos} {diasAtivos === 1 ? 'dia' : 'dias'}</b>
-                      {vagasPrio ? <> (e uma vaga por dia reservada ao concurso prioritário)</> : null}, cabem <b>{cabem}</b> matérias diferentes na semana — e você tem <b>{ativas.length}</b>.
-                      {' '}Na etapa <b>Blocos</b>, suba "matérias diferentes por dia" para <b>{cfg.simultaneas + faltam}</b>, ou inclua mais um dia de estudo.</>
+                    <> No modo fixo a mesma semana se repete até a prova, e nela cabem <b>{cabem}</b> matérias diferentes (uma por bloco) — você tem <b>{ativas.length}</b>.
+                      {' '}Para todas entrarem,{limiteAperta ? <> suba "matérias diferentes por dia" na etapa <b>Blocos</b>,</> : null} aumente as horas de algum dia (mais blocos) ou inclua mais um dia de estudo na etapa <b>Dias e horas</b>.</>
                   );
                 })()}
               </p>

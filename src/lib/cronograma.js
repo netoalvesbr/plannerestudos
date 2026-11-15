@@ -212,14 +212,13 @@ export function gerarCronograma(cfg, disciplinas, { discursiva = false } = {}) {
     const dows = Object.keys(s);
     const conta = {};
     for (const dow of dows) for (const n of s[dow]) conta[n] = (conta[n] || 0) + 1;
-    for (const n of disp) {
-      if (conta[n]) continue;
+    // procura o melhor bloco pra ceder: o da matéria que mais se repete na semana
+    const procurar = (n, deJ) => {
       let alvo = null;
       for (const dow of dows) {
         if (s[dow].includes(n)) continue; // não repete a mesma matéria duas vezes no mesmo dia
         const distintasNoDia = new Set(s[dow]).size;
-        // o primeiro bloco do dia é do concurso prioritário: não mexe nele
-        for (let j = prioritarias.size ? 1 : 0; j < s[dow].length; j++) {
+        for (let j = deJ; j < s[dow].length; j++) {
           const atual = s[dow][j];
           if ((conta[atual] || 0) <= 1) continue;
           // trocar só pode aumentar as matérias do dia se ainda couber no limite
@@ -227,6 +226,13 @@ export function gerarCronograma(cfg, disciplinas, { discursiva = false } = {}) {
           if (!alvo || conta[atual] > conta[alvo.nome]) alvo = { dow, j, nome: atual };
         }
       }
+      return alvo;
+    };
+    for (const n of disp) {
+      if (conta[n]) continue;
+      // primeiro tenta sem mexer no bloco de abertura do dia (reservado ao concurso prioritário);
+      // se não houver outro jeito de encaixar a matéria, cede um desses blocos
+      const alvo = procurar(n, prioritarias.size ? 1 : 0) || (prioritarias.size ? procurar(n, 0) : null);
       if (!alvo) continue;
       conta[alvo.nome]--;
       s[alvo.dow][alvo.j] = n;
