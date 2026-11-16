@@ -7,6 +7,7 @@ import Calendario, { ProximaData } from './Calendario.jsx';
 import { anteriorDe, DATAS_PADRAO, datasDoEdital, eventosDoAluno, nomeAnterior, proximaDoAnterior } from '../lib/exameAnterior.js';
 import EditalVerticalizado from './EditalVerticalizado.jsx';
 import MenuDivulgar from './Divulgar.jsx';
+import Vitrine from './Vitrine.jsx';
 import { aplicarRepescagem, ehOAB, eventosRepescagem } from '../data/modelos.js';
 import { enviarEdital } from '../lib/remoto.js';
 import { vespera } from '../lib/cronograma.js';
@@ -16,15 +17,21 @@ import { PROVEDORES_LOGIN } from '../data/config.js';
 import { getModo, criarConta, entrarComProvedor, definirNovaSenha, entrarComSenha, entrarLocal, recuperarSenha } from '../lib/store.js';
 
 export function Login({ aoEntrar }) {
+  // quem chega sem conta vê primeiro a apresentação da plataforma; o formulário abre a partir dela
+  const vitrinePrimeiro = getModo() === 'conta' || (typeof window !== 'undefined' && new URLSearchParams(window.location.search).has('vitrine'));
+  const [tela, setTela] = useState(vitrinePrimeiro ? 'vitrine' : 'form');
+  const [abaInicial, setAbaInicial] = useState('entrar');
+  const abrir = (aba) => { setAbaInicial(aba); setTela('form'); };
+  if (tela === 'vitrine') return <Vitrine aoCriarConta={() => abrir('criar')} aoEntrar={() => abrir('entrar')} />;
   return (
     <div>
       <MenuDivulgar />
-      <LoginForm aoEntrar={aoEntrar} />
+      <LoginForm aoEntrar={aoEntrar} abaInicial={abaInicial} aoVoltar={vitrinePrimeiro ? () => setTela('vitrine') : null} />
     </div>
   );
 }
 
-function LoginForm({ aoEntrar }) {
+function LoginForm({ aoEntrar, abaInicial, aoVoltar }) {
   const [nome, setNome] = useState('');
 
   if (getModo() !== 'conta') {
@@ -38,6 +45,9 @@ function LoginForm({ aoEntrar }) {
           aoEntrar();
         }}
       >
+        {aoVoltar && (
+          <button type="button" className="btn peq" onClick={aoVoltar} style={{ marginBottom: 10 }}>← Conhecer a plataforma</button>
+        )}
         <h1>Bem-vindo ao EstudaAí</h1>
         <p className="sub">Banco de questões, mapas mentais e desempenho para concursos.</p>
         {getModo() === 'local' && <p className="aviso">Respostas salvas apenas neste aparelho.</p>}
@@ -50,11 +60,11 @@ function LoginForm({ aoEntrar }) {
     );
   }
 
-  return <LoginConta aoEntrar={aoEntrar} />;
+  return <LoginConta aoEntrar={aoEntrar} abaInicial={abaInicial} aoVoltar={aoVoltar} />;
 }
 
-function LoginConta({ aoEntrar }) {
-  const [aba, setAba] = useState('entrar'); // entrar | criar | esqueci
+function LoginConta({ aoEntrar, abaInicial, aoVoltar }) {
+  const [aba, setAba] = useState(abaInicial || 'entrar'); // entrar | criar | esqueci
   const [nome, setNome] = useState('');
   const [email, setEmail] = useState('');
   const [senha, setSenha] = useState('');
@@ -95,6 +105,9 @@ function LoginConta({ aoEntrar }) {
   };
   return (
     <div className="login">
+      {aoVoltar && (
+        <button type="button" className="btn peq" onClick={aoVoltar} style={{ marginBottom: 10 }}>← Conhecer a plataforma</button>
+      )}
       <div className="centro" style={{ marginBottom: 16 }}>
         <div className="logo" style={{ fontSize: '2rem' }}>📚 EstudaAí</div>
         <p className="sub">Banco de questões, provas diárias, mapas mentais e desempenho para concursos.</p>
