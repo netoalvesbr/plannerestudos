@@ -1,6 +1,6 @@
 import { textoDoPdf } from '../lib/leitorPdf.js';
 import { useEffect, useMemo, useState } from 'react';
-import { analisarProva, identificarMateria, lerGabarito, lerGabaritoPartes } from '../lib/leitura.js';
+import { analisarCadernoTreinos, analisarProva, ehCadernoDeTreinos, identificarMateria, lerGabarito, lerGabaritoPartes } from '../lib/leitura.js';
 import { POR_UID, QUESTOES } from '../lib/dados.js';
 import { salvarQuestoes, uidDe } from '../lib/remoto.js';
 
@@ -90,7 +90,10 @@ export default function ImportarProva({ concursos, concursoInicial, faseInicial,
 
   // Separa as questões e monta o relatório de conferência: o que o arquivo parece ter x o que foi lido
   async function aplicarProva(linhas, nomeArquivo = '') {
-    const { questoes: lidas, relatorio } = analisarProva(linhas, formato);
+    // caderno de treinos da 2ª fase: peça + espelho + questões com padrão de resposta
+    const caderno = ehCadernoDeTreinos(linhas);
+    if (caderno && formato !== 'discursiva') setFormato('discursiva');
+    const { questoes: lidas, relatorio } = caderno ? analisarCadernoTreinos(linhas) : analisarProva(linhas, formato);
     if (!lidas.length) {
       setErro('Não consegui separar as questões automaticamente. Verifique se o PDF tem texto (não é imagem escaneada) e se as questões são numeradas (1, 2, 3… ou "QUESTÃO 1").');
       setStatus(null);
@@ -117,6 +120,10 @@ export default function ImportarProva({ concursos, concursoInicial, faseInicial,
     const material_ = lidas.filter((q) => q.comentario).length >= lidas.length / 2;
     if (material_) setMeta((m) => ({ ...m, banca: '', ano: '' }));
     setErro(null);
+    if (caderno) {
+      setStatus(`Caderno de treinos: ${relatorio.treinos} treinos · ${relatorio.pecas} peças e ${qs.length - relatorio.pecas} questões, cada uma com o espelho/padrão de resposta. As orientações de uso, o sumário, os anexos e a folha de respostas não foram importados. Confira abaixo antes de salvar.`);
+      return;
+    }
     const comGab = qs.filter((q) => q.gabarito || q.anulada).length;
     setStatus(`${qs.length} questões lidas do arquivo${relatorio.gabaritoNoArquivo ? ` · gabarito encontrado no próprio arquivo em ${comGab}` : formato === 'discursiva' ? '' : ' · gabarito não encontrado no arquivo: importe no passo 3'}${material_ ? ' · comentários lidos junto com as questões (tratei como material de estudo: banca e ano ficaram em branco; preencha se for prova oficial)' : ''}. Veja a conferência abaixo antes de salvar.`);
   }
@@ -214,7 +221,12 @@ export default function ImportarProva({ concursos, concursoInicial, faseInicial,
           orgao: meta.orgao,
           ...(semOrigem ? limparQuestao(q, marcas) : {}),
           origem: material ? 'material_biblioteca' : q.origem,
-          fonte: semOrigem ? 'Banco de questões EstudaAí' : ([meta.banca, meta.ano, meta.orgao].filter(Boolean).join(' · ') || 'Material importado') + ` – questão ${q.numero}`,
+          // item de caderno de treinos guarda de qual treino veio, que é como o aluno se localiza
+          fonte: semOrigem
+            ? 'Banco de questões EstudaAí'
+            : q.fonteItem
+              ? ([meta.banca, meta.ano, meta.orgao].filter(Boolean).join(' · ') || 'Caderno de treinos') + ` – ${q.fonteItem}`
+              : ([meta.banca, meta.ano, meta.orgao].filter(Boolean).join(' · ') || 'Material importado') + ` – questão ${q.numero}`,
         });
       }
       const r = await salvarQuestoes(lista);

@@ -862,3 +862,149 @@ export function identificarMateria(linhas, disciplinas = [], nomeArquivo = '') {
   }
   return { materia: d ? d.nome : tema, assunto: d && tema && n(d.nome) !== n(tema) ? tema : '', motivo: d ? motivo : tema ? 'título do arquivo' : '' };
 }
+
+// ---------- caderno de treinos da 2ª fase (peça + questões discursivas) ----------
+// Material no padrão "TREINO Nº 01 → PEÇA/ENUNCIADO → ESPELHO → QUESTÃO 1..4 + PADRÃO DE RESPOSTA
+// → ANEXO". Aqui só interessam a peça, o espelho, as questões e os padrões de resposta: orientações
+// de uso, sumário, anexos, folha de respostas e índice de peças ficam de fora.
+const CAD = {
+  treino: /^TREINO\s*N[º°o.]*\s*(\d+)\s*$/i,
+  peca: /^PE[ÇC]A\s+PR[ÁA]TICO-PROFISSIONAL\s*$/i,
+  enunciado: /^ENUNCIADO\s*$/i,
+  espelho: /^ESPELHO\s*[—–-]/i,
+  questao: /^QUEST[ÃA]O\s*(\d+)\s*$/i,
+  padrao: /^PADR[ÃA]O\s+DE\s+RESPOSTA\s*$/i,
+  // daqui em diante não é conteúdo do treino
+  descartar: /^(ANEXO\s*[—–-]|CADERNO DE TEXTOS DEFINITIVOS|[ÍI]NDICE DE PE[ÇC]AS|EXAME DE ORDEM\s*[—–-]\s*PROVA)/i,
+};
+
+// nome da peça, lido do próprio espelho (o enunciado nunca entrega a peça ao candidato)
+const PECAS_ESPELHO = [
+  [/A[ÇC][ÃA]O\s+DIRETA\s+DE\s+INCONSTITUCIONALIDADE\s+POR\s+OMISS[ÃA]O/i, 'Ação Direta de Inconstitucionalidade por Omissão (ADO)'],
+  [/A[ÇC][ÃA]O\s+DIRETA\s+DE\s+INCONSTITUCIONALIDADE/i, 'Ação Direta de Inconstitucionalidade (ADI)'],
+  [/A[ÇC][ÃA]O\s+DECLARAT[ÓO]RIA\s+DE\s+CONSTITUCIONALIDADE/i, 'Ação Declaratória de Constitucionalidade (ADC)'],
+  [/ARGUI[ÇC][ÃA]O\s+DE\s+DESCUMPRIMENTO\s+DE\s+PRECEITO\s+FUNDAMENTAL/i, 'Arguição de Descumprimento de Preceito Fundamental (ADPF)'],
+  [/MANDADO\s+DE\s+INJUN[ÇC][ÃA]O\s+COLETIVO/i, 'Mandado de Injunção coletivo'],
+  [/MANDADO\s+DE\s+INJUN[ÇC][ÃA]O/i, 'Mandado de Injunção individual'],
+  [/MANDADO\s+DE\s+SEGURAN[ÇC]A\s+COLETIVO/i, 'Mandado de Segurança coletivo'],
+  [/MANDADO\s+DE\s+SEGURAN[ÇC]A/i, 'Mandado de Segurança individual'],
+  [/HABEAS\s+DATA/i, 'Habeas Data'],
+  [/A[ÇC][ÃA]O\s+CIVIL\s+P[ÚU]BLICA/i, 'Ação Civil Pública'],
+  [/A[ÇC][ÃA]O\s+POPULAR/i, 'Ação Popular'],
+  [/RECLAMA[ÇC][ÃA]O/i, 'Reclamação Constitucional'],
+  [/RECURSO\s+EXTRAORDIN[ÁA]RIO/i, 'Recurso Extraordinário'],
+  [/RECURSO\s+ORDIN[ÁA]RIO/i, 'Recurso Ordinário Constitucional'],
+];
+// os cabeçalhos do caderno vêm em caixa alta; "Peça prático-profissional" em meio ao anexo, não
+const soMaiusculas = (l) => !!l && l === l.toUpperCase() && /[A-ZÀ-Ý]/.test(l);
+
+export function pecaDoEspelho(espelho) {
+  // o nome da peça está no título em caixa alta do espelho, não em citações dentro do texto
+  const titulos = (espelho || '').split('\n').filter((l) => soMaiusculas(l.trim()) && l.trim().length < 130);
+  for (const t of titulos) for (const [re, nome] of PECAS_ESPELHO) if (re.test(t)) return nome;
+  return '';
+}
+
+// Vale a pena ler como caderno de treinos? (vários treinos, cada um com o seu espelho)
+export function ehCadernoDeTreinos(linhas) {
+  let treinos = 0;
+  let espelhos = 0;
+  for (const l of linhas) {
+    const t = (l || '').trim();
+    if (!soMaiusculas(t)) continue;
+    if (CAD.treino.test(t)) treinos++;
+    else if (CAD.espelho.test(t)) espelhos++;
+    if (treinos >= 2 && espelhos >= 2) return true;
+  }
+  return false;
+}
+
+export function analisarCadernoTreinos(linhasOriginais) {
+  const linhas = semCabecalhoDePagina(linhasOriginais.map((l) => (l || '').trim())).filter(Boolean);
+  const treinos = [];
+  let atual = null;
+  let secao = null;
+  let buffer = [];
+  let ultima = 0;
+
+  const fechar = () => {
+    if (!atual || !secao) return;
+    const texto = buffer.join('\n').trim();
+    buffer = [];
+    if (!texto) return;
+    if (secao === 'peca') atual.peca = texto;
+    else if (secao === 'espelho') atual.espelho = texto;
+    else if (secao[0] === 'q') atual.questoes[+secao[1] - 1].enunciado = texto;
+    else if (secao.startsWith('r')) atual.questoes[+secao[1] - 1].resposta = texto;
+  };
+
+  for (const l of linhas) {
+    const mt = soMaiusculas(l) ? l.match(CAD.treino) : null;
+    if (mt) {
+      fechar();
+      atual = { numero: +mt[1], peca: '', espelho: '', questoes: [1, 2, 3, 4].map(() => ({ enunciado: '', resposta: '' })) };
+      treinos.push(atual);
+      secao = null;
+      ultima = 0;
+      continue;
+    }
+    if (!atual) continue; // orientações e sumário, antes do primeiro treino
+    const cabecalho = soMaiusculas(l);
+    if (cabecalho && CAD.descartar.test(l)) { fechar(); secao = null; continue; }
+    if (cabecalho && (CAD.peca.test(l) || CAD.enunciado.test(l))) { fechar(); secao = 'peca'; continue; }
+    if (cabecalho && CAD.espelho.test(l)) { fechar(); secao = 'espelho'; continue; }
+    const mq = cabecalho ? l.match(CAD.questao) : null;
+    if (mq && +mq[1] >= 1 && +mq[1] <= 4) { fechar(); ultima = +mq[1]; secao = `q${ultima}`; continue; }
+    if (cabecalho && CAD.padrao.test(l)) { fechar(); secao = ultima ? `r${ultima}` : null; continue; }
+    if (secao) buffer.push(l);
+  }
+  fechar();
+
+  const questoes = [];
+  const incompletos = [];
+  let n = 0;
+  for (const t of treinos) {
+    const peca = pecaDoEspelho(t.espelho);
+    const rotulo = `Treino nº ${String(t.numero).padStart(2, '0')}`;
+    if (t.peca && t.espelho) {
+      questoes.push({
+        numero: ++n,
+        enunciado: t.peca,
+        espelho: t.espelho,
+        alternativas: null,
+        gabarito: '',
+        assunto: peca,
+        bloco: 'Peça prático-profissional',
+        fonteItem: `${rotulo}${peca ? ` (${peca})` : ''}`,
+      });
+    } else incompletos.push(`${rotulo}: peça sem enunciado ou sem espelho`);
+    t.questoes.forEach((q, i) => {
+      if (q.enunciado && q.resposta) {
+        questoes.push({
+          numero: ++n,
+          enunciado: q.enunciado,
+          espelho: q.resposta,
+          alternativas: null,
+          gabarito: '',
+          assunto: 'Questões discursivas (2ª fase)',
+          bloco: 'Questões 1 a 4',
+          fonteItem: `${rotulo}, Questão ${i + 1}${peca ? ` (peça do treino: ${peca})` : ''}`,
+        });
+      } else if (q.enunciado || q.resposta) incompletos.push(`${rotulo} Q${i + 1}: falta o enunciado ou o padrão de resposta`);
+    });
+  }
+  return {
+    questoes,
+    relatorio: {
+      caderno: true,
+      treinos: treinos.length,
+      pecas: questoes.filter((q) => q.bloco === 'Peça prático-profissional').length,
+      marcadoresA: null,
+      maiorNumero: questoes.length,
+      partes: 1,
+      faltando: [],
+      suspeitas: incompletos,
+      gabaritoNoArquivo: questoes.length,
+    },
+  };
+}
