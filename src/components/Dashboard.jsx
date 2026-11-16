@@ -1,5 +1,6 @@
 import { useMemo } from 'react';
 import { getConcurso } from '../data/concursos.js';
+import { siteDaBanca } from '../lib/bancas.js';
 import { QUESTOES, questoesDo } from '../lib/dados.js';
 import { chaveRevisao, chaveSessao } from '../lib/cronograma.js';
 import { sessoesDoCronograma } from '../lib/cronogramaSalvo.js';
@@ -149,6 +150,18 @@ export default function Dashboard({ ctx, ir, abrirCrono, estudarConcurso }) {
                 <p className="sub peq" style={{ marginTop: 2 }}>
                   {c.nome}
                   {nomeCargos(c, pc.cargo) && <><br />Cargo: {nomeCargos(c, pc.cargo)}</>}
+                  {c.banca && (() => {
+                    const s = siteDaBanca(c.banca);
+                    return (
+                      <><br />Banca: {c.banca}
+                        {s && (
+                          <> · <a href={s.url} target="_blank" rel="noopener noreferrer" aria-label={s.oficial ? `Abrir o site da banca ${c.banca} em nova aba` : `Procurar o site da banca ${c.banca} em nova aba`}>
+                            🔗 {s.oficial ? 'site da banca' : 'procurar o site'}
+                          </a></>
+                        )}
+                      </>
+                    );
+                  })()}
                   {f && <><br />Você estuda: {f.nome}</>}
                 </p>
                 {prova ? (

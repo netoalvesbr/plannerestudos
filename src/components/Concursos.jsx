@@ -2,6 +2,7 @@ import { lerEdital } from '../lib/leitura.js';
 import { textoDoPdf } from '../lib/leitorPdf.js';
 import { useState } from 'react';
 import { todosConcursos } from '../data/concursos.js';
+import { siteDaBanca } from '../lib/bancas.js';
 import Calendario, { ProximaData } from './Calendario.jsx';
 import { anteriorDe, DATAS_PADRAO, datasDoEdital, eventosDoAluno, nomeAnterior, proximaDoAnterior } from '../lib/exameAnterior.js';
 import EditalVerticalizado from './EditalVerticalizado.jsx';
@@ -448,7 +449,17 @@ export function Ficha({ ctx, concurso, voltar }) {
       <button className="btn peq" onClick={voltar} style={{ marginBottom: 10 }}>← Voltar</button>
       <section className="card">
         <h1>{concurso.nome} ({concurso.sigla})</h1>
-        <p className="sub">{[concurso.banca && `Banca ${concurso.banca}`, concurso.orgao].filter(Boolean).join(' · ')}</p>
+        <p className="sub">
+          {[concurso.banca && `Banca ${concurso.banca}`, concurso.orgao].filter(Boolean).join(' · ')}
+          {concurso.banca && (() => {
+            const s = siteDaBanca(concurso.banca);
+            return s ? (
+              <> · <a href={s.url} target="_blank" rel="noopener noreferrer" aria-label={s.oficial ? `Abrir o site da banca ${concurso.banca} em nova aba` : `Procurar o site da banca ${concurso.banca} em nova aba`}>
+                🔗 {s.oficial ? 'site da banca' : 'procurar o site'}
+              </a></>
+            ) : null;
+          })()}
+        </p>
         <div className="linha">
           <button className="btn" onClick={() => abrirImportarProva(concurso.id, fase, area)}>📥 Importar prova</button>
           {podeEditar && <button className="btn" onClick={() => abrirEditarConcurso(concurso.id)}>✏️ Editar / reimportar edital</button>}
