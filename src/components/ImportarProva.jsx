@@ -48,6 +48,8 @@ export default function ImportarProva({ concursos, concursoInicial, faseInicial,
   const [erro, setErro] = useState(null);
   const [colarProva, setColarProva] = useState('');
   const [colarGab, setColarGab] = useState('');
+  // o gabarito foi importado à parte (true) ou veio no próprio arquivo da prova (false)
+  const [gabaritoAParte, setGabaritoAParte] = useState(false);
   const [salvando, setSalvando] = useState(false);
   const [semOrigem, setSemOrigem] = useState(!!material);
   const [marcas, setMarcas] = useState('');
@@ -111,6 +113,7 @@ export default function ImportarProva({ concursos, concursoInicial, faseInicial,
     setQuestoes(qs);
     setRel(relatorio);
     setConfirmo(false);
+    setGabaritoAParte(false); // prova nova: o gabarito que valer agora é o que vier dela
     // matéria do arquivo: usada nas questões que vieram sem disciplina
     const id = identificarMateria(linhas, (concurso?.disciplinas || []).filter((d) => (!fase || !d.fase || d.fase === fase) && (!area || !d.area || d.area === area)), nomeArquivo);
     setAchado(id.materia ? id : null);
@@ -160,6 +163,7 @@ export default function ImportarProva({ concursos, concursoInicial, faseInicial,
       }),
     );
     const faltam = questoes.length - casadas;
+    if (casadas) setGabaritoAParte(true);
     setStatus(`Gabarito aplicado: ${casadas} de ${questoes.length} questões receberam resposta.${faltam ? ` ✗ ${faltam} ficaram sem gabarito: elas não podem ser importadas enquanto não tiverem resposta.` : ' ✓ Todas com gabarito.'}`);
   }
 
@@ -191,6 +195,7 @@ export default function ImportarProva({ concursos, concursoInicial, faseInicial,
   // conferência: o que o arquivo parece ter x o que foi lido
   const semGab = questoes.filter((q) => formato !== 'discursiva' && !q.anulada && !q.gabarito).length;
   const anuladas = questoes.filter((q) => q.anulada).length;
+  const comGabarito = questoes.length - semGab;
   const jaNoBanco = questoes.filter((q) => q.jaExiste).length;
   const repetidas = questoes.filter((q) => q.repetida && !q.jaExiste).length;
   const contagemDiverge = rel?.marcadoresA != null && rel.marcadoresA !== questoes.length;
@@ -309,16 +314,33 @@ export default function ImportarProva({ concursos, concursoInicial, faseInicial,
         </details>
       </section>
 
-      {questoes.length > 0 && formato !== 'discursiva' && (
+      {formato !== 'discursiva' && (
         <section className="card">
           <h2>3. Gabarito</h2>
+          {/* há prova que traz o gabarito no próprio arquivo e há prova em que ele vem separado:
+              o passo fica sempre à vista e diz em qual dos dois casos você está */}
+          {!questoes.length ? (
+            <p className="sub" style={{ marginTop: 0 }}>
+              Importe a prova no passo 2 primeiro. Se o gabarito vier no próprio arquivo da prova, eu aproveito de lá e você nem precisa deste passo; se vier separado, é aqui que você importa.
+            </p>
+          ) : (
+            <p className={comGabarito ? 'sub' : 'aviso'} style={{ marginTop: 0 }}>
+              {comGabarito === questoes.length
+                ? gabaritoAParte
+                  ? `✓ Gabarito aplicado: todas as ${questoes.length} questões estão com resposta. Se este era o preliminar, pode importar o definitivo por cima.`
+                  : `✓ O gabarito já veio junto com a prova: todas as ${questoes.length} questões estão com resposta. Só importe aqui se quiser substituir pelo gabarito definitivo.`
+                : comGabarito
+                  ? `O gabarito veio junto com a prova em ${comGabarito} de ${questoes.length} questões. Importe o gabarito abaixo para completar as outras ${questoes.length - comGabarito}.`
+                  : `Não encontrei gabarito no arquivo da prova — nesta o gabarito vem separado. Importe o PDF do gabarito abaixo (ou cole as respostas).`}
+            </p>
+          )}
           <label className="campo">PDF do gabarito (de preferência o definitivo)
-            <input type="file" accept="application/pdf" onChange={(e) => lerArquivoGabarito(e.target.files[0])} style={{ display: 'block', marginTop: 6 }} />
+            <input type="file" accept="application/pdf" disabled={!questoes.length} onChange={(e) => lerArquivoGabarito(e.target.files[0])} style={{ display: 'block', marginTop: 6 }} />
           </label>
           <details style={{ marginTop: 10 }}>
             <summary className="sub">Ou cole o gabarito</summary>
             <textarea rows={3} style={{ ...campo, marginTop: 6 }} value={colarGab} onChange={(e) => setColarGab(e.target.value)} placeholder="1-A 2-C 3-B … (X ou * = anulada)" />
-            <button type="button" className="btn peq" onClick={() => aplicarGabarito(colarGab)} disabled={!colarGab.trim()}>Aplicar gabarito</button>
+            <button type="button" className="btn peq" onClick={() => aplicarGabarito(colarGab)} disabled={!colarGab.trim() || !questoes.length}>Aplicar gabarito</button>
           </details>
         </section>
       )}
