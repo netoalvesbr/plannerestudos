@@ -502,3 +502,30 @@ export async function mudarPrivacidade(item, privado) {
   const { error } = await supabase.from('biblioteca').update({ privado }).eq('id', item.id);
   if (error) throw new Error(/privado/.test(error.message) ? 'A opção de arquivo privado ainda não foi ativada no banco de dados.' : error.message);
 }
+
+// ---------- planos (quem tem acesso liberado) ----------
+// Quem define o plano é o administrador. A pessoa só consegue ler o próprio (ver 009_planos.sql).
+export async function planosDosUsuarios() {
+  if (!supabase) return {};
+  const { data, error } = await supabase.from('planos').select('user_id, plano, ate, obs, atualizado_em');
+  if (error) {
+    if (/planos/i.test(error.message)) return { _faltaTabela: true };
+    throw new Error(error.message);
+  }
+  return Object.fromEntries((data || []).map((p) => [p.user_id, p]));
+}
+
+export async function definirPlano(userId, plano, { ate = null, obs = null } = {}) {
+  if (!supabase) throw new Error('Os planos só funcionam com contas (modo online).');
+  const linha = { user_id: userId, plano, ate: plano === 'ilimitado' ? null : ate, obs, atualizado_em: new Date().toISOString() };
+  const { error } = await supabase.from('planos').upsert(linha, { onConflict: 'user_id' });
+  if (error) throw new Error(/planos/i.test(error.message) ? 'A tabela de planos ainda não foi criada no banco (009_planos.sql).' : error.message);
+  return linha;
+}
+
+export async function meuPlano() {
+  if (!supabase) return { plano: 'ilimitado', ativo: true };
+  const { data, error } = await supabase.rpc('meu_plano');
+  if (error) return { plano: 'teste', ativo: true, indefinido: true };
+  return data?.[0] || { plano: 'teste', ativo: true };
+}

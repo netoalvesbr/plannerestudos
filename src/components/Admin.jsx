@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { dadosAdmin } from '../lib/remoto.js';
+import { dadosAdmin, definirPlano, planosDosUsuarios } from '../lib/remoto.js';
 import ImportarLeis from './ImportarLeis.jsx';
 
 // Painel do administrador: quantas pessoas têm conta, quantas já entraram e quantas vezes cada uma acessou.
@@ -9,6 +9,7 @@ const fmtD = (d) => (d ? new Date(d).toLocaleDateString('pt-BR') : '—');
 const fmtDH = (d) => (d ? new Date(d).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', year: '2-digit', hour: '2-digit', minute: '2-digit' }) : '—');
 const PERIODOS = { dia: ['Hoje', 0], semana: ['Últimos 7 dias', 6], mes: ['Últimos 30 dias', 29] };
 const PROV = { google: 'Google', email: 'E-mail e senha' };
+const PLANOS = { teste: 'Teste grátis', mensal: 'Mensal', ilimitado: 'Ilimitado' };
 
 export default function Admin() {
   const [dados, setDados] = useState(null);
@@ -17,11 +18,30 @@ export default function Admin() {
   const [busca, setBusca] = useState('');
   const [ordem, setOrdem] = useState('acessos');
 
+  const [planos, setPlanos] = useState({});
+  const [salvandoPlano, setSalvandoPlano] = useState(null);
+  const [avisoPlano, setAvisoPlano] = useState(null);
+
   const carregar = () => {
     setErro(null);
     dadosAdmin().then(setDados).catch((e) => setErro(e.message));
+    planosDosUsuarios().then(setPlanos).catch(() => setPlanos({}));
   };
   useEffect(carregar, []);
+
+  // libera ou limita o acesso de uma pessoa
+  const trocarPlano = async (u, plano) => {
+    setSalvandoPlano(u.id);
+    setAvisoPlano(null);
+    try {
+      const linha = await definirPlano(u.id, plano);
+      setPlanos((p) => ({ ...p, [u.id]: linha }));
+      setAvisoPlano({ ok: true, texto: `✓ ${u.nome || u.email}: plano ${PLANOS[plano].toLowerCase()}.` });
+    } catch (e) {
+      setAvisoPlano({ ok: false, texto: e.message });
+    }
+    setSalvandoPlano(null);
+  };
 
   const calc = useMemo(() => {
     if (!dados) return null;
@@ -122,15 +142,30 @@ export default function Admin() {
             </select>
           </label>
         </div>
+        {planos._faltaTabela && (
+          <p className="aviso">Para definir planos, rode antes o arquivo <b>supabase/009_planos.sql</b> no banco de dados.</p>
+        )}
+        {avisoPlano && <p className={avisoPlano.ok ? 'sub' : 'aviso'}>{avisoPlano.texto}</p>}
         <div className="tabela-rolagem">
           <table className="tabela-admin">
             <thead>
-              <tr><th>Pessoa</th><th>Acessos ({PERIODOS[periodo][0].toLowerCase()})</th><th>Hoje</th><th>7 dias</th><th>30 dias</th><th>Último acesso</th><th>Cadastro</th><th>Entrada</th></tr>
+              <tr><th>Pessoa</th><th>Plano</th><th>Acessos ({PERIODOS[periodo][0].toLowerCase()})</th><th>Hoje</th><th>7 dias</th><th>30 dias</th><th>Último acesso</th><th>Cadastro</th><th>Entrada</th></tr>
             </thead>
             <tbody>
               {lista.map((u) => (
                 <tr key={u.id}>
                   <td><b>{u.nome || '(sem nome)'}</b><div className="peq sub">{u.email}</div></td>
+                  <td>
+                    <select
+                      aria-label={`Plano de ${u.nome || u.email}`}
+                      value={planos[u.id]?.plano || 'teste'}
+                      disabled={salvandoPlano === u.id || planos._faltaTabela}
+                      onChange={(e) => trocarPlano(u, e.target.value)}
+                    >
+                      {Object.entries(PLANOS).map(([k, rot]) => <option key={k} value={k}>{rot}</option>)}
+                    </select>
+                    {planos[u.id]?.plano === 'ilimitado' && <div className="peq sobe">✓ acesso liberado</div>}
+                  </td>
                   <td className="num"><b>{u.est[periodo]}</b></td>
                   <td className="num">{u.est.dia}</td>
                   <td className="num">{u.est.semana}</td>
