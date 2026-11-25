@@ -45,3 +45,35 @@ export async function textoDoPdf(arquivo, aoProgredir, maxPaginas = Infinity) {
   }
   return linhas;
 }
+
+// Sumário vindo dos marcadores do próprio PDF (o índice que o leitor mostra na barra lateral).
+// Quando existe, é muito mais confiável do que ler a página de sumário: já traz o título e a
+// página de destino exatos. Devolve [] se o PDF não tiver marcadores.
+export async function sumarioDosMarcadores(arquivo) {
+  await prepararPdf();
+  const dados = new Uint8Array(await arquivo.arrayBuffer());
+  const doc = await pdfjs.getDocument({ data: dados }).promise;
+  const raiz = await doc.getOutline();
+  if (!raiz?.length) return [];
+
+  const paginaDe = async (item) => {
+    try {
+      const dest = typeof item.dest === 'string' ? await doc.getDestination(item.dest) : item.dest;
+      if (!Array.isArray(dest) || !dest[0]) return null;
+      return (await doc.getPageIndex(dest[0])) + 1;
+    } catch {
+      return null;
+    }
+  };
+
+  const saida = [];
+  const andar = async (itens, nivel) => {
+    for (const it of itens) {
+      const titulo = String(it.title || '').replace(/\s+/g, ' ').trim();
+      if (titulo) saida.push({ titulo, pagina: await paginaDe(it), nivel });
+      if (it.items?.length && nivel < 4) await andar(it.items, nivel + 1);
+    }
+  };
+  await andar(raiz, 1);
+  return saida;
+}

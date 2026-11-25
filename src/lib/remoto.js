@@ -607,15 +607,38 @@ export async function salvarLeitura(dados) {
     criado_em: new Date().toISOString(),
   };
   if (!supabase) {
+    // Sem conta não há onde guardar o áudio (o navegador não aguenta arquivos grandes),
+    // então guardamos só o texto. Quem chama oferece o download do áudio.
     const nova = { id: `local-${Date.now()}`, ...linha };
-    // sem conta guardamos as 100 últimas, para não estourar o espaço do navegador
     localStorage.setItem(LS_LEIT, JSON.stringify([nova, ...leitLocal()].slice(0, 100)));
     return nova;
   }
   const { data: { user } = {} } = await supabase.auth.getUser();
   if (!user) throw new Error('Entre na sua conta para guardar a leitura.');
+
+  // o áudio vai primeiro: se o envio falhar, não deixamos um registro apontando para o vazio
+  let caminho = null;
+  if (dados.audio?.blob) {
+    const nome = `${user.id}/${Date.now()}.${dados.audio.ext || 'webm'}`;
+    const { error: eUp } = await supabase.storage
+      .from('leituras')
+      .upload(nome, dados.audio.blob, { contentType: dados.audio.mime, upsert: false });
+    if (eUp) {
+      if (/bucket|not found/i.test(eUp.message)) throw new Error('O espaço do áudio ainda não foi criado no banco (012_leitura_audio.sql).');
+      if (/size|large|exceeded/i.test(eUp.message)) throw new Error('O áudio ficou grande demais para ser guardado. Faça leituras mais curtas.');
+      throw new Error(`Não foi possível enviar o áudio: ${eUp.message}`);
+    }
+    caminho = nome;
+    linha.audio = nome;
+    linha.audio_bytes = dados.audio.bytes || dados.audio.blob.size;
+    linha.audio_tipo = dados.audio.mime || null;
+  }
+
   const { data, error } = await supabase.from('leituras').insert({ ...linha, user_id: user.id }).select().single();
-  if (error) throw new Error(semTabelaLeit(error.message) ? 'O registro de leituras ainda não foi criado no banco (011_leituras.sql).' : error.message);
+  if (error) {
+    if (caminho) await supabase.storage.from('leituras').remove([caminho]);
+    throw new Error(semTabelaLeit(error.message) ? 'O registro de leituras ainda não foi criado no banco (011_leituras.sql).' : error.message);
+  }
   return data;
 }
 
@@ -629,11 +652,30 @@ export async function minhasLeituras({ limite = 50 } = {}) {
   return data || [];
 }
 
-export async function excluirLeitura(id) {
+export async function excluirLeitura(id, caminhoAudio = null) {
   if (!supabase || String(id).startsWith('local-')) {
     localStorage.setItem(LS_LEIT, JSON.stringify(leitLocal().filter((l) => l.id !== id)));
     return;
   }
   const { error } = await supabase.from('leituras').delete().eq('id', id);
   if (error) throw new Error(error.message);
+  if (caminhoAudio) await supabase.storage.from('leituras').remove([caminhoAudio]);
+}
+
+// endereço temporário para tocar ou baixar o áudio de uma leitura (vale 2 horas)
+export async function linkAudioLeitura(caminho, baixar = false) {
+  if (!supabase || !caminho) return null;
+  const { data, error } = await supabase.storage
+    .from('leituras')
+    .createSignedUrl(caminho, 7200, baixar ? { download: true } : undefined);
+  if (error) throw new Error(error.message);
+  return data.signedUrl;
+}
+
+// quanto espaço as suas leituras já ocupam
+export async function espacoDasLeituras() {
+  if (!supabase) return 0;
+  const { data, error } = await supabase.from('leituras').select('audio_bytes');
+  if (error) return 0;
+  return (data || []).reduce((a, l) => a + (l.audio_bytes || 0), 0);
 }
