@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { dadosAdmin, definirPlano, planosDosUsuarios } from '../lib/remoto.js';
+import { dadosAdmin, definirPlano, mudarSituacaoSugestao, planosDosUsuarios, todasSugestoes } from '../lib/remoto.js';
 import ImportarLeis from './ImportarLeis.jsx';
 
 // Painel do administrador: quantas pessoas têm conta, quantas já entraram e quantas vezes cada uma acessou.
@@ -10,6 +10,8 @@ const fmtDH = (d) => (d ? new Date(d).toLocaleString('pt-BR', { day: '2-digit', 
 const PERIODOS = { dia: ['Hoje', 0], semana: ['Últimos 7 dias', 6], mes: ['Últimos 30 dias', 29] };
 const PROV = { google: 'Google', email: 'E-mail e senha' };
 const PLANOS = { teste: 'Teste grátis', mensal: 'Mensal', ilimitado: 'Ilimitado' };
+const TIPO_SUG = { sugestao: '💡 Sugestão', problema: '🐞 Problema', duvida: '❓ Dúvida', elogio: '👍 Elogio' };
+const SIT_SUG = { nova: 'Recebida', lendo: 'Em análise', feita: '✓ Atendida', arquivada: 'Arquivada' };
 
 export default function Admin() {
   const [dados, setDados] = useState(null);
@@ -18,6 +20,7 @@ export default function Admin() {
   const [busca, setBusca] = useState('');
   const [ordem, setOrdem] = useState('acessos');
 
+  const [sugs, setSugs] = useState({ lista: [] });
   const [planos, setPlanos] = useState({});
   const [salvandoPlano, setSalvandoPlano] = useState(null);
   const [avisoPlano, setAvisoPlano] = useState(null);
@@ -26,6 +29,7 @@ export default function Admin() {
     setErro(null);
     dadosAdmin().then(setDados).catch((e) => setErro(e.message));
     planosDosUsuarios().then(setPlanos).catch(() => setPlanos({}));
+    todasSugestoes().then((r) => setSugs(Array.isArray(r) ? { lista: r } : r)).catch(() => setSugs({ lista: [] }));
   };
   useEffect(carregar, []);
 
@@ -180,6 +184,50 @@ export default function Admin() {
         </div>
         {!lista.length && <p className="sub">Ninguém encontrado.</p>}
         <p className="peq sub" style={{ marginTop: 8 }}>Os acessos passaram a ser contados a partir da ativação deste painel; antes disso só existe a data do último login.</p>
+      </section>
+      <section>
+        <h2>💬 Opiniões e melhorias ({sugs.lista?.length || 0})</h2>
+        {sugs._faltaTabela && (
+          <p className="aviso" role="alert">
+            ✗ A caixa de sugestões ainda não existe no banco. Rode <b>supabase/010_sugestoes.sql</b> no SQL Editor do Supabase.
+          </p>
+        )}
+        {!sugs._faltaTabela && !sugs.lista?.length && <p className="sub">Nenhum recado recebido ainda.</p>}
+        {(sugs.lista || []).map((s) => (
+          <div className="card" key={s.id}>
+            <div className="linha entre">
+              <b>{TIPO_SUG[s.tipo] || s.tipo}</b>
+              <span className="peq sub">{fmtDH(s.criado_em)}</span>
+            </div>
+            <p className="peq sub" style={{ margin: '2px 0' }}>
+              {s.nome || 'sem nome'} · {s.email || 'sem e-mail'}{s.nota ? ` · nota ${s.nota} de 5` : ''}{s.tela ? ` · tela: ${s.tela}` : ''}
+            </p>
+            <p style={{ whiteSpace: 'pre-line', margin: '8px 0' }}>{s.texto}</p>
+            <label className="campo">
+              Situação
+              <select
+                value={s.situacao || 'nova'}
+                onChange={async (e) => {
+                  const situacao = e.target.value;
+                  try {
+                    await mudarSituacaoSugestao(s.id, situacao);
+                    setSugs((v) => ({ ...v, lista: v.lista.map((x) => (x.id === s.id ? { ...x, situacao } : x)) }));
+                  } catch (err) {
+                    setAvisoPlano({ ok: false, texto: err.message });
+                  }
+                }}
+                style={{ width: 'auto' }}
+              >
+                {Object.entries(SIT_SUG).map(([k, rot]) => <option key={k} value={k}>{rot}</option>)}
+              </select>
+            </label>
+            {s.email && (
+              <p className="peq" style={{ marginBottom: 0 }}>
+                <a href={`mailto:${s.email}?subject=${encodeURIComponent('EstudaAí – sobre o seu recado')}`}>Responder por e-mail</a>
+              </p>
+            )}
+          </div>
+        ))}
       </section>
       <ImportarLeis />
     </div>

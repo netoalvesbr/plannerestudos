@@ -2,12 +2,15 @@
 // Tudo aqui descreve o que a plataforma realmente faz: nada de depoimento, número de alunos
 // ou promessa de aprovação. Se um recurso sair do ar, tire a linha dele daqui também.
 
+import Rodape from './Rodape.jsx';
+import { CONTATO } from '../data/config.js';
+
 // ----- mexa aqui quando fechar os valores -----
 export const PLANO = {
   preco: 'R$ 19,90',
   periodo: '/mês',
   diasTeste: 7,
-  contato: 'estudaai.suporte@gmail.com', // troque pelo e-mail/WhatsApp que você vai divulgar
+  contato: CONTATO.email, // para trocar o e-mail, mexa em src/data/config.js
 };
 
 const RECURSOS = [
@@ -183,14 +186,9 @@ export default function Vitrine({ aoCriarConta, aoEntrar }) {
         </div>
       </section>
 
-      <footer style={{ ...caixa, textAlign: 'center' }}>
-        <p className="sub peq">
-          Dúvidas? <a href={`mailto:${PLANO.contato}`}>{PLANO.contato}</a>
-        </p>
-        <p className="sub peq">
-          <a href="/privacidade.html">Política de Privacidade</a> · <a href="/termos.html">Termos de Uso</a>
-        </p>
-      </footer>
+      <div style={{ ...caixa, paddingBottom: 0 }}>
+        <Rodape aoCriarConta={aoCriarConta} />
+      </div>
     </div>
   );
 }

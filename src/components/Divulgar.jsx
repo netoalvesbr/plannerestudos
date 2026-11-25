@@ -73,13 +73,15 @@ export function Sugestoes({ nomeInicial = '' }) {
 }
 
 // Menu com as duas opções (tela de entrada e topo do site)
-export default function MenuDivulgar({ nome, compacto = false }) {
+// aoAbrirOpinioes: dentro do app o botão 💡 leva para a página de Opiniões e melhorias,
+// que grava o recado no sistema. Na tela de entrada (sem conta) continua abrindo o e-mail.
+export default function MenuDivulgar({ nome, compacto = false, aoAbrirOpinioes = null }) {
   const [aberto, setAberto] = useState(null);
   return (
     <>
       <div className={compacto ? 'linha' : 'linha extras-entrada'}>
         <button type="button" className={`btn${compacto ? ' peq' : ''}`} aria-expanded={aberto === 'comp'} onClick={() => setAberto(aberto === 'comp' ? null : 'comp')} aria-label="Compartilhar">🔗<span className={compacto ? 'so-largo' : ''}> Compartilhar</span></button>
-        <button type="button" className={`btn${compacto ? ' peq' : ''}`} aria-expanded={aberto === 'sug'} onClick={() => setAberto(aberto === 'sug' ? null : 'sug')} aria-label="Sugestões e melhorias">💡<span className={compacto ? 'so-largo' : ''}> Sugestões e melhorias</span></button>
+        <button type="button" className={`btn${compacto ? ' peq' : ''}`} aria-expanded={aoAbrirOpinioes ? undefined : aberto === 'sug'} onClick={() => (aoAbrirOpinioes ? aoAbrirOpinioes() : setAberto(aberto === 'sug' ? null : 'sug'))} aria-label="Sugestões e melhorias">💡<span className={compacto ? 'so-largo' : ''}> Sugestões e melhorias</span></button>
       </div>
       {aberto && (
         <>

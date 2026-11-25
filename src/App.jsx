@@ -13,6 +13,8 @@ import * as store from './lib/store.js';
 import { EscolhaArea, EscolhaCargo, EscolhaFase, Ficha, Login, MeusConcursos, NovaSenha } from './components/Concursos.jsx';
 import Questao, { Conclusao } from './components/Questao.jsx';
 import Painel from './components/Painel.jsx';
+import Opinioes from './components/Opinioes.jsx';
+import Rodape from './components/Rodape.jsx';
 import { Mapa } from './components/Mapas.jsx';
 import Estudar from './components/Estudar.jsx';
 import Biblioteca from './components/Biblioteca.jsx';
@@ -370,6 +372,8 @@ export default function App() {
     );
   } else if (tela.nome === 'biblioteca') {
     conteudo = <Biblioteca ctx={ctx} />;
+  } else if (tela.nome === 'opinioes') {
+    conteudo = <Opinioes ctx={{ ...ctx, telaAtual: tela.de || null }} />;
   } else if (tela.nome === 'admin' && usuario?.admin) {
     conteudo = <Admin />;
   } else if (tela.nome === 'cronograma' && !tela.abrir) {
@@ -468,7 +472,7 @@ export default function App() {
             <button className="logo" onClick={() => ir('dashboard')}>EstudaAí</button>
             <span className="sub">Olá, {usuario.nome.split(' ')[0]}</span>
             {usuario.admin && <button className="btn peq" aria-current={tela.nome === 'admin'} onClick={() => setTela({ nome: 'admin' })} title="Painel do administrador: pessoas e acessos" aria-label="Painel do administrador">👑<span className="so-largo"> Admin</span></button>}
-            <MenuDivulgar compacto nome={usuario.nome} />
+            <MenuDivulgar compacto nome={usuario.nome} aoAbrirOpinioes={() => setTela({ nome: 'opinioes', de: tela.nome })} />
             {seguindo.length > 1 && (
               <select aria-label="Concurso ativo" value={prefs.ativo || ''} onChange={(e) => { setPrefs({ ativo: e.target.value }); ir('dashboard'); }} style={{ width: 'auto' }}>
                 {seguindo.map((id) => <option key={id} value={id}>{getConcurso(id)?.sigla}</option>)}
@@ -500,6 +504,7 @@ export default function App() {
       {tela.nome === 'questoes' && tela.msg && <p className="aviso" role="status" style={{ background: 'var(--ok-bg)', color: 'var(--ok)' }}>{tela.msg}</p>}
       <main><ErroTela chave={tela.nome} aoSair={() => setTela({ nome: 'concursos' })}>{conteudo}</ErroTela></main>
       {!semTopo && <Cronometro materias={materiasCrono} cronogramas={cronogramasParaCrono} hojeSeg={hojeSeg} registrosHoje={prefs.tempos?.[new Date().toLocaleDateString('sv-SE')] || {}} sessoesHoje={prefs.sessoesEstudo?.[new Date().toLocaleDateString('sv-SE')] || []} aoRegistrar={registrarTempo} aoSalvarSessao={registrarSessao} />}
+      {!semTopo && <Rodape ir={(n) => setTela({ nome: n })} compacto={tela.nome !== 'dashboard'} />}
       {concurso && !precisaCargo && !precisaFase && <MenuDesempenho questoes={questoes} respostas={respostas} aoAbrirPainel={() => ir('painel')} />}
     </div>
   );

@@ -529,3 +529,57 @@ export async function meuPlano() {
   if (error) return { plano: 'teste', ativo: true, indefinido: true };
   return data?.[0] || { plano: 'teste', ativo: true };
 }
+
+// ---------- opiniões, problemas e sugestões de melhoria ----------
+// Em modo local (sem conta) guardamos no próprio aparelho para a pessoa não perder o que escreveu.
+const LS_SUG = 'estudaai_sugestoes';
+const sugLocal = () => { try { return JSON.parse(localStorage.getItem(LS_SUG) || '[]'); } catch { return []; } };
+
+const semTabelaSug = (msg) => /sugestoes|does not exist|schema cache/i.test(msg || '');
+
+export async function enviarSugestao({ tipo = 'sugestao', texto, nota = null, tela = null, nome = null, email = null }) {
+  const limpo = String(texto || '').trim();
+  if (limpo.length < 5) throw new Error('Escreva um pouco mais para eu entender o seu recado.');
+  if (limpo.length > 4000) throw new Error('O texto ficou muito longo. Resuma em até 4.000 caracteres.');
+  const linha = { tipo, texto: limpo, nota, tela, nome, email, criado_em: new Date().toISOString() };
+  if (!supabase) {
+    localStorage.setItem(LS_SUG, JSON.stringify([{ id: `local-${Date.now()}`, situacao: 'nova', ...linha }, ...sugLocal()]));
+    return { ...linha, local: true };
+  }
+  const { data: { user } = {} } = await supabase.auth.getUser();
+  if (!user) throw new Error('Entre na sua conta para enviar.');
+  const { data, error } = await supabase
+    .from('sugestoes')
+    .insert({ ...linha, user_id: user.id, nome: nome || user.user_metadata?.name || null, email: email || user.email || null })
+    .select()
+    .single();
+  if (error) throw new Error(semTabelaSug(error.message) ? 'A caixa de sugestões ainda não foi criada no banco (010_sugestoes.sql).' : error.message);
+  return data;
+}
+
+export async function minhasSugestoes() {
+  if (!supabase) return sugLocal();
+  const { data, error } = await supabase.from('sugestoes').select('*').order('criado_em', { ascending: false });
+  if (error) {
+    if (semTabelaSug(error.message)) return [];
+    throw new Error(error.message);
+  }
+  return data || [];
+}
+
+// administrador: lê tudo (a RLS é quem garante) e muda a situação
+export async function todasSugestoes() {
+  if (!supabase) return sugLocal();
+  const { data, error } = await supabase.from('sugestoes').select('*').order('criado_em', { ascending: false }).limit(300);
+  if (error) {
+    if (semTabelaSug(error.message)) return { _faltaTabela: true, lista: [] };
+    throw new Error(error.message);
+  }
+  return { lista: data || [] };
+}
+
+export async function mudarSituacaoSugestao(id, situacao) {
+  if (!supabase) throw new Error('Só funciona com conta (modo online).');
+  const { error } = await supabase.from('sugestoes').update({ situacao }).eq('id', id);
+  if (error) throw new Error(error.message);
+}
