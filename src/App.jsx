@@ -291,6 +291,8 @@ export default function App() {
       await remoto.salvarConcurso(dados, null, id);
       await recarregarBanco();
     },
+    registrarTempo,
+    registrarSessao,
     abrirPainel: () => setTela({ nome: 'painel' }),
     voltar: () => setTela({ nome: 'mapas' }),
     zerar,

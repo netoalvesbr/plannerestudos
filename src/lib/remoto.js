@@ -583,3 +583,57 @@ export async function mudarSituacaoSugestao(id, situacao) {
   const { error } = await supabase.from('sugestoes').update({ situacao }).eq('id', id);
   if (error) throw new Error(error.message);
 }
+
+// ---------- leituras em voz alta ----------
+// O texto lido é pessoal: a RLS (011_leituras.sql) deixa cada pessoa ver só as suas,
+// e o administrador NÃO tem acesso. Sem conta, fica guardado só no aparelho.
+const LS_LEIT = 'estudaai_leituras';
+const leitLocal = () => { try { return JSON.parse(localStorage.getItem(LS_LEIT) || '[]'); } catch { return []; } };
+
+const semTabelaLeit = (msg) => /leituras|does not exist|schema cache/i.test(msg || '');
+
+export async function salvarLeitura(dados) {
+  const linha = {
+    concurso_id: dados.concursoId || null,
+    materia: dados.materia || null,
+    assunto: dados.assunto || null,
+    obra: dados.obra || null,
+    pagina_ini: dados.paginaIni || null,
+    pagina_fim: dados.paginaFim || null,
+    texto: dados.texto || '',
+    palavras: dados.palavras || 0,
+    segundos: dados.segundos || 0,
+    idioma: dados.idioma || 'pt-BR',
+    criado_em: new Date().toISOString(),
+  };
+  if (!supabase) {
+    const nova = { id: `local-${Date.now()}`, ...linha };
+    // sem conta guardamos as 100 últimas, para não estourar o espaço do navegador
+    localStorage.setItem(LS_LEIT, JSON.stringify([nova, ...leitLocal()].slice(0, 100)));
+    return nova;
+  }
+  const { data: { user } = {} } = await supabase.auth.getUser();
+  if (!user) throw new Error('Entre na sua conta para guardar a leitura.');
+  const { data, error } = await supabase.from('leituras').insert({ ...linha, user_id: user.id }).select().single();
+  if (error) throw new Error(semTabelaLeit(error.message) ? 'O registro de leituras ainda não foi criado no banco (011_leituras.sql).' : error.message);
+  return data;
+}
+
+export async function minhasLeituras({ limite = 50 } = {}) {
+  if (!supabase) return leitLocal().slice(0, limite);
+  const { data, error } = await supabase.from('leituras').select('*').order('criado_em', { ascending: false }).limit(limite);
+  if (error) {
+    if (semTabelaLeit(error.message)) return [];
+    throw new Error(error.message);
+  }
+  return data || [];
+}
+
+export async function excluirLeitura(id) {
+  if (!supabase || String(id).startsWith('local-')) {
+    localStorage.setItem(LS_LEIT, JSON.stringify(leitLocal().filter((l) => l.id !== id)));
+    return;
+  }
+  const { error } = await supabase.from('leituras').delete().eq('id', id);
+  if (error) throw new Error(error.message);
+}

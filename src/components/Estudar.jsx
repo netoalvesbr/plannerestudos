@@ -2,13 +2,15 @@ import { ListaMapas } from './Mapas.jsx';
 import Leis from './Leis.jsx';
 import Flashcards from './Flashcards.jsx';
 import PdfInterativo from './PdfInterativo.jsx';
+import LeituraVoz from './LeituraVoz.jsx';
 
-// 📖 Estudar: PDF interativo, Leis, Flashcards e Mapas mentais
+// 📖 Estudar: PDF interativo, Leis, Flashcards, Mapas mentais e Leitura em voz alta
 const ABAS = [
   ['pdf', '📘 PDF interativo'],
   ['leis', '⚖️ Leis'],
   ['flash', '🃏 Flashcards'],
   ['mapas', '🧠 Mapas mentais'],
+  ['voz', '🎙️ Leitura em voz alta'],
 ];
 
 export default function Estudar({ ctx }) {
@@ -24,6 +26,7 @@ export default function Estudar({ ctx }) {
       {aba === 'leis' && <Leis ctx={ctx} />}
       {aba === 'flash' && <Flashcards ctx={ctx} />}
       {aba === 'mapas' && <ListaMapas ctx={ctx} />}
+      {aba === 'voz' && <LeituraVoz ctx={ctx} />}
     </div>
   );
 }

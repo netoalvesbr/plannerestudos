@@ -40,7 +40,7 @@ footer.fim{border-top:1px solid var(--borda);margin-top:36px;padding-top:16px;co
 </nav>
 </header>
 <h1>Política de Privacidade</h1>
-<p class="data">Última atualização: 24 de novembro de 2026.</p>
+<p class="data">Última atualização: 25 de novembro de 2026.</p>
 
 <div class="caixa">
 <p><b>Em uma frase:</b> o EstudaAí guarda o seu nome, o seu e-mail e o seu histórico de estudos só para fazer a plataforma funcionar. Ninguém além de você vê o seu histórico. Não vendemos nem alugamos os seus dados para ninguém, e você pode pedir a exclusão a qualquer momento.</p>
@@ -58,16 +58,18 @@ footer.fim{border-top:1px solid var(--borda);margin-top:36px;padding-top:16px;co
 <tr><td>Dados de estudo</td><td>Respostas às questões, acertos e erros, tempo gasto, cronogramas, registros do cronômetro, tarefas do calendário, metas e anotações.</td><td>O seu uso da plataforma.</td></tr>
 <tr><td>Arquivos que você envia</td><td>PDFs de editais, provas e materiais que você anexa à biblioteca.</td><td>Você.</td></tr>
 <tr><td>Dados de acesso</td><td>Data e hora de entrada, e registros técnicos gerados pelos serviços de hospedagem (como endereço IP e navegador).</td><td>Automático, pelos provedores de infraestrutura.</td></tr>
+<tr><td>Leitura em voz alta</td><td>O <b>texto transcrito</b> do que você leu, o tempo de leitura e as pausas. O áudio da sua voz <b>não é gravado nem guardado</b> por nós.</td><td>O microfone, quando você inicia uma leitura.</td></tr>
 <tr><td>O que você nos escreve</td><td>Mensagens de suporte, opiniões e sugestões de melhoria.</td><td>Você.</td></tr>
 </tbody>
 </table>
-<p><b>O que não coletamos:</b> não pedimos CPF, RG, endereço, dados bancários nem número de cartão. Não recebemos a sua senha do Google. Não usamos a câmera, o microfone nem a localização do seu aparelho.</p>
+<p><b>O que não coletamos:</b> não pedimos CPF, RG, endereço, dados bancários nem número de cartão. Não recebemos a sua senha do Google. Não usamos a câmera nem a localização do seu aparelho. O microfone é usado só na ferramenta de leitura em voz alta, quando você mesmo a inicia — veja o item 7.</p>
 
 <h2 id="finalidades">3. Para que usamos</h2>
 <ul>
 <li>Permitir que você entre na sua conta e encontre o seu histórico em qualquer aparelho.</li>
 <li>Montar e replanejar o seu cronograma e mostrar o seu desempenho.</li>
 <li>Responder o seu suporte e tratar as suas sugestões.</li>
+<li>Registrar o que você leu em voz alta e quanto tempo levou, para entrar no seu histórico de estudos.</li>
 <li>Controlar qual plano está ativo na sua conta e, quando houver cobrança, emitir e conferir pagamentos.</li>
 <li>Manter a segurança da plataforma e apurar uso indevido.</li>
 <li>Entender, de forma somada e sem identificar ninguém, quais telas são mais usadas, para decidir o que melhorar.</li>
@@ -89,7 +91,7 @@ footer.fim{border-top:1px solid var(--borda);margin-top:36px;padding-top:16px;co
 <tbody>
 <tr><td>Supabase</td><td>Banco de dados e sistema de contas, onde ficam guardados o seu cadastro e o seu histórico.</td></tr>
 <tr><td>Vercel</td><td>Hospedagem do site.</td></tr>
-<tr><td>Google</td><td>Apenas se você escolher entrar com a conta Google.</td></tr>
+<tr><td>Google</td><td>Se você escolher entrar com a conta Google, e no serviço de transcrição de fala do navegador Chrome usado pela leitura em voz alta (item 7).</td></tr>
 <tr><td>Meio de pagamento</td><td>Quando houver cobrança, a operadora escolhida processa o pagamento. Os dados do seu cartão são informados diretamente a ela e o EstudaAí não tem acesso a eles.</td></tr>
 </tbody>
 </table>
@@ -98,7 +100,19 @@ footer.fim{border-top:1px solid var(--borda);margin-top:36px;padding-top:16px;co
 <h2 id="internacional">6. Transferência internacional</h2>
 <p>Os serviços acima podem manter servidores fora do Brasil. Nesse caso a transferência ocorre nos termos do art. 33 da LGPD, para a execução do contrato com você e com base nas cláusulas e padrões de proteção adotados por esses fornecedores.</p>
 
-<h2 id="cookies">7. Cookies e armazenamento no seu aparelho</h2>
+<h2 id="microfone">7. Microfone e leitura em voz alta</h2>
+<p>A ferramenta de leitura em voz alta funciona assim:</p>
+<ul>
+<li>O microfone <b>só é ligado quando você clica em "Começar a ler"</b>, e é desligado quando você termina a leitura. Enquanto a leitura está ativa, a tela mostra se o microfone está ouvindo ou em pausa.</li>
+<li>A transcrição é feita pelo <b>recurso de reconhecimento de fala do próprio navegador</b>. No Chrome, isso significa que o áudio é enviado ao serviço de transcrição do Google, que devolve o texto. Esse envio é do navegador para o Google, e não passa pelos nossos servidores.</li>
+<li><b>Nós não gravamos, não transmitimos e não armazenamos o áudio da sua voz.</b> O que fica guardado na sua conta é apenas o texto transcrito, o tempo de leitura e as pausas.</li>
+<li>O texto da sua leitura é <b>só seu</b>: as regras do banco de dados impedem o acesso de qualquer outra conta, inclusive da administração.</li>
+<li>Você pode apagar qualquer leitura, com o texto registrado, na própria tela da ferramenta.</li>
+<li>Se você não quiser usar o microfone, simplesmente não use essa ferramenta. Todo o resto da plataforma funciona sem ela.</li>
+</ul>
+<p>O tratamento de voz pelo serviço do navegador segue a política de privacidade do fabricante do navegador que você escolheu usar.</p>
+
+<h2 id="cookies">8. Cookies e armazenamento no seu aparelho</h2>
 <p>O EstudaAí <b>não usa cookies de publicidade, de rastreamento ou de redes sociais.</b> Usamos apenas o mínimo para o site funcionar:</p>
 <ul>
 <li><b>Sessão de login:</b> guardado pelo sistema de contas para você não precisar digitar a senha a cada tela. Sem ele, não é possível manter você conectado.</li>
@@ -107,15 +121,16 @@ footer.fim{border-top:1px solid var(--borda);margin-top:36px;padding-top:16px;co
 </ul>
 <p>Você pode apagar tudo isso limpando os dados do site nas configurações do navegador. Ao fazer isso, você sai da conta e, no modo sem conta, perde o histórico local.</p>
 
-<h2 id="guarda">8. Por quanto tempo guardamos</h2>
+<h2 id="guarda">9. Por quanto tempo guardamos</h2>
 <ul>
 <li><b>Conta e histórico de estudos:</b> enquanto a sua conta existir. Se você pedir a exclusão, apagamos em até 15 dias.</li>
 <li><b>Registros de acesso:</b> 6 meses, conforme o art. 15 do Marco Civil da Internet.</li>
 <li><b>Documentos de cobrança:</b> pelo prazo exigido pela legislação fiscal.</li>
+<li><b>Leituras em voz alta:</b> enquanto você não apagar. São excluídas junto com a conta.</li>
 <li><b>Mensagens de suporte e sugestões:</b> até 2 anos, para acompanharmos o que foi pedido e já resolvido.</li>
 </ul>
 
-<h2 id="direitos">9. Os seus direitos</h2>
+<h2 id="direitos">10. Os seus direitos</h2>
 <p>O art. 18 da LGPD garante a você, a qualquer momento e sem custo, o direito de:</p>
 <ul>
 <li>saber se tratamos dados seus e quais são;</li>
@@ -131,13 +146,13 @@ footer.fim{border-top:1px solid var(--borda);margin-top:36px;padding-top:16px;co
 <p>Para exercer qualquer um deles, escreva para <a href="mailto:estudaai.suporte@gmail.com">estudaai.suporte@gmail.com</a> a partir do e-mail cadastrado. Respondemos em até 15 dias. Dentro da plataforma você também consegue, sozinho, zerar as suas respostas e copiar o seu histórico.</p>
 <p>Se não concordar com a nossa resposta, você pode reclamar à Autoridade Nacional de Proteção de Dados (ANPD) em <a href="https://www.gov.br/anpd/" target="_blank" rel="noreferrer">gov.br/anpd</a>.</p>
 
-<h2 id="seguranca">10. Segurança</h2>
+<h2 id="seguranca">11. Segurança</h2>
 <p>O acesso ao site é cifrado (HTTPS). O banco de dados usa regras de acesso por linha, de modo que cada conta só alcança os próprios registros, e as senhas ficam guardadas de forma cifrada pelo sistema de contas, inacessíveis até para nós. Ainda assim, nenhum sistema é totalmente imune: se ocorrer um incidente que possa trazer risco relevante a você, comunicaremos você e a ANPD, como manda o art. 48 da LGPD.</p>
 
-<h2 id="menores">11. Menores de idade</h2>
+<h2 id="menores">12. Menores de idade</h2>
 <p>A plataforma é destinada a maiores de 18 anos. Adolescentes a partir de 16 anos podem usar com a ciência e a autorização dos pais ou responsáveis. Não coletamos dados de crianças de forma consciente; se isso acontecer, apagamos ao sermos avisados.</p>
 
-<h2 id="mudancas">12. Mudanças nesta política</h2>
+<h2 id="mudancas">13. Mudanças nesta política</h2>
 <p>Quando esta política mudar, a data no topo é atualizada. Se a mudança for relevante, avisamos dentro da plataforma antes de passar a valer.</p>
 
 <footer class="fim">
