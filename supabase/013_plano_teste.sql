@@ -6,6 +6,11 @@
 -- Se um dia você mudar a duração do teste, mude aqui E em DIAS_TESTE,
 -- no arquivo src/data/config.js — os dois precisam falar a mesma coisa.
 
+-- A função já existe desde o 009, devolvendo (plano, ate, ativo). Aqui ela passa a
+-- devolver também os dias restantes, e o PostgreSQL não deixa trocar o formato da
+-- resposta com "create or replace" — é preciso apagar antes (erro 42P13).
+drop function if exists public.meu_plano();
+
 create or replace function public.meu_plano()
 returns table (plano text, ate timestamptz, ativo boolean, dias int)
 language sql stable security definer set search_path = public as $$
