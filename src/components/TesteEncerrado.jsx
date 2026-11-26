@@ -36,6 +36,13 @@ export default function TesteEncerrado({ ctx, plano, aoSair }) {
     setBaixando(false);
   };
 
+  // O link do Mercado Pago leva o id da pessoa em external_reference: é assim que o
+  // aviso de pagamento, lá no servidor, sabe qual conta liberar sem depender do e-mail
+  // que ela digitou no checkout.
+  const linkAssinar = LINK_ASSINATURA && ctx?.usuario?.id
+    ? `${LINK_ASSINATURA}${LINK_ASSINATURA.includes('?') ? '&' : '?'}external_reference=${encodeURIComponent(ctx.usuario.id)}`
+    : LINK_ASSINATURA;
+
   const assunto = encodeURIComponent('Quero assinar o EstudaAí');
   const corpo = encodeURIComponent(
     `Olá! Quero assinar o EstudaAí.\n\nMeu e-mail de cadastro: ${ctx?.usuario?.email || ''}\n`,
@@ -73,7 +80,7 @@ export default function TesteEncerrado({ ctx, plano, aoSair }) {
         </div>
 
         {LINK_ASSINATURA ? (
-          <a className="btn pri" href={LINK_ASSINATURA} style={{ display: 'block', textAlign: 'center' }}>
+          <a className="btn pri" href={linkAssinar} style={{ display: 'block', textAlign: 'center' }}>
             Assinar agora
           </a>
         ) : (
