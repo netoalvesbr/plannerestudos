@@ -1,10 +1,10 @@
 import { useState } from 'react';
-import { ADMIN_EMAILS } from '../data/config.js';
+import { CONTATO } from '../data/config.js';
 
 // Compartilhar a plataforma e enviar sugestões ao responsável (aparece já na tela de entrada)
 const LINK = typeof window !== 'undefined' ? window.location.origin : '';
 const TEXTO = 'Estou usando o EstudaAí para estudar para concursos: banco de questões, cronograma, calendário de provas e mapas mentais. Crie sua conta grátis:';
-const DESTINO = ADMIN_EMAILS[0];
+const DESTINO = CONTATO.email;
 
 export function Compartilhar() {
   const [copiado, setCopiado] = useState(false);

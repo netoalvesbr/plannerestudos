@@ -14,7 +14,7 @@ export const PROVEDORES_LOGIN = ['google'];
 // Canais de atendimento mostrados no rodapé e nas páginas de contato.
 // ----- troque pelos seus dados antes de divulgar -----
 export const CONTATO = {
-  email: 'estudaai.suporte@gmail.com',
+  email: 'suporteestudaaiconcursos@gmail.com',
   whatsapp: '', // ex.: '5568999999999' (só números, com 55 na frente). Vazio = esconde o botão.
   prazoResposta: 'até 2 dias úteis',
   responsavel: 'Francisco Alves de Souza Neto',
