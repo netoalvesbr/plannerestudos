@@ -28,4 +28,4 @@ export const PLANO_PERIODO = '/mês';
 export const DIAS_TESTE = 14;
 // Link de assinatura do Mercado Pago. Enquanto estiver vazio, a tela de
 // "teste encerrado" mostra o caminho por e-mail em vez do botão de pagar.
-export const LINK_ASSINATURA = '';
+export const LINK_ASSINATURA = 'https://www.mercadopago.com.br/subscriptions/checkout?preapproval_plan_id=66f07089d04a4a46aa197fa99fa2c49d';
