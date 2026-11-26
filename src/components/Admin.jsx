@@ -34,17 +34,33 @@ export default function Admin() {
   useEffect(carregar, []);
 
   // libera ou limita o acesso de uma pessoa
-  const trocarPlano = async (u, plano) => {
+  const trocarPlano = async (u, plano, ate = planos[u.id]?.ate || null) => {
     setSalvandoPlano(u.id);
     setAvisoPlano(null);
     try {
-      const linha = await definirPlano(u.id, plano);
+      const linha = await definirPlano(u.id, plano, { ate });
       setPlanos((p) => ({ ...p, [u.id]: linha }));
-      setAvisoPlano({ ok: true, texto: `✓ ${u.nome || u.email}: plano ${PLANOS[plano].toLowerCase()}.` });
+      setAvisoPlano({
+        ok: true,
+        texto: `✓ ${u.nome || u.email}: plano ${PLANOS[plano].toLowerCase()}`
+          + (plano !== 'ilimitado' && ate ? ` até ${fmtD(ate)}.` : '.'),
+      });
     } catch (e) {
       setAvisoPlano({ ok: false, texto: e.message });
     }
     setSalvandoPlano(null);
+  };
+
+  // "vale até" em formato de campo de data (AAAA-MM-DD)
+  const ateInput = (u) => {
+    const v = planos[u.id]?.ate;
+    return v ? new Date(v).toLocaleDateString('sv-SE') : '';
+  };
+  // libera por um mês a partir de hoje — o atalho do pagamento confirmado no Pix
+  const liberarUmMes = (u) => {
+    const d = new Date();
+    d.setMonth(d.getMonth() + 1);
+    trocarPlano(u, 'mensal', d.toISOString());
   };
 
   const calc = useMemo(() => {
@@ -169,6 +185,28 @@ export default function Admin() {
                       {Object.entries(PLANOS).map(([k, rot]) => <option key={k} value={k}>{rot}</option>)}
                     </select>
                     {planos[u.id]?.plano === 'ilimitado' && <div className="peq sobe">✓ acesso liberado</div>}
+                    {planos[u.id]?.plano !== 'ilimitado' && (
+                      <>
+                        <input
+                          type="date"
+                          aria-label={`Acesso de ${u.nome || u.email} vale até`}
+                          value={ateInput(u)}
+                          disabled={!!planos._faltaTabela || salvandoPlano === u.id}
+                          onChange={(e) => trocarPlano(u, planos[u.id]?.plano || 'mensal', e.target.value ? new Date(`${e.target.value}T23:59:59`).toISOString() : null)}
+                          style={{ marginTop: 4, fontSize: '0.8rem', minHeight: 32, padding: '2px 6px' }}
+                        />
+                        <div className="peq">
+                          <button className="btn peq" style={{ minHeight: 28, padding: '2px 8px', marginTop: 4 }} disabled={!!planos._faltaTabela || salvandoPlano === u.id} onClick={() => liberarUmMes(u)}>
+                            + 1 mês
+                          </button>
+                        </div>
+                        {planos[u.id]?.ate && (
+                          <div className="peq sub">
+                            {new Date(planos[u.id].ate) > new Date() ? `vale até ${fmtD(planos[u.id].ate)}` : `✗ venceu em ${fmtD(planos[u.id].ate)}`}
+                          </div>
+                        )}
+                      </>
+                    )}
                   </td>
                   <td className="num"><b>{u.est[periodo]}</b></td>
                   <td className="num">{u.est.dia}</td>

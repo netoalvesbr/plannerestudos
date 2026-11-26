@@ -20,3 +20,12 @@ export const CONTATO = {
   responsavel: 'Francisco Alves de Souza Neto',
   cidade: 'Rio Branco/AC',
 };
+
+// Plano e cobrança. O preço e os dias de teste aparecem na página de vendas e nos avisos.
+// DIAS_TESTE precisa ser igual ao número usado em supabase/013_plano_teste.sql.
+export const PLANO_PRECO = 'R$ 19,90';
+export const PLANO_PERIODO = '/mês';
+export const DIAS_TESTE = 14;
+// Link de assinatura do Mercado Pago. Enquanto estiver vazio, a tela de
+// "teste encerrado" mostra o caminho por e-mail em vez do botão de pagar.
+export const LINK_ASSINATURA = '';

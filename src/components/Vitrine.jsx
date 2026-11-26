@@ -3,14 +3,14 @@
 // ou promessa de aprovação. Se um recurso sair do ar, tire a linha dele daqui também.
 
 import Rodape from './Rodape.jsx';
-import { CONTATO } from '../data/config.js';
+import { CONTATO, DIAS_TESTE, PLANO_PERIODO, PLANO_PRECO } from '../data/config.js';
 
 // ----- mexa aqui quando fechar os valores -----
 export const PLANO = {
-  preco: 'R$ 19,90',
-  periodo: '/mês',
-  diasTeste: 7,
-  contato: CONTATO.email, // para trocar o e-mail, mexa em src/data/config.js
+  preco: PLANO_PRECO,
+  periodo: PLANO_PERIODO,
+  diasTeste: DIAS_TESTE,
+  contato: CONTATO.email,
 };
 
 const RECURSOS = [

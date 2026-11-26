@@ -15,6 +15,7 @@ import Questao, { Conclusao } from './components/Questao.jsx';
 import Painel from './components/Painel.jsx';
 import Opinioes from './components/Opinioes.jsx';
 import Rodape from './components/Rodape.jsx';
+import TesteEncerrado, { AvisoTeste } from './components/TesteEncerrado.jsx';
 import { Mapa } from './components/Mapas.jsx';
 import Estudar from './components/Estudar.jsx';
 import Biblioteca from './components/Biblioteca.jsx';
@@ -42,6 +43,7 @@ export default function App() {
   const [respostas, setRespostas] = useState({});
   const [prefs, setPrefsState] = useState({});
   const [somenteLocal, setSomenteLocal] = useState(false);
+  const [plano, setPlano] = useState(null);
   const [tela, setTela] = useState({ nome: 'dashboard' });
   const [recuperando, setRecuperando] = useState(false);
   const [bancoVersao, setBancoVersao] = useState(0);
@@ -71,6 +73,10 @@ export default function App() {
       setRespostas(d.respostas);
       setPrefsState(d.prefs);
       setSomenteLocal(d.somenteLocal);
+      // Se a consulta do plano falhar, meuPlano() devolve ativo: true de propósito:
+      // uma falha de rede ou um banco sem a função nova não pode trancar ninguém
+      // para fora da própria conta.
+      remoto.meuPlano().then(setPlano).catch(() => setPlano(null));
       await recarregarBanco();
     }
     setCarregando(false);
@@ -244,6 +250,10 @@ export default function App() {
   if (recuperando) return <div className="app"><NovaSenha aoConcluir={() => { setRecuperando(false); iniciar(); }} /></div>;
   if (carregando) return <div className="app centro" style={{ paddingTop: '30vh' }}>Carregando…</div>;
   if (!usuario) return <div className="app"><Login aoEntrar={iniciar} /></div>;
+
+  // Teste encerrado ou assinatura inativa: o administrador nunca é bloqueado, e quem
+  // usa sem conta também não (não há o que cobrar de quem guarda tudo no aparelho).
+  const semAcesso = plano && plano.ativo === false && !usuario.admin && store.getModo() === 'conta';
 
   const ctx = {
     concurso,
@@ -453,6 +463,13 @@ export default function App() {
     conteudo = hub();
   }
 
+  // Sem acesso, nenhuma tela do app é montada: a pessoa vê a tela de assinatura,
+  // que já traz o botão de sair e o de baixar o próprio histórico.
+  if (semAcesso) {
+    semTopo = true;
+    conteudo = <TesteEncerrado ctx={ctx} plano={plano} aoSair={() => store.sair().then(iniciar)} />;
+  }
+
   const ir = (nome) => setTela({ nome });
   const hojeIso = new Date().toLocaleDateString('sv-SE');
   const hojeSeg = Object.values(prefs.tempos?.[hojeIso] || {}).reduce((a, b) => a + b, 0);
@@ -501,6 +518,7 @@ export default function App() {
         </header>
       )}
       <NovaVersao />
+      {!semTopo && <AvisoTeste plano={plano} />}
       {somenteLocal && !semTopo && naInicio && <p className="aviso">Respostas salvas apenas neste aparelho.</p>}
       {avisoBanco && !semTopo && <p className="aviso">{avisoBanco}</p>}
       {tela.nome === 'questoes' && tela.msg && <p className="aviso" role="status" style={{ background: 'var(--ok-bg)', color: 'var(--ok)' }}>{tela.msg}</p>}
