@@ -642,6 +642,53 @@ export async function salvarLeitura(dados) {
   return data;
 }
 
+// Atualiza uma leitura já começada — é o que o salvamento automático usa enquanto a
+// pessoa ainda está lendo, para não criar um registro novo a cada 30 segundos.
+export async function atualizarLeitura(id, dados) {
+  const campos = {
+    materia: dados.materia || null,
+    assunto: dados.assunto || null,
+    obra: dados.obra || null,
+    pagina_ini: dados.paginaIni || null,
+    pagina_fim: dados.paginaFim || null,
+    texto: dados.texto || '',
+    palavras: dados.palavras || 0,
+    segundos: dados.segundos || 0,
+  };
+  if (!supabase || String(id).startsWith('local-')) {
+    const lista = leitLocal().map((l) => (l.id === id ? { ...l, ...campos } : l));
+    localStorage.setItem(LS_LEIT, JSON.stringify(lista));
+    return;
+  }
+  const { error } = await supabase.from('leituras').update(campos).eq('id', id);
+  if (error) throw new Error(error.message);
+}
+
+// Envia o áudio depois que a leitura já existe no banco (o texto foi sendo salvo
+// durante a leitura; o áudio só fica pronto quando a pessoa termina).
+export async function anexarAudioLeitura(id, audio) {
+  if (!supabase || !audio?.blob) return null;
+  const { data: { user } = {} } = await supabase.auth.getUser();
+  if (!user) throw new Error('Entre na sua conta para guardar o áudio.');
+  const nome = `${user.id}/${Date.now()}.${audio.ext || 'webm'}`;
+  const { error: eUp } = await supabase.storage
+    .from('leituras')
+    .upload(nome, audio.blob, { contentType: audio.mime, upsert: false });
+  if (eUp) {
+    if (/bucket|not found/i.test(eUp.message)) throw new Error('O espaço do áudio ainda não foi criado no banco (012_leitura_audio.sql).');
+    if (/size|large|exceeded/i.test(eUp.message)) throw new Error('O áudio ficou grande demais para ser guardado. Faça leituras mais curtas.');
+    throw new Error(`Não foi possível enviar o áudio: ${eUp.message}`);
+  }
+  const { error } = await supabase.from('leituras')
+    .update({ audio: nome, audio_bytes: audio.bytes || audio.blob.size, audio_tipo: audio.mime || null })
+    .eq('id', id);
+  if (error) {
+    await supabase.storage.from('leituras').remove([nome]);
+    throw new Error(error.message);
+  }
+  return nome;
+}
+
 export async function minhasLeituras({ limite = 50 } = {}) {
   if (!supabase) return leitLocal().slice(0, limite);
   const { data, error } = await supabase.from('leituras').select('*').order('criado_em', { ascending: false }).limit(limite);

@@ -1,40 +1,25 @@
-// 🎙️ Leitura em voz alta: a pessoa lê o livro em voz alta e a plataforma faz três coisas —
-// transcreve o texto, grava o áudio e cronometra. O cronômetro e a gravação contam só o tempo
-// em que ela está realmente lendo: no silêncio pausam sozinhos e, quando a leitura volta,
-// retomam, sem precisar clicar em nada.
+// 🎙️ Leitura em voz alta: a pessoa lê o livro em voz alta e a plataforma transcreve,
+// grava o áudio e cronometra só o tempo de leitura de verdade.
 //
-// Para que serve o áudio: ouvir depois a própria leitura, para revisar a matéria sem estar
-// com o livro na mão. Por isso o arquivo é pequeno (voz em opus mono) e o silêncio não entra.
-//
-// A conta do tempo (ver o relógio de 1 segundo, mais abaixo):
-//  - a cada segundo lendo, soma 1 segundo ao tempo de leitura;
-//  - quando o silêncio passa do limite escolhido, devolve esses segundos de silêncio que
-//    já tinham sido somados e marca a pausa — o tempo de leitura fica honesto;
-//  - o tempo total da sessão (relógio de parede) continua correndo, para a pessoa comparar
-//    quanto tempo ficou sentada e quanto tempo de fato leu.
+// Esta tela monta a sessão e mostra o resultado. Quem segura a leitura em andamento é
+// src/lib/sessaoLeitura.js, fora do React — por isso trocar de tela, ou recarregar a
+// página por acidente, não apaga mais o que já foi lido.
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { disciplinasDo } from '../lib/dados.js';
 import {
-  espacoDasLeituras, excluirLeitura, linkAudioLeitura, minhasLeituras, salvarLeitura,
+  anexarAudioLeitura, atualizarLeitura, espacoDasLeituras, excluirLeitura, linkAudioLeitura,
+  minhasLeituras, salvarLeitura,
 } from '../lib/remoto.js';
 import { getModo } from '../lib/store.js';
+import * as sessao from '../lib/sessaoLeitura.js';
 import { analisarSumario, faixaDe } from '../lib/sumario.js';
-import {
-  TEXTO_GRAVACAO, criarGravador, emMB, suporteGravacao,
-} from '../lib/gravadorAudio.js';
-import {
-  TEXTO_ERRO, TEXTO_SUPORTE, arrumarTrecho, contarPalavras, criarLeitor, porMinuto, suporteVoz,
-} from '../lib/vozLeitura.js';
+import { TEXTO_GRAVACAO, emMB, suporteGravacao } from '../lib/gravadorAudio.js';
+import { CONFIANCA_MINIMA, TEXTO_SUPORTE, contarPalavras, porMinuto, suporteVoz } from '../lib/vozLeitura.js';
 
-const LIMIARES = [
-  [10, '10 segundos'],
-  [20, '20 segundos'],
-  [30, '30 segundos'],
-  [60, '1 minuto'],
-  [120, '2 minutos'],
-];
-
-const PAGINAS_SUMARIO = 60; // até onde procurar a página de sumário num PDF sem marcadores
+const PAGINAS_SUMARIO = 60;
+const LIMIAR_MIN = 2;
+const LIMIAR_MAX = 120;
+const ATALHOS_LIMIAR = [3, 6, 10, 20, 30];
 
 const dois = (n) => String(n).padStart(2, '0');
 export const fmtTempo = (seg) => {
@@ -44,9 +29,17 @@ export const fmtTempo = (seg) => {
   return h ? `${h}:${dois(m)}:${dois(s % 60)}` : `${dois(m)}:${dois(s % 60)}`;
 };
 const fmtDH = (d) => (d ? new Date(d).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', year: '2-digit', hour: '2-digit', minute: '2-digit' }) : '—');
-const agora = () => Date.now();
 const horaCurta = (t) => new Date(t).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
 const chaveObra = (s) => String(s || '').trim().toLowerCase().replace(/\s+/g, ' ');
+const duvidoso = (t) => typeof t.confianca === 'number' && t.confianca < CONFIANCA_MINIMA;
+
+// Trecho que o navegador ouviu com pouca certeza. Nunca marcamos só pela cor: quem não
+// distingue vermelho continua vendo o negrito, o sublinhado ondulado e o sinal ⚠.
+const estiloDuvida = {
+  color: 'var(--erro)', fontWeight: 700,
+  textDecoration: 'underline wavy var(--erro)', textUnderlineOffset: 3,
+  background: 'var(--erro-bg)', borderRadius: 4, padding: '0 2px',
+};
 
 export default function LeituraVoz({ ctx }) {
   const { concurso, cargo, fase, area, prefs, setPrefs } = ctx;
@@ -61,45 +54,31 @@ export default function LeituraVoz({ ctx }) {
   const [obra, setObra] = useState(salvo.obra || '');
   const [paginaIni, setPaginaIni] = useState('');
   const [paginaFim, setPaginaFim] = useState('');
-  const [limiar, setLimiar] = useState(salvo.limiar || 20);
+  const [limiar, setLimiar] = useState(salvo.limiar || 6);
   const [gravar, setGravar] = useState(salvo.gravar !== false);
 
-  const [estado, setEstado] = useState('parado'); // parado | lendo | pausa | revisando
-  const [trechos, setTrechos] = useState([]);
-  const [parcial, setParcial] = useState('');
-  const [texto, setTexto] = useState('');
-  const [segLidos, setSegLidos] = useState(0);
-  const [segTotais, setSegTotais] = useState(0);
-  const [pausas, setPausas] = useState([]);
+  const [st, setSt] = useState(sessao.estado());
+  useEffect(() => sessao.assinar(setSt), []);
+
+  const [trechosRev, setTrechosRev] = useState(null);
+  const [textoLivre, setTextoLivre] = useState(null);
+  const [abertoAlt, setAbertoAlt] = useState(null);
   const [erro, setErro] = useState(null);
   const [aviso, setAviso] = useState(null);
   const [salvando, setSalvando] = useState(false);
-
-  // áudio
-  const [audio, setAudio] = useState(null); // { blob, ext, mime, bytes }
-  const [bytesVivo, setBytesVivo] = useState(0);
   const [urlPreview, setUrlPreview] = useState(null);
   const [urlsHist, setUrlsHist] = useState({});
   const [espaco, setEspaco] = useState(0);
+  const [leituras, setLeituras] = useState([]);
+  const [aberta, setAberta] = useState(null);
+  const [recuperavel, setRecuperavel] = useState(null);
 
-  // sumário
   const [carregandoSum, setCarregandoSum] = useState(false);
   const [progressoSum, setProgressoSum] = useState('');
   const [avisoSum, setAvisoSum] = useState(null);
   const [sumAberto, setSumAberto] = useState(false);
 
-  const [leituras, setLeituras] = useState([]);
-  const [aberta, setAberta] = useState(null);
-
-  const leitorRef = useRef(null);
-  const gravadorRef = useRef(null);
-  const estadoRef = useRef('parado');
-  const ultimaFalaRef = useRef(0);
-  const inicioRef = useRef(0);
-  const segLidosRef = useRef(0);
-  const pausaAtualRef = useRef(null);
-  const fimTranscricaoRef = useRef(null);
-
+  const fimRef = useRef(null);
   const suporte = useMemo(suporteVoz, []);
   const supGrav = useMemo(suporteGravacao, []);
   const comConta = getModo() === 'conta';
@@ -110,23 +89,21 @@ export default function LeituraVoz({ ctx }) {
   }, []);
   useEffect(carregarHistorico, [carregarHistorico]);
 
-  // guarda as escolhas para a próxima sessão
   useEffect(() => {
-    if (estado === 'parado') return;
-    setPrefs({ leituraVoz: { materia, obra, limiar, gravar } });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [estado]);
+    if (!st.ativa && st.fase === 'parado') setRecuperavel(sessao.rascunho());
+  }, [st.ativa, st.fase]);
 
-  // libera os endereços temporários de áudio ao sair da tela
-  useEffect(() => () => {
-    if (urlPreview) URL.revokeObjectURL(urlPreview);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [urlPreview]);
+  useEffect(() => {
+    if (st.fase !== 'revisando') return;
+    setTrechosRev((v) => v || st.trechos.map((t) => ({ ...t })));
+    if (st.audio && !urlPreview) setUrlPreview(URL.createObjectURL(st.audio.blob));
+  }, [st.fase, st.trechos, st.audio, urlPreview]);
 
-  const mudarEstado = (novo) => {
-    estadoRef.current = novo;
-    setEstado(novo);
-  };
+  useEffect(() => () => { if (urlPreview) URL.revokeObjectURL(urlPreview); }, [urlPreview]);
+
+  useEffect(() => {
+    if (st.fase === 'lendo' || st.fase === 'pausa') fimRef.current?.scrollIntoView({ block: 'nearest' });
+  }, [st.trechos, st.parcial, st.fase]);
 
   // ----- sumário do livro -----
   const sumarios = prefs.sumarios || {};
@@ -135,46 +112,34 @@ export default function LeituraVoz({ ctx }) {
   const carregarSumario = async (arquivo) => {
     if (!arquivo) return;
     setAvisoSum(null);
-    setErro(null);
     setCarregandoSum(true);
     setProgressoSum('Abrindo o PDF…');
     try {
       const { sumarioDosMarcadores, textoDoPdf } = await import('../lib/pdf.js');
-      // 1ª tentativa: os marcadores do próprio PDF, que já trazem título e página exatos
       let itens = await sumarioDosMarcadores(arquivo);
       let origem = 'marcadores';
       let relatorio = null;
       if (!itens.length) {
-        // 2ª tentativa: ler a página de sumário como texto
         setProgressoSum('Sem índice embutido. Procurando a página de sumário…');
-        const linhas = await textoDoPdf(arquivo, (p, t) => setProgressoSum(`Lendo página ${p} de ${Math.min(t, PAGINAS_SUMARIO)}…`), PAGINAS_SUMARIO);
+        const linhas = await textoDoPdf(arquivo, (pg, t) => setProgressoSum(`Lendo página ${pg} de ${Math.min(t, PAGINAS_SUMARIO)}…`), PAGINAS_SUMARIO);
         const r = analisarSumario(linhas);
         itens = r.itens;
         relatorio = r.relatorio;
         origem = 'texto';
       }
       if (!itens.length) {
-        setAvisoSum({
-          ok: false,
-          texto: 'Não encontrei o sumário neste PDF. Ele pode ser um arquivo escaneado (imagem sem texto). '
-            + 'Você ainda pode digitar o assunto e as páginas à mão em cada leitura.',
-        });
+        setAvisoSum({ ok: false, texto: 'Não encontrei o sumário neste PDF. Ele pode ser um arquivo escaneado (imagem sem texto). Você ainda pode digitar o assunto e as páginas à mão.' });
         return;
       }
       const nome = obra.trim() || arquivo.name.replace(/\.pdf$/i, '');
       if (!obra.trim()) setObra(nome);
-      setPrefs({
-        sumarios: {
-          ...sumarios,
-          [chaveObra(nome)]: { obra: nome, itens: itens.slice(0, 400), origem, em: new Date().toISOString() },
-        },
-      });
+      setPrefs({ sumarios: { ...sumarios, [chaveObra(nome)]: { obra: nome, itens: itens.slice(0, 400), origem, em: new Date().toISOString() } } });
       setSumAberto(true);
       setAvisoSum({
         ok: true,
         texto: origem === 'marcadores'
           ? `✓ ${itens.length} itens lidos do índice do PDF.`
-          : `✓ ${itens.length} itens lidos da página de sumário${relatorio?.descartados ? ` (${relatorio.descartados} linhas descartadas por não parecerem sumário)` : ''}. Confira se ficou certo.`,
+          : `✓ ${itens.length} itens lidos da página de sumário${relatorio?.descartados ? ` (${relatorio.descartados} linhas descartadas)` : ''}. Confira se ficou certo.`,
       });
     } catch (e) {
       setAvisoSum({ ok: false, texto: `Não foi possível ler o PDF: ${e.message}` });
@@ -192,54 +157,18 @@ export default function LeituraVoz({ ctx }) {
     setPaginaFim(f.fim);
     setSumAberto(false);
   };
-
   const apagarSumario = () => {
     const resto = { ...sumarios };
     delete resto[chaveObra(obra)];
     setPrefs({ sumarios: resto });
     setAvisoSum(null);
   };
-
   const removerItem = (i) => {
     const novos = sumAtual.itens.filter((_, j) => j !== i);
     setPrefs({ sumarios: { ...sumarios, [chaveObra(obra)]: { ...sumAtual, itens: novos } } });
   };
 
-  // ----- relógio de 1 segundo: é ele que pausa e retoma cronômetro e gravação -----
-  useEffect(() => {
-    if (estado !== 'lendo' && estado !== 'pausa') return undefined;
-    const t = setInterval(() => {
-      setSegTotais(Math.round((agora() - inicioRef.current) / 1000));
-      if (estadoRef.current === 'lendo') {
-        segLidosRef.current += 1;
-        setSegLidos(segLidosRef.current);
-        if (agora() - ultimaFalaRef.current > limiar * 1000) {
-          segLidosRef.current = Math.max(0, segLidosRef.current - limiar);
-          setSegLidos(segLidosRef.current);
-          pausaAtualRef.current = { inicio: ultimaFalaRef.current };
-          gravadorRef.current?.pausar();
-          mudarEstado('pausa');
-        }
-      }
-    }, 1000);
-    return () => clearInterval(t);
-  }, [estado, limiar]);
-
-  // fala detectada: se estava em pausa, retoma sozinho
-  const marcarFala = () => {
-    ultimaFalaRef.current = agora();
-    if (estadoRef.current === 'pausa') {
-      const p = pausaAtualRef.current;
-      if (p) {
-        const seg = Math.round((agora() - p.inicio) / 1000);
-        if (seg >= limiar) setPausas((v) => [...v, { ...p, fim: agora(), segundos: seg }]);
-        pausaAtualRef.current = null;
-      }
-      gravadorRef.current?.retomar();
-      mudarEstado('lendo');
-    }
-  };
-
+  // ----- começar -----
   const comecar = async () => {
     setErro(null);
     setAviso(null);
@@ -248,156 +177,68 @@ export default function LeituraVoz({ ctx }) {
       setErro('Escolha a matéria antes de começar.');
       return;
     }
-    setTrechos([]);
-    setParcial('');
-    setTexto('');
-    setPausas([]);
-    setSegLidos(0);
-    setSegTotais(0);
-    setBytesVivo(0);
+    setTrechosRev(null);
+    setTextoLivre(null);
     if (urlPreview) URL.revokeObjectURL(urlPreview);
     setUrlPreview(null);
-    setAudio(null);
-    segLidosRef.current = 0;
-    pausaAtualRef.current = null;
-    inicioRef.current = agora();
-    ultimaFalaRef.current = agora();
-
-    // a gravação vem primeiro: ela pede o microfone, e uma permissão serve para as duas coisas
-    if (gravar && supGrav.ok) {
-      const g = criarGravador({
-        aoErro: (m) => setErro(m),
-        aoPedaco: (b) => setBytesVivo(b),
-      });
-      try {
-        await g.iniciar();
-        gravadorRef.current = g;
-      } catch (e) {
-        gravadorRef.current = null;
-        setErro(
-          /denied|not allowed/i.test(e.message || '')
-            ? 'O microfone foi bloqueado. Clique no ícone de cadeado ao lado do endereço do site e libere o microfone.'
-            : `Não foi possível gravar o áudio: ${e.message}. A leitura segue sem gravação.`,
-        );
-      }
-    }
-
-    const leitor = criarLeitor({
-      aoTrecho: (t) => {
-        if (!t) return;
-        marcarFala();
-        setTrechos((v) => [...v, arrumarTrecho(t)]);
-      },
-      aoParcial: (t) => {
-        if (t) marcarFala();
-        setParcial(t);
-      },
-      aoErro: (cod) => setErro(TEXTO_ERRO[cod] || `O navegador relatou um problema no microfone (${cod}).`),
-      aoParar: () => {
-        if (estadoRef.current === 'lendo' || estadoRef.current === 'pausa') encerrar({ porErro: true });
-      },
+    setPrefs({ leituraVoz: { materia, obra, limiar, gravar } });
+    await sessao.iniciar({
+      concursoId: concurso?.id, materia, assunto, obra, paginaIni, paginaFim,
+      limiar: Math.min(LIMIAR_MAX, Math.max(LIMIAR_MIN, Number(limiar) || 6)),
+      gravar: gravar && supGrav.ok,
     });
-    leitorRef.current = leitor;
-    try {
-      leitor.iniciar();
-      mudarEstado('lendo');
-    } catch (e) {
-      gravadorRef.current?.parar();
-      gravadorRef.current = null;
-      setErro(e.message || 'Não foi possível ligar o microfone.');
-    }
   };
 
-  // termina a escuta e abre a revisão antes de salvar.
-  // A mudança de estado vem ANTES de parar a escuta: parar dispara o `aoParar` do leitor,
-  // que chamaria esta função de novo e, pior, com porErro — o que mostraria "a escuta foi
-  // interrompida" para quem só clicou em Terminar.
-  const encerrar = async ({ porErro = false } = {}) => {
-    if (estadoRef.current !== 'lendo' && estadoRef.current !== 'pausa') return;
-    mudarEstado('revisando');
-    leitorRef.current?.parar();
-    leitorRef.current = null;
-    setParcial('');
-    if (pausaAtualRef.current) {
-      const seg = Math.round((agora() - pausaAtualRef.current.inicio) / 1000);
-      if (seg >= limiar) setPausas((v) => [...v, { ...pausaAtualRef.current, fim: agora(), segundos: seg }]);
-      pausaAtualRef.current = null;
-    }
-    if (porErro) setAviso('A escuta foi interrompida. O que já foi lido está guardado aqui embaixo.');
+  // ----- revisão -----
+  const trechos = trechosRev || st.trechos;
+  const textoFinal = textoLivre != null ? textoLivre : trechos.map((t) => t.texto).join(' ');
+  const palavras = contarPalavras(textoFinal);
+  const ritmo = porMinuto(palavras, st.segLidos);
+  const segPausado = (st.pausas || []).reduce((a, p) => a + p.segundos, 0);
+  const duvidas = trechos.filter(duvidoso).length;
 
-    const g = gravadorRef.current;
-    gravadorRef.current = null;
-    if (g) {
-      const a = await g.parar();
-      if (a) {
-        setAudio(a);
-        setUrlPreview(URL.createObjectURL(a.blob));
-      }
-    }
+  const trocarTrecho = (i, novo) => {
+    setTrechosRev((v) => v.map((t, j) => (j === i ? { ...t, texto: novo, confianca: 1 } : t)));
+    setAbertoAlt(null);
   };
 
-  const textoCorrido = useMemo(() => trechos.join(' '), [trechos]);
-  useEffect(() => {
-    if (estado === 'revisando') setTexto((t) => (t ? t : textoCorrido));
-  }, [estado, textoCorrido]);
-
-  useEffect(() => {
-    if (estado === 'lendo' || estado === 'pausa') fimTranscricaoRef.current?.scrollIntoView({ block: 'nearest' });
-  }, [trechos, parcial, estado]);
-
-  const palavras = contarPalavras(estado === 'revisando' ? texto : textoCorrido);
-  const ritmo = porMinuto(palavras, segLidos);
-  const segPausado = pausas.reduce((a, p) => a + p.segundos, 0)
-    + (estado === 'pausa' && pausaAtualRef.current ? Math.round((agora() - pausaAtualRef.current.inicio) / 1000) : 0);
-
-  const baixarAudio = () => {
-    if (!audio) return;
-    const a = document.createElement('a');
-    a.href = urlPreview;
-    a.download = `leitura-${[materia, assunto].filter(Boolean).join('-').replace(/[^\p{L}\p{N}-]+/gu, '_') || 'voz'}.${audio.ext}`;
-    a.click();
-  };
-
-  const salvarTudo = async () => {
+  const guardar = async () => {
     setSalvando(true);
     setErro(null);
     try {
-      await salvarLeitura({
-        concursoId: concurso?.id, materia, assunto, obra, paginaIni, paginaFim,
-        texto, palavras, segundos: segLidos,
-        audio: comConta ? audio : null,
-      });
+      const dados = {
+        concursoId: st.cfg.concursoId, materia: st.cfg.materia, assunto: st.cfg.assunto,
+        obra: st.cfg.obra, paginaIni: st.cfg.paginaIni, paginaFim: st.cfg.paginaFim,
+        texto: textoFinal, palavras, segundos: st.segLidos,
+      };
+      // Durante a leitura o texto já foi sendo gravado; aqui só concluímos.
+      if (st.idRemoto) {
+        await atualizarLeitura(st.idRemoto, dados);
+        if (st.audio && comConta) await anexarAudioLeitura(st.idRemoto, st.audio);
+      } else {
+        await salvarLeitura({ ...dados, audio: comConta ? st.audio : null });
+      }
       let baixa = null;
-      if (segLidos >= 1) {
-        ctx.registrarTempo?.(materia, segLidos);
+      if (st.segLidos >= 1) {
+        ctx.registrarTempo?.(st.cfg.materia, st.segLidos);
         baixa = ctx.registrarSessao?.({
-          materia,
-          tema: [assunto, obra].filter(Boolean).join(' · ') || 'Leitura em voz alta',
-          paginaIni, paginaFim,
-          seg: segLidos,
-          hora: horaCurta(agora()),
-          horaInicio: horaCurta(inicioRef.current),
-          origem: 'leitura',
-          palavras,
-          cronogramaK: null,
+          materia: st.cfg.materia,
+          tema: [st.cfg.assunto, st.cfg.obra].filter(Boolean).join(' · ') || 'Leitura em voz alta',
+          paginaIni: st.cfg.paginaIni, paginaFim: st.cfg.paginaFim,
+          seg: st.segLidos, hora: horaCurta(Date.now()), horaInicio: horaCurta(st.inicio),
+          origem: 'leitura', palavras, cronogramaK: null,
         });
       }
       setAviso(
-        `✓ Leitura guardada: ${fmtTempo(segLidos)} de leitura, ${palavras} palavras`
-        + (audio && comConta ? `, áudio de ${emMB(audio.bytes)} MB` : '')
-        + '.'
+        `✓ Leitura guardada: ${fmtTempo(st.segLidos)}, ${palavras} palavras`
+        + (st.audio && comConta ? `, áudio de ${emMB(st.audio.bytes)} MB` : '') + '.'
         + (baixa?.achou ? ' O bloco do cronograma recebeu baixa.' : '')
-        + (audio && !comConta ? ' Sem conta o áudio não fica guardado: use o botão de baixar antes de sair.' : ''),
+        + (st.audio && !comConta ? ' Sem conta o áudio não fica guardado: baixe antes de sair.' : ''),
       );
-      mudarEstado('parado');
-      setTrechos([]);
-      setTexto('');
+      sessao.concluir();
+      setTrechosRev(null);
+      setTextoLivre(null);
       setAssunto('');
-      if (comConta) {
-        if (urlPreview) URL.revokeObjectURL(urlPreview);
-        setUrlPreview(null);
-        setAudio(null);
-      }
       carregarHistorico();
     } catch (e) {
       setErro(e.message);
@@ -406,17 +247,21 @@ export default function LeituraVoz({ ctx }) {
   };
 
   const descartar = () => {
-    mudarEstado('parado');
-    setTrechos([]);
-    setTexto('');
-    setParcial('');
-    setSegLidos(0);
-    setSegTotais(0);
-    setPausas([]);
+    if (!window.confirm('Descartar esta leitura? O texto e o áudio serão perdidos.')) return;
+    sessao.descartar();
+    setTrechosRev(null);
+    setTextoLivre(null);
     if (urlPreview) URL.revokeObjectURL(urlPreview);
     setUrlPreview(null);
-    setAudio(null);
-    setAviso('Leitura descartada. Nada foi guardado.');
+    setAviso('Leitura descartada.');
+  };
+
+  const baixarAudio = () => {
+    if (!st.audio || !urlPreview) return;
+    const a = document.createElement('a');
+    a.href = urlPreview;
+    a.download = `leitura-${(st.cfg.assunto || st.cfg.materia || 'voz').replace(/[^\p{L}\p{N}-]+/gu, '_')}.${st.audio.ext}`;
+    a.click();
   };
 
   const apagar = async (l) => {
@@ -449,253 +294,338 @@ export default function LeituraVoz({ ctx }) {
         <p className="sub">
           A ideia é simples: você lê o livro em voz alta, a plataforma escreve o que você leu,
           grava o áudio para você ouvir depois e cronometra só o tempo de leitura de verdade.
-          Para isso ela depende do reconhecimento de fala do navegador, que não existe aqui.
         </p>
       </div>
     );
   }
 
-  const lendo = estado === 'lendo';
-  const emPausa = estado === 'pausa';
-  const ativo = lendo || emPausa;
+  const lendo = st.fase === 'lendo';
+  const emPausa = st.fase === 'pausa';
+  const pausadoNaMao = st.fase === 'manual';
+  const ativo = st.ativa;
+  const revisando = st.fase === 'revisando';
+  const segSalvo = st.salvoEm ? Math.round((Date.now() - st.salvoEm) / 1000) : null;
 
   return (
     <div>
       <h2>🎙️ Leitura em voz alta</h2>
       <p className="sub">
         Leia o livro em voz alta. A plataforma escreve o que você lê, grava o áudio para você
-        ouvir depois e conta o tempo — quando você fica{' '}
-        {LIMIARES.find(([v]) => v === limiar)?.[1] || `${limiar}s`} em silêncio, o cronômetro e a
-        gravação pausam sozinhos; quando você volta a ler, retomam.
+        ouvir depois e conta o tempo. Depois de {st.cfg?.limiar || limiar} segundos em silêncio
+        ela entende que você parou e pausa sozinha; quando você volta a ler, retoma.
       </p>
 
-      {/* o que está sendo lido */}
-      <div className="card">
-        <div className="filtros">
-          <label className="campo">Matéria *
-            {materias.length
-              ? (
-                <select value={materia} onChange={(e) => setMateria(e.target.value)} disabled={ativo}>
-                  <option value="">Escolha…</option>
-                  {materias.map((m) => <option key={m} value={m}>{m}</option>)}
-                </select>
-              )
-              : <input type="text" value={materia} onChange={(e) => setMateria(e.target.value)} disabled={ativo} placeholder="Ex.: Direito Constitucional" />}
-          </label>
-          <label className="campo">Livro ou material
-            <input type="text" value={obra} onChange={(e) => setObra(e.target.value)} disabled={ativo} placeholder="Ex.: Curso de Direito Constitucional" />
-          </label>
-          <label className="campo">Assunto / capítulo
-            <input type="text" value={assunto} onChange={(e) => setAssunto(e.target.value)} disabled={ativo} placeholder="Ex.: Controle de constitucionalidade" />
-          </label>
-          <label className="campo">Página inicial
-            <input type="text" inputMode="numeric" value={paginaIni} onChange={(e) => setPaginaIni(e.target.value)} />
-          </label>
-          <label className="campo">Página final
-            <input type="text" inputMode="numeric" value={paginaFim} onChange={(e) => setPaginaFim(e.target.value)} />
-          </label>
-          <label className="campo">Pausar após
-            <select value={limiar} onChange={(e) => setLimiar(Number(e.target.value))} disabled={ativo}>
-              {LIMIARES.map(([v, rot]) => <option key={v} value={v}>{rot} de silêncio</option>)}
-            </select>
-          </label>
-        </div>
-
-        {/* gravação do áudio */}
-        <div style={{ borderTop: '1px solid var(--borda)', marginTop: 12, paddingTop: 12 }}>
-          {supGrav.ok ? (
-            <>
-              <label className="linha" style={{ gap: 8, cursor: ativo ? 'default' : 'pointer' }}>
-                <input type="checkbox" checked={gravar} disabled={ativo} onChange={(e) => setGravar(e.target.checked)} style={{ width: 'auto', minHeight: 0 }} />
-                <b>🔊 Gravar o áudio da leitura</b>
-              </label>
-              <p className="sub peq" style={{ margin: '4px 0 0' }}>
-                {comConta
-                  ? 'Fica guardado na sua conta para você ouvir depois. Uma hora de leitura ocupa perto de 15 MB, e o silêncio das pausas não entra no arquivo.'
-                  : 'Você está sem conta, então o áudio não pode ser guardado — mas no fim da leitura aparece um botão para baixar o arquivo no seu aparelho.'}
-              </p>
-            </>
-          ) : (
-            <p className="sub peq" style={{ margin: 0 }}>✗ {TEXTO_GRAVACAO[supGrav.motivo]}</p>
-          )}
-        </div>
-      </div>
-
-      {/* sumário do livro */}
-      <div className="card">
-        <div className="linha entre">
-          <b>📑 Sumário do livro</b>
-          {sumAtual && (
-            <button className="btn peq" onClick={() => setSumAberto(!sumAberto)} aria-expanded={sumAberto}>
-              {sumAberto ? 'Esconder' : `Ver os ${sumAtual.itens.length} itens`}
+      {recuperavel && !ativo && !revisando && (
+        <div className="card" style={{ borderColor: 'var(--alerta)', borderWidth: 2 }}>
+          <b>Você tem uma leitura não finalizada</b>
+          <p className="sub peq" style={{ margin: '4px 0' }}>
+            {recuperavel.cfg?.materia || 'Sem matéria'} ·{' '}
+            {contarPalavras(recuperavel.trechos.map((t) => t.texto).join(' '))} palavras ·{' '}
+            {fmtTempo(recuperavel.segLidos || 0)} · de {fmtDH(recuperavel.em)}
+          </p>
+          <div className="linha">
+            <button className="btn pri" onClick={() => { sessao.recuperar(recuperavel); setRecuperavel(null); }}>
+              Recuperar o texto
             </button>
-          )}
+            <button className="btn" onClick={() => { sessao.limparRascunho(); setRecuperavel(null); }}>Descartar</button>
+          </div>
+          <p className="sub peq" style={{ marginBottom: 0 }}>
+            O texto foi guardado automaticamente. O áudio daquela sessão não pôde ser recuperado.
+          </p>
         </div>
+      )}
 
-        {!sumAtual && (
-          <>
-            <p className="sub peq">
-              Carregue o PDF do livro e a plataforma lê o sumário. Depois, em vez de digitar o
-              assunto e as páginas a cada leitura, você só clica no capítulo que vai ler.
-              {obra.trim() ? '' : ' O nome do livro é preenchido com o nome do arquivo.'}
-            </p>
-            <label className="btn" style={{ display: 'inline-block', cursor: 'pointer' }}>
-              {carregandoSum ? 'Lendo o PDF…' : '📄 Carregar sumário de um PDF'}
-              <input
-                type="file"
-                accept="application/pdf,.pdf"
-                disabled={carregandoSum || ativo}
-                onChange={(e) => {
-                  carregarSumario(e.target.files?.[0]);
-                  e.target.value = '';
-                }}
-                style={{ display: 'none' }}
-              />
+      {!ativo && !revisando && (
+        <div className="card">
+          <div className="filtros">
+            <label className="campo">Matéria *
+              {materias.length
+                ? (
+                  <select value={materia} onChange={(e) => setMateria(e.target.value)}>
+                    <option value="">Escolha…</option>
+                    {materias.map((m) => <option key={m} value={m}>{m}</option>)}
+                  </select>
+                )
+                : <input type="text" value={materia} onChange={(e) => setMateria(e.target.value)} placeholder="Ex.: Direito Constitucional" />}
             </label>
-            {carregandoSum && <p className="sub peq" role="status">{progressoSum}</p>}
-          </>
-        )}
+            <label className="campo">Livro ou material
+              <input type="text" value={obra} onChange={(e) => setObra(e.target.value)} placeholder="Ex.: Curso de Direito Constitucional" />
+            </label>
+            <label className="campo">Assunto / capítulo
+              <input type="text" value={assunto} onChange={(e) => setAssunto(e.target.value)} placeholder="Ex.: Controle de constitucionalidade" />
+            </label>
+            <label className="campo">Página inicial
+              <input type="text" inputMode="numeric" value={paginaIni} onChange={(e) => setPaginaIni(e.target.value)} />
+            </label>
+            <label className="campo">Página final
+              <input type="text" inputMode="numeric" value={paginaFim} onChange={(e) => setPaginaFim(e.target.value)} />
+            </label>
+          </div>
 
-        {sumAtual && (
-          <>
-            <p className="sub peq" style={{ margin: '4px 0' }}>
-              {sumAtual.obra} · {sumAtual.itens.length} itens ·{' '}
-              {sumAtual.origem === 'marcadores' ? 'lido do índice do PDF' : 'lido da página de sumário'}
-            </p>
-            {sumAberto && (
-              <div style={{ maxHeight: 320, overflowY: 'auto', borderTop: '1px solid var(--borda)', paddingTop: 8 }}>
-                {sumAtual.itens.map((it, i) => (
-                  <div key={`${it.titulo}-${it.pagina}-${i}`} className="linha entre" style={{ gap: 8, padding: '4px 0', paddingLeft: (it.nivel - 1) * 14 }}>
-                    <span style={{ flex: 1, minWidth: 0, fontWeight: it.nivel === 1 ? 700 : 400 }}>
-                      {it.titulo}
-                      {it.pagina != null && <span className="sub peq"> · p. {it.pagina}</span>}
-                    </span>
-                    <button className="btn peq" onClick={() => escolherItem(i)} disabled={ativo}>Vou ler este</button>
-                    <button className="btn peq" onClick={() => removerItem(i)} disabled={ativo} aria-label={`Tirar "${it.titulo}" do sumário`}>✕</button>
-                  </div>
-                ))}
-              </div>
-            )}
-            <div className="linha" style={{ marginTop: 8 }}>
-              <label className="btn peq" style={{ cursor: 'pointer' }}>
-                Trocar o PDF
-                <input type="file" accept="application/pdf,.pdf" disabled={carregandoSum || ativo} onChange={(e) => { carregarSumario(e.target.files?.[0]); e.target.value = ''; }} style={{ display: 'none' }} />
-              </label>
-              <button className="btn peq perigo" onClick={apagarSumario} disabled={ativo}>Apagar este sumário</button>
+          <div style={{ borderTop: '1px solid var(--borda)', marginTop: 12, paddingTop: 12 }}>
+            <label className="campo" htmlFor="limiar">Pausar sozinho depois de quantos segundos em silêncio</label>
+            <div className="linha" style={{ gap: 6, flexWrap: 'wrap' }}>
+              <input
+                id="limiar"
+                type="number"
+                min={LIMIAR_MIN}
+                max={LIMIAR_MAX}
+                value={limiar}
+                onChange={(e) => setLimiar(e.target.value)}
+                onBlur={() => setLimiar(Math.min(LIMIAR_MAX, Math.max(LIMIAR_MIN, Number(limiar) || 6)))}
+                style={{ width: 90 }}
+              />
+              <span className="sub peq">segundos</span>
+              {ATALHOS_LIMIAR.map((n) => (
+                <button
+                  key={n}
+                  type="button"
+                  className="btn peq"
+                  aria-pressed={Number(limiar) === n}
+                  onClick={() => setLimiar(n)}
+                  style={Number(limiar) === n ? { background: 'var(--pri)', color: 'var(--pri-txt)', borderColor: 'var(--pri)' } : undefined}
+                >
+                  {n}s
+                </button>
+              ))}
             </div>
-          </>
-        )}
-        {avisoSum && (
-          <p className="aviso" role="status" style={avisoSum.ok ? { background: 'var(--ok-bg)', color: 'var(--ok)', marginTop: 10 } : { marginTop: 10 }}>
-            {avisoSum.ok ? '' : '✗ '}{avisoSum.texto}
-          </p>
-        )}
-      </div>
+            <p className="sub peq" style={{ margin: '4px 0 0' }}>
+              Entre {LIMIAR_MIN} e {LIMIAR_MAX} segundos. Valor baixo pausa nas respiradas entre
+              frases; valor alto demora a perceber que você parou.
+            </p>
+          </div>
 
-      {erro && <p className="aviso" role="alert" style={{ background: 'var(--erro-bg)', color: 'var(--erro)' }}>✗ {erro}</p>}
-      {aviso && <p className="aviso" role="status" style={{ background: 'var(--ok-bg)', color: 'var(--ok)' }}>{aviso}</p>}
+          <div style={{ borderTop: '1px solid var(--borda)', marginTop: 12, paddingTop: 12 }}>
+            {supGrav.ok ? (
+              <>
+                <label className="linha" style={{ gap: 8, cursor: 'pointer' }}>
+                  <input type="checkbox" checked={gravar} onChange={(e) => setGravar(e.target.checked)} style={{ width: 'auto', minHeight: 0 }} />
+                  <b>🔊 Gravar o áudio da leitura</b>
+                </label>
+                <p className="sub peq" style={{ margin: '4px 0 0' }}>
+                  {comConta
+                    ? 'Fica guardado na sua conta para você ouvir depois. Uma hora ocupa perto de 15 MB, e o silêncio das pausas não entra.'
+                    : 'Sem conta o áudio não pode ser guardado — no fim aparece um botão para baixar o arquivo.'}
+                </p>
+              </>
+            ) : <p className="sub peq" style={{ margin: 0 }}>✗ {TEXTO_GRAVACAO[supGrav.motivo]}</p>}
+          </div>
+        </div>
+      )}
 
-      {/* cronômetro de leitura */}
-      {ativo && (
-        <div className="card" style={{ borderColor: lendo ? 'var(--ok)' : 'var(--alerta)', borderWidth: 2 }}>
+      {!ativo && !revisando && (
+        <div className="card">
           <div className="linha entre">
-            <span
-              className="etiqueta"
-              role="status"
-              aria-live="polite"
-              style={{ marginBottom: 0, background: lendo ? 'var(--ok-bg)' : 'var(--alerta-bg)', fontWeight: 700 }}
-            >
-              {lendo
-                ? `🎙️ Ouvindo — cronômetro${gravadorRef.current ? ' e gravação' : ''} andando`
-                : `⏸ Em pausa — cronômetro${gravadorRef.current ? ' e gravação' : ''} parados`}
-            </span>
-            <span className="sub peq">{pausas.length} pausa{pausas.length === 1 ? '' : 's'}</span>
+            <b>📑 Sumário do livro</b>
+            {sumAtual && (
+              <button className="btn peq" onClick={() => setSumAberto(!sumAberto)} aria-expanded={sumAberto}>
+                {sumAberto ? 'Esconder' : `Ver os ${sumAtual.itens.length} itens`}
+              </button>
+            )}
           </div>
-          <p style={{ fontSize: '2.6rem', fontWeight: 800, margin: '10px 0 2px', fontVariantNumeric: 'tabular-nums' }}>
-            {fmtTempo(segLidos)}
-          </p>
-          <p className="sub peq" style={{ marginTop: 0 }}>tempo de leitura (sem as pausas)</p>
-          <div className="filtros" style={{ marginTop: 10 }}>
-            <div><b>{fmtTempo(segTotais)}</b><div className="sub peq">na sessão</div></div>
-            <div><b>{fmtTempo(segPausado)}</b><div className="sub peq">parado</div></div>
-            <div><b>{palavras}</b><div className="sub peq">palavras</div></div>
-            <div><b>{ritmo || '—'}</b><div className="sub peq">palavras por minuto</div></div>
-            {gravadorRef.current && <div><b>{emMB(bytesVivo)} MB</b><div className="sub peq">áudio gravado</div></div>}
-          </div>
-          {emPausa && (
-            <p className="sub peq" style={{ marginTop: 10, marginBottom: 0 }}>
-              O microfone continua ligado para retomar sozinho quando você voltar a ler.
-              Se for parar por muito tempo, clique em Terminar.
+          {!sumAtual && (
+            <>
+              <p className="sub peq">
+                Carregue o PDF do livro e a plataforma lê o sumário. Depois você só clica no
+                capítulo que vai ler, em vez de digitar assunto e páginas toda vez.
+              </p>
+              <label className="btn" style={{ display: 'inline-block', cursor: 'pointer' }}>
+                {carregandoSum ? 'Lendo o PDF…' : '📄 Carregar sumário de um PDF'}
+                <input type="file" accept="application/pdf,.pdf" disabled={carregandoSum}
+                  onChange={(e) => { carregarSumario(e.target.files?.[0]); e.target.value = ''; }} style={{ display: 'none' }} />
+              </label>
+              {carregandoSum && <p className="sub peq" role="status">{progressoSum}</p>}
+            </>
+          )}
+          {sumAtual && (
+            <>
+              <p className="sub peq" style={{ margin: '4px 0' }}>
+                {sumAtual.obra} · {sumAtual.itens.length} itens · {sumAtual.origem === 'marcadores' ? 'lido do índice do PDF' : 'lido da página de sumário'}
+              </p>
+              {sumAberto && (
+                <div style={{ maxHeight: 320, overflowY: 'auto', borderTop: '1px solid var(--borda)', paddingTop: 8 }}>
+                  {sumAtual.itens.map((it, i) => (
+                    <div key={`${it.titulo}-${it.pagina}-${i}`} className="linha entre" style={{ gap: 8, padding: '4px 0', paddingLeft: (it.nivel - 1) * 14 }}>
+                      <span style={{ flex: 1, minWidth: 0, fontWeight: it.nivel === 1 ? 700 : 400 }}>
+                        {it.titulo}{it.pagina != null && <span className="sub peq"> · p. {it.pagina}</span>}
+                      </span>
+                      <button className="btn peq" onClick={() => escolherItem(i)}>Vou ler este</button>
+                      <button className="btn peq" onClick={() => removerItem(i)} aria-label={`Tirar "${it.titulo}" do sumário`}>✕</button>
+                    </div>
+                  ))}
+                </div>
+              )}
+              <div className="linha" style={{ marginTop: 8 }}>
+                <label className="btn peq" style={{ cursor: 'pointer' }}>
+                  Trocar o PDF
+                  <input type="file" accept="application/pdf,.pdf" disabled={carregandoSum} onChange={(e) => { carregarSumario(e.target.files?.[0]); e.target.value = ''; }} style={{ display: 'none' }} />
+                </label>
+                <button className="btn peq perigo" onClick={apagarSumario}>Apagar este sumário</button>
+              </div>
+            </>
+          )}
+          {avisoSum && (
+            <p className="aviso" role="status" style={avisoSum.ok ? { background: 'var(--ok-bg)', color: 'var(--ok)', marginTop: 10 } : { marginTop: 10 }}>
+              {avisoSum.ok ? '' : '✗ '}{avisoSum.texto}
             </p>
           )}
         </div>
       )}
 
-      {/* botões */}
+      {(erro || st.erro) && <p className="aviso" role="alert" style={{ background: 'var(--erro-bg)', color: 'var(--erro)' }}>✗ {erro || st.erro}</p>}
+      {aviso && <p className="aviso" role="status" style={{ background: 'var(--ok-bg)', color: 'var(--ok)' }}>{aviso}</p>}
+
+      {ativo && (
+        <div className="card" style={{ borderColor: lendo ? 'var(--ok)' : 'var(--alerta)', borderWidth: 2 }}>
+          <div className="linha entre">
+            <span className="etiqueta" role="status" aria-live="polite" style={{ marginBottom: 0, background: lendo ? 'var(--ok-bg)' : 'var(--alerta-bg)', fontWeight: 700 }}>
+              {lendo && `🎙️ Ouvindo — cronômetro${st.cfg.gravar ? ' e gravação' : ''} andando`}
+              {emPausa && `⏸ Em pausa (silêncio) — cronômetro${st.cfg.gravar ? ' e gravação' : ''} parados`}
+              {pausadoNaMao && '⏸ Pausado por você'}
+            </span>
+            <span className="sub peq">{st.pausas.length} pausa{st.pausas.length === 1 ? '' : 's'}</span>
+          </div>
+          <p style={{ fontSize: '2.6rem', fontWeight: 800, margin: '10px 0 2px', fontVariantNumeric: 'tabular-nums' }}>{fmtTempo(st.segLidos)}</p>
+          <p className="sub peq" style={{ marginTop: 0 }}>tempo de leitura (sem as pausas)</p>
+          <div className="filtros" style={{ marginTop: 10 }}>
+            <div><b>{fmtTempo(st.segTotais)}</b><div className="sub peq">na sessão</div></div>
+            <div><b>{fmtTempo(segPausado)}</b><div className="sub peq">parado</div></div>
+            <div><b>{sessao.palavrasDe()}</b><div className="sub peq">palavras</div></div>
+            {st.bytesAudio > 0 && <div><b>{emMB(st.bytesAudio)} MB</b><div className="sub peq">áudio</div></div>}
+          </div>
+          <p className="sub peq" role="status" style={{ marginTop: 8, marginBottom: 0 }}>
+            {st.salvando ? 'Guardando…'
+              : st.erroSalvar ? `✗ ${st.erroSalvar} — o texto continua guardado neste aparelho.`
+                : segSalvo == null ? 'Ainda não guardado'
+                  : `✓ Guardado automaticamente ${segSalvo < 5 ? 'agora' : `há ${segSalvo} s`}${comConta ? '' : ' neste aparelho'}`}
+          </p>
+          {pausadoNaMao && (
+            <p className="sub peq" style={{ marginBottom: 0 }}>
+              O microfone está desligado. Clique em Retomar quando quiser voltar a ler.
+            </p>
+          )}
+        </div>
+      )}
+
       <div className="linha" style={{ marginBottom: 14 }}>
-        {estado === 'parado' && <button className="btn pri" onClick={comecar}>🎙️ Começar a ler</button>}
-        {ativo && <button className="btn pri" onClick={() => encerrar()}>⏹ Terminar leitura</button>}
-        {estado === 'revisando' && (
+        {!ativo && !revisando && <button className="btn pri" onClick={comecar}>🎙️ Começar a ler</button>}
+        {(lendo || emPausa) && <button className="btn" onClick={sessao.pausarManual}>⏸ Pausar</button>}
+        {pausadoNaMao && <button className="btn pri" onClick={sessao.retomarManual}>▶️ Retomar</button>}
+        {ativo && <button className="btn" onClick={() => sessao.encerrar()}>⏹ Terminar e guardar</button>}
+        {revisando && (
           <>
-            <button className="btn pri" onClick={salvarTudo} disabled={salvando}>
-              {salvando ? 'Guardando…' : '💾 Guardar leitura'}
-            </button>
-            {audio && <button className="btn" onClick={baixarAudio}>⬇️ Baixar o áudio</button>}
+            <button className="btn pri" onClick={guardar} disabled={salvando}>{salvando ? 'Guardando…' : '💾 Guardar leitura'}</button>
+            {st.audio && <button className="btn" onClick={baixarAudio}>⬇️ Baixar o áudio</button>}
             <button className="btn perigo" onClick={descartar} disabled={salvando}>Descartar</button>
           </>
         )}
       </div>
 
-      {/* transcrição ao vivo */}
       {ativo && (
         <div className="card">
           <h3 style={{ marginTop: 0 }}>O que você está lendo</h3>
-          <div style={{ maxHeight: 260, overflowY: 'auto', whiteSpace: 'pre-wrap', lineHeight: 1.7 }} aria-live="off">
-            {textoCorrido || <span className="sub">Comece a ler — o texto aparece aqui.</span>}
-            {parcial && <span className="sub" style={{ fontStyle: 'italic' }}> {parcial}…</span>}
-            <div ref={fimTranscricaoRef} />
+          <div style={{ maxHeight: 260, overflowY: 'auto', whiteSpace: 'pre-wrap', lineHeight: 1.8 }}>
+            {st.trechos.length
+              ? st.trechos.map((t, i) => (
+                <span key={`${t.em}-${i}`} style={duvidoso(t) ? estiloDuvida : undefined} title={duvidoso(t) ? 'O navegador não teve certeza deste trecho' : undefined}>
+                  {duvidoso(t) ? '⚠ ' : ''}{t.texto}{' '}
+                </span>
+              ))
+              : <span className="sub">Comece a ler — o texto aparece aqui.</span>}
+            {st.parcial && <span className="sub" style={{ fontStyle: 'italic' }}>{st.parcial}…</span>}
+            <div ref={fimRef} />
           </div>
         </div>
       )}
 
-      {/* revisão antes de guardar */}
-      {estado === 'revisando' && (
+      {revisando && (
         <div className="card">
           <h3 style={{ marginTop: 0 }}>Confira antes de guardar</h3>
           {urlPreview && (
             <div style={{ marginBottom: 12 }}>
-              <p className="sub peq" style={{ margin: '0 0 6px' }}>
-                Áudio gravado · {emMB(audio?.bytes)} MB · ouça para conferir se o microfone pegou bem
-              </p>
+              <p className="sub peq" style={{ margin: '0 0 6px' }}>Áudio gravado · {emMB(st.audio?.bytes)} MB</p>
               {/* eslint-disable-next-line jsx-a11y/media-has-caption */}
               <audio controls src={urlPreview} style={{ width: '100%' }} />
             </div>
           )}
-          <p className="sub peq">
-            A transcrição erra nomes próprios, números de artigo e termos em latim. Corrija o que
-            importa — ou guarde como está, se for só para registrar o que foi lido. O áudio não muda.
-          </p>
-          <textarea rows={10} value={texto} onChange={(e) => setTexto(e.target.value)} />
+
+          {duvidas > 0 && textoLivre == null && (
+            <p className="aviso" role="status">
+              ⚠ {duvidas} trecho{duvidas === 1 ? '' : 's'} em vermelho: o navegador ouviu com pouca
+              certeza. Clique em cada um para trocar pelo que ele também ouviu, ou corrigir à mão.
+            </p>
+          )}
+
+          {textoLivre == null ? (
+            <>
+              <div style={{ lineHeight: 2, marginBottom: 10 }}>
+                {trechos.map((t, i) => (
+                  duvidoso(t) ? (
+                    <button
+                      key={`${t.em}-${i}`}
+                      type="button"
+                      onClick={() => setAbertoAlt(abertoAlt === i ? null : i)}
+                      aria-expanded={abertoAlt === i}
+                      style={{ ...estiloDuvida, border: 0, font: 'inherit', cursor: 'pointer', minHeight: 0, padding: '2px 4px', margin: '0 1px' }}
+                    >
+                      ⚠ {t.texto}
+                    </button>
+                  ) : <span key={`${t.em}-${i}`}>{t.texto} </span>
+                ))}
+              </div>
+              {abertoAlt != null && trechos[abertoAlt] && (
+                <div className="card" style={{ background: 'var(--pri-claro)' }}>
+                  <p className="sub peq" style={{ marginTop: 0 }}>
+                    O navegador ouviu isto com {Math.round((trechos[abertoAlt].confianca || 0) * 100)}% de certeza:
+                  </p>
+                  <p style={{ fontWeight: 700 }}>{trechos[abertoAlt].texto}</p>
+                  {trechos[abertoAlt].alternativas?.length > 0 ? (
+                    <>
+                      <p className="sub peq">Ele também considerou:</p>
+                      {trechos[abertoAlt].alternativas.map((alt) => (
+                        <button key={alt} className="btn peq" style={{ display: 'block', width: '100%', textAlign: 'left', marginBottom: 4 }} onClick={() => trocarTrecho(abertoAlt, alt)}>
+                          {alt}
+                        </button>
+                      ))}
+                    </>
+                  ) : <p className="sub peq">Ele não ofereceu outra opção para este trecho.</p>}
+                  <label className="campo">Ou escreva a forma certa
+                    <input
+                      type="text"
+                      defaultValue={trechos[abertoAlt].texto}
+                      onKeyDown={(e) => { if (e.key === 'Enter') trocarTrecho(abertoAlt, e.currentTarget.value); }}
+                      onBlur={(e) => { if (e.target.value !== trechos[abertoAlt].texto) trocarTrecho(abertoAlt, e.target.value); }}
+                    />
+                  </label>
+                  <button className="btn peq" onClick={() => setAbertoAlt(null)}>Fechar</button>
+                </div>
+              )}
+              <button className="btn peq" onClick={() => setTextoLivre(textoFinal)}>✏️ Editar o texto inteiro</button>
+            </>
+          ) : (
+            <>
+              <p className="sub peq">A marcação em vermelho some quando você edita o texto corrido.</p>
+              <textarea rows={10} value={textoLivre} onChange={(e) => setTextoLivre(e.target.value)} />
+            </>
+          )}
+
           <div className="filtros" style={{ marginTop: 10 }}>
-            <div><b>{fmtTempo(segLidos)}</b><div className="sub peq">lendo</div></div>
+            <div><b>{fmtTempo(st.segLidos)}</b><div className="sub peq">lendo</div></div>
             <div><b>{fmtTempo(segPausado)}</b><div className="sub peq">parado</div></div>
             <div><b>{palavras}</b><div className="sub peq">palavras</div></div>
             <div><b>{ritmo || '—'}</b><div className="sub peq">palavras por minuto</div></div>
           </div>
-          {pausas.length > 0 && (
+          {st.pausas.length > 0 && (
             <details style={{ marginTop: 10 }}>
-              <summary className="sub peq">Ver as {pausas.length} pausas</summary>
+              <summary className="sub peq">Ver as {st.pausas.length} pausas</summary>
               <ul className="sub peq">
-                {pausas.map((p, i) => (
-                  <li key={p.inicio}>Pausa {i + 1}: {horaCurta(p.inicio)} às {horaCurta(p.fim)} — {fmtTempo(p.segundos)}</li>
-                ))}
+                {st.pausas.map((p, i) => <li key={p.inicio}>Pausa {i + 1}: {horaCurta(p.inicio)} às {horaCurta(p.fim)} — {fmtTempo(p.segundos)}</li>)}
               </ul>
             </details>
           )}
         </div>
       )}
 
-      {/* leituras anteriores */}
       <div className="linha entre">
         <h3 style={{ marginBottom: 8 }}>Leituras anteriores</h3>
         {espaco > 0 && <span className="sub peq">{emMB(espaco)} MB de áudio guardados</span>}
@@ -720,9 +650,7 @@ export default function LeituraVoz({ ctx }) {
           )}
           <div className="linha">
             {l.audio && !urlsHist[l.id] && <button className="btn peq pri" onClick={() => ouvir(l)}>▶️ Ouvir</button>}
-            {l.audio && urlsHist[l.id] && (
-              <a className="btn peq" href={urlsHist[l.id]} download={`leitura-${(l.assunto || l.materia || 'voz').replace(/[^\p{L}\p{N}-]+/gu, '_')}.webm`}>⬇️ Baixar</a>
-            )}
+            {l.audio && urlsHist[l.id] && <a className="btn peq" href={urlsHist[l.id]} download>⬇️ Baixar</a>}
             <button className="btn peq" onClick={() => setAberta(aberta === l.id ? null : l.id)} aria-expanded={aberta === l.id}>
               {aberta === l.id ? 'Esconder o texto' : 'Ver o texto lido'}
             </button>

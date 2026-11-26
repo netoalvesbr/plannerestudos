@@ -45,6 +45,10 @@ export const TEXTO_ERRO = {
   'language-not-supported': 'O português não está disponível para transcrição neste navegador.',
 };
 
+// Abaixo disso, o trecho vai marcado na tela para a pessoa conferir.
+// 0,75 é um meio-termo: mais alto enche o texto de marcação, mais baixo deixa erro passar.
+export const CONFIANCA_MINIMA = 0.75;
+
 // Conta palavras de verdade: ignora espaços repetidos e pontuação solta.
 export function contarPalavras(texto) {
   const limpo = String(texto || '').trim();
@@ -79,6 +83,7 @@ export function criarLeitor({ idioma = 'pt-BR', aoTrecho, aoParcial, aoErro, aoP
   let rec = null;
   let querendoOuvir = false;
   let religando = null;
+  let ultimoParcial = '';
 
   // Erros em que não faz sentido insistir: religar só repetiria o mesmo bloqueio.
   const fatal = (e) => ['not-allowed', 'service-not-allowed', 'audio-capture', 'language-not-supported'].includes(e);
@@ -88,17 +93,38 @@ export function criarLeitor({ idioma = 'pt-BR', aoTrecho, aoParcial, aoErro, aoP
     r.lang = idioma;
     r.continuous = true;
     r.interimResults = true;
-    r.maxAlternatives = 1;
+    r.maxAlternatives = 3;
 
     r.onresult = (ev) => {
       let parcial = '';
       for (let i = ev.resultIndex; i < ev.results.length; i++) {
         const res = ev.results[i];
         const texto = res[0]?.transcript || '';
-        if (res.isFinal) aoTrecho?.(texto.trim());
-        else parcial += texto;
+        if (res.isFinal) {
+          // `confidence` é o quanto o navegador confia no que ouviu (0 a 1). As outras
+          // alternativas são o segundo e o terceiro palpite dele, úteis quando erra.
+          const alternativas = [];
+          for (let a = 1; a < res.length && a < 3; a++) {
+            const alt = res[a]?.transcript?.trim();
+            if (alt && alt !== texto.trim()) alternativas.push(alt);
+          }
+          aoTrecho?.({
+            texto: texto.trim(),
+            confianca: typeof res[0]?.confidence === 'number' ? res[0].confidence : null,
+            alternativas,
+          });
+        } else {
+          parcial += texto;
+        }
       }
-      aoParcial?.(parcial.trim());
+      const limpo = parcial.trim();
+      // Só avisamos quando o texto parcial mudou de verdade. O Chrome repete o mesmo
+      // parcial várias vezes por segundo, e tratar repetição como fala fazia o
+      // detector de silêncio nunca disparar — era o motivo de a pausa não ser notada.
+      if (limpo !== ultimoParcial) {
+        ultimoParcial = limpo;
+        aoParcial?.(limpo);
+      }
     };
 
     r.onerror = (ev) => {
@@ -113,6 +139,7 @@ export function criarLeitor({ idioma = 'pt-BR', aoTrecho, aoParcial, aoErro, aoP
 
     // O navegador encerra sozinho; enquanto a sessão estiver ativa, religamos.
     r.onend = () => {
+      ultimoParcial = '';
       aoParcial?.('');
       if (!querendoOuvir) {
         aoParar?.();

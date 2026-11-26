@@ -16,6 +16,7 @@ import Painel from './components/Painel.jsx';
 import Opinioes from './components/Opinioes.jsx';
 import Rodape from './components/Rodape.jsx';
 import TesteEncerrado, { AvisoTeste } from './components/TesteEncerrado.jsx';
+import LeituraFlutuante from './components/LeituraFlutuante.jsx';
 import { Mapa } from './components/Mapas.jsx';
 import Estudar from './components/Estudar.jsx';
 import Biblioteca from './components/Biblioteca.jsx';
@@ -525,6 +526,7 @@ export default function App() {
       <main><ErroTela chave={tela.nome} aoSair={() => setTela({ nome: 'concursos' })}>{conteudo}</ErroTela></main>
       {!semTopo && <Cronometro materias={materiasCrono} cronogramas={cronogramasParaCrono} hojeSeg={hojeSeg} registrosHoje={prefs.tempos?.[new Date().toLocaleDateString('sv-SE')] || {}} sessoesHoje={prefs.sessoesEstudo?.[new Date().toLocaleDateString('sv-SE')] || []} aoRegistrar={registrarTempo} aoSalvarSessao={registrarSessao} />}
       {!semTopo && <Rodape ir={(n) => setTela({ nome: n })} compacto={tela.nome !== 'dashboard'} />}
+      {!semAcesso && <LeituraFlutuante aoAbrirTela={() => setTela({ nome: 'estudar', aba: 'voz' })} />}
       {concurso && !precisaCargo && !precisaFase && <MenuDesempenho questoes={questoes} respostas={respostas} aoAbrirPainel={() => ir('painel')} />}
     </div>
   );
